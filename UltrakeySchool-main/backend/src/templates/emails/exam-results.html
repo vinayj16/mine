@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Results - EduSearch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+        .content { background: #f9f9f9; padding: 30px; }
+        .results-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
+        .results-table th { background: #667eea; color: white; padding: 12px; text-align: left; }
+        .results-table td { padding: 12px; border: 1px solid #dee2e6; }
+        .results-table tr:nth-child(even) { background: #f8f9fa; }
+        .grade-excellent { background: #d4edda; color: #155724; padding: 4px 8px;  font-weight: bold; }
+        .grade-good { background: #fff3cd; color: #856404; padding: 4px 8px;  font-weight: bold; }
+        .grade-average { background: #f8d7da; color: #721c24; padding: 4px 8px;  font-weight: bold; }
+        .summary-card { background: white; padding: 20px; margin: 20px 0; border-left: 4px solid #667eea; }
+        .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none;  margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Exam Results Published</h1>
+        <p>Academic Performance Update</p>
+    </div>
+
+    <div class="content">
+        <h2>Dear {{parentName}},</h2>
+
+        <p>We are pleased to inform you that the exam results for <strong>{{studentName}}</strong> ({{studentId}}) have been published.</p>
+
+        <div class="summary-card">
+            <h3>🎓 Student Information</h3>
+            <p><strong>Name:</strong> {{studentName}}</p>
+            <p><strong>Class:</strong> {{studentClass}} - {{section}}</p>
+            <p><strong>Roll Number:</strong> {{studentId}}</p>
+            <p><strong>Exam:</strong> {{examName}}</p>
+            <p><strong>Academic Year:</strong> {{academicYear}}</p>
+        </div>
+
+        <div class="summary-card">
+            <h3>📈 Performance Summary</h3>
+            <p><strong>Total Marks Obtained:</strong> {{totalObtained}} / {{totalMaximum}}</p>
+            <p><strong>Percentage:</strong> {{percentage}}%</p>
+            <p><strong>Overall Grade:</strong> <span class="grade-{{gradeClass}}">{{overallGrade}}</span></p>
+            <p><strong>Rank in Class:</strong> {{rank}} / {{totalStudents}}</p>
+        </div>
+
+        <h3>📋 Subject-wise Results:</h3>
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Maximum</th>
+                    <th>Obtained</th>
+                    <th>Percentage</th>
+                    <th>Grade</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{#each subjects}}
+                <tr>
+                    <td>{{subject}}</td>
+                    <td>{{maximum}}</td>
+                    <td>{{obtained}}</td>
+                    <td>{{percentage}}%</td>
+                    <td><span class="grade-{{gradeClass}}">{{grade}}</span></td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+
+        {{#if remarks}}
+        <div style="background: #e7f3ff; border: 1px solid #b3d7ff; color: #004085; padding: 15px; margin: 20px 0;">
+            <strong>📝 Remarks:</strong> {{remarks}}
+        </div>
+        {{/if}}
+
+        <h3>📚 Next Steps:</h3>
+        <ul>
+            <li>Review the detailed mark sheet by logging into the parent portal</li>
+            <li>Discuss the results with your child</li>
+            <li>Attend parent-teacher meeting if scheduled</li>
+            <li>Contact the class teacher for any clarifications</li>
+        </ul>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{resultUrl}}" class="button">View Detailed Results</a>
+        </div>
+
+        <h3>📞 Contact Information:</h3>
+        <ul>
+            <li><strong>Class Teacher:</strong> {{teacherName}} - {{teacherPhone}}</li>
+            <li><strong>Principal:</strong> {{principalName}} - {{principalPhone}}</li>
+            <li><strong>Academic Office:</strong> {{academicOffice}} - {{academicPhone}}</li>
+        </ul>
+
+        <p>Congratulations to {{studentName}} for their performance! We encourage continuous improvement and academic excellence.</p>
+
+        <p>Best regards,<br>
+        <strong>{{schoolName}} Academic Department</strong><br>
+        <em>Via EduSearch Platform</em></p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated result notification. For detailed analysis, please login to the parent portal.</p>
+        <p>© 2024 EduSearch. All rights reserved.</p>
+    </div>
+</body>
+</html>

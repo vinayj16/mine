@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fee Payment Reminder - EduSearch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 30px; text-align: center; }
+        .content { background: #f9f9f9; padding: 30px; }
+        .fee-details { background: white; padding: 20px; margin: 20px 0; border-left: 4px solid #dc3545; }
+        .button { display: inline-block; background: #28a745; color: white; padding: 12px 30px; text-decoration: none; margin: 20px 10px 20px 0; }
+        .urgent { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💰 Fee Payment Reminder</h1>
+        <p>Payment Due Notice</p>
+    </div>
+
+    <div class="content">
+        <h2>Dear {{parentName}},</h2>
+
+        <p>This is a friendly reminder about outstanding fees for your child <strong>{{studentName}}</strong> ({{studentId}}).</p>
+
+        <div class="fee-details">
+            <h3>📄 Fee Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Description</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Amount</strong></td>
+                </tr>
+                {{#each fees}}
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{{description}}</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">₹{{amount}}</td>
+                </tr>
+                {{/each}}
+                <tr style="background: #f8f9fa; font-weight: bold;">
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">Total Amount</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">₹{{totalAmount}}</td>
+                </tr>
+            </table>
+        </div>
+
+        {{#if urgent}}
+        <div class="urgent">
+            <strong>🚨 URGENT:</strong> This fee payment is overdue. Please make the payment immediately to avoid:
+            <ul style="margin: 10px 0;">
+                <li>Late fees and penalties</li>
+                <li>Interruption of academic services</li>
+                <li>Hold on examination results</li>
+                <li>Impact on student's academic record</li>
+            </ul>
+        </div>
+        {{/if}}
+
+        <p><strong>Due Date:</strong> {{dueDate}}</p>
+        <p><strong>Academic Year:</strong> {{academicYear}}</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{paymentUrl}}" class="button">Pay Now Online</a>
+            <a href="{{feeDetailsUrl}}" class="button" style="background: #007bff;">View Fee Details</a>
+        </div>
+
+        <h3>💳 Payment Options:</h3>
+        <ul>
+            <li><strong>Online Payment:</strong> Secure payment through our portal</li>
+            <li><strong>Bank Transfer:</strong> Direct transfer to school account</li>
+            <li><strong>Cash/DD:</strong> Payment at school office</li>
+            <li><strong>UPI/Google Pay:</strong> Quick mobile payments</li>
+        </ul>
+
+        <p>For any queries regarding fees or payment options, please contact:</p>
+        <ul>
+            <li><strong>Finance Office:</strong> {{financeContact}}</li>
+            <li><strong>Email:</strong> <a href="mailto:fees@school.com">fees@school.com</a></li>
+            <li><strong>Phone:</strong> {{schoolPhone}}</li>
+        </ul>
+
+        <p>Thank you for your prompt attention to this matter.</p>
+
+        <p>Best regards,<br>
+        <strong>{{schoolName}} Finance Department</strong><br>
+        <em>EduSearch Platform</em></p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated reminder. Please do not reply to this email.</p>
+        <p>For support, contact <a href="mailto:support@edusearch.com">support@edusearch.com</a></p>
+        <p>© 2024 EduSearch. All rights reserved.</p>
+    </div>
+</body>
+</html>

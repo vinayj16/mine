@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transport Information - EduSearch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); color: white; padding: 30px; text-align: center; }
+        .content { background: #f9f9f9; padding: 30px;}
+        .info-card { background: white; padding: 20px; margin: 20px 0;border-left: 4px solid #f39c12; }
+        .route-info { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px;  margin: 15px 0; }
+        .button { display: inline-block; background: #f39c12; color: white; padding: 12px 30px; text-decoration: none; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚌 Transport Information</h1>
+        <p>School Transport Details</p>
+    </div>
+
+    <div class="content">
+        <h2>Dear {{parentName}},</h2>
+
+        <p>This is to inform you about the transport arrangement for your child <strong>{{studentName}}</strong>.</p>
+
+        <div class="info-card">
+            <h3>📋 Transport Details</h3>
+            <p><strong>Bus Number:</strong> {{busNumber}}</p>
+            <p><strong>Route Number:</strong> {{routeNumber}}</p>
+            <p><strong>Driver Name:</strong> {{driverName}}</p>
+            <p><strong>Driver Contact:</strong> {{driverPhone}}</p>
+            <p><strong>Conductor Name:</strong> {{conductorName}}</p>
+            <p><strong>Conductor Contact:</strong> {{conductorPhone}}</p>
+        </div>
+
+        <div class="route-info">
+            <h3>📍 Route Information</h3>
+            <p><strong>Pickup Point:</strong> {{pickupPoint}}</p>
+            <p><strong>Pickup Time:</strong> {{pickupTime}}</p>
+            <p><strong>Drop Point:</strong> {{dropPoint}}</p>
+            <p><strong>Drop Time:</strong> {{dropTime}}</p>
+        </div>
+
+        <div class="info-card">
+            <h3>💰 Fee Information</h3>
+            <p><strong>Transport Fee:</strong> ₹{{transportFee}}</p>
+            <p><strong>Payment Status:</strong> {{paymentStatus}}</p>
+            <p><strong>Due Date:</strong> {{dueDate}}</p>
+        </div>
+
+        {{#if importantNotice}}
+        <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; margin: 20px 0;">
+            <strong>📢 Important Notice:</strong>
+            <p>{{importantNotice}}</p>
+        </div>
+        {{/if}}
+
+        <h3>📞 Contact Information:</h3>
+        <ul>
+            <li><strong>Transport Office:</strong> {{transportOffice}} - {{transportPhone}}</li>
+            <li><strong>Email:</strong> <a href="mailto:transport@school.com">transport@school.com</a></li>
+            <li><strong>Emergency Contact:</strong> {{emergencyContact}}</li>
+        </ul>
+
+        <p>For any queries regarding transport services, please contact the transport office.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{dashboardUrl}}" class="button">View Transport Details in Dashboard</a>
+        </div>
+
+        <p>Best regards,<br>
+        <strong>{{schoolName}} Transport Department</strong><br>
+        <em>Via EduSearch Platform</em></p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated transport notification. For immediate assistance, contact the transport office.</p>
+        <p>© 2024 EduSearch. All rights reserved.</p>
+    </div>
+</body>
+</html>

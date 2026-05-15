@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to EduSearch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;}
+        .content { background: #f9f9f9; padding: 30px;}
+        .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+        .features { background: white; padding: 20px; margin: 20px 0; border-left: 4px solid #667eea; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎓 Welcome to EduSearch!</h1>
+        <p>Your Complete Educational Management Solution</p>
+    </div>
+
+    <div class="content">
+        <h2>Hello {{name}}!</h2>
+
+        <p>Welcome to EduSearch! We're excited to have you join our educational community. Your account has been successfully created and you're now ready to explore all the features we offer.</p>
+
+        <div class="features">
+            <h3>🚀 What You Can Do:</h3>
+            <ul>
+                <li>📊 Access your personalized dashboard</li>
+                <li>📚 View academic information and progress</li>
+                <li>💰 Manage fees and payments securely</li>
+                <li>👥 Communicate with teachers and staff</li>
+                <li>📅 Stay updated with announcements and events</li>
+                <li>📱 Access from any device, anywhere</li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{loginUrl}}" class="button">Get Started Now</a>
+        </div>
+
+        <p>If you have any questions or need assistance, our support team is here to help. You can reach us at <a href="mailto:support@edusearch.com">support@edusearch.com</a>.</p>
+
+        <p>Best regards,<br>
+        <strong>The EduSearch Team</strong></p>
+    </div>
+
+    <div class="footer">
+        <p>This email was sent to {{email}}. If you didn't create this account, please contact our support team immediately.</p>
+        <p>© 2024 EduSearch. All rights reserved.</p>
+    </div>
+</body>
+</html>

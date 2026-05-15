@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - EduSearch</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; padding: 30px; text-align: center; }
+        .content { background: #f9f9f9; padding: 30px;}
+        .button { display: inline-block; background: #28a745; color: white; padding: 15px 30px; text-decoration: none;margin: 20px 0; font-weight: bold; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 30px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>✉️ Verify Your Email</h1>
+        <p>Email Confirmation Required</p>
+    </div>
+
+    <div class="content">
+        <h2>Hello {{name}}!</h2>
+
+        <p>Thank you for registering with EduSearch! To complete your registration and activate your account, please verify your email address by clicking the button below.</p>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{verifyUrl}}" class="button">Verify Email Address</a>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ Important Information:</strong>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>This verification link will expire in <strong>24 hours</strong></li>
+                <li>You can only use this link once</li>
+                <li>If you didn't create an account, please ignore this email</li>
+            </ul>
+        </div>
+
+        <p>If the button above doesn't work, you can copy and paste this link into your browser:</p>
+        <p style="word-break: break-all; background: #f0f0f0; padding: 10px; font-family: monospace;">{{verifyUrl}}</p>
+
+        <h3>🔒 Why Verify Your Email?</h3>
+        <ul>
+            <li>Ensures the security of your account</li>
+            <li>Enables important email notifications</li>
+            <li>Prevents unauthorized access</li>
+            <li>Required for full account features</li>
+        </ul>
+
+        <p>After verification, you'll be able to:</p>
+        <ul>
+            <li>Access your dashboard</li>
+            <li>View and manage your profile</li>
+            <li>Receive important notifications</li>
+            <li>Use all platform features</li>
+        </ul>
+
+        <p>If you have any questions or need assistance, please contact our support team at <a href="mailto:support@edusearch.com">support@edusearch.com</a>.</p>
+
+        <p>Best regards,<br>
+        <strong>The EduSearch Team</strong></p>
+    </div>
+
+    <div class="footer">
+        <p>This email was sent to {{email}}. This is an automated message, please do not reply.</p>
+        <p>© 2024 EduSearch. All rights reserved.</p>
+    </div>
+</body>
+</html>
