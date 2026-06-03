@@ -1,27 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import apiClient from '../../api/client';
-
-interface StaffLeave {
-  _id: string;
-  staffId: string;
-  leaveType: 'sick' | 'casual' | 'annual' | 'maternity' | 'paternity' | 'emergency';
-  startDate: string;
-  endDate: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
-  approvedBy?: {
-    _id: string;
-    name: string;
-    email: string;
-  };
-  approvedAt?: string;
-  rejectionReason?: string;
-  createdAt: string;
-  updatedAt: string;
-  attachments?: string[];
-}
+import staffService, { type StaffLeave } from '../../services/staffService';
 
 const LeavePage: React.FC = () => {
   const [leaves, setLeaves] = useState<StaffLeave[]>([]);
@@ -49,11 +29,8 @@ const LeavePage: React.FC = () => {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/leaves');
-      
-      if (response.data.success) {
-        setLeaves(response.data.data || []);
-      }
+      const leaves = await staffService.getMyLeaves();
+      setLeaves(leaves || []);
     } catch (error: any) {
       console.error('Error fetching leaves:', error);
       toast.error(error.response?.data?.message || 'Failed to load leaves');
@@ -65,34 +42,22 @@ const LeavePage: React.FC = () => {
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append('leaveType', formData.leaveType);
-      formDataToSend.append('startDate', formData.startDate);
-      formDataToSend.append('endDate', formData.endDate);
-      formDataToSend.append('reason', formData.reason);
-      
-      formData.attachments.forEach((file, index) => {
-        formDataToSend.append(`attachments[${index}]`, file);
+      await staffService.applyLeave({
+        leaveType: formData.leaveType,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        reason: formData.reason
       });
-
-      const response = await apiClient.post('/leaves', formDataToSend, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      toast.success('Leave application submitted successfully');
+      setShowAddModal(false);
+      setFormData({
+        leaveType: 'casual',
+        startDate: '',
+        endDate: '',
+        reason: '',
+        attachments: []
       });
-      
-      if (response.data.success) {
-        toast.success('Leave application submitted successfully');
-        setShowAddModal(false);
-        setFormData({
-          leaveType: 'casual',
-          startDate: '',
-          endDate: '',
-          reason: '',
-          attachments: []
-        });
-        fetchLeaves();
-      }
+      fetchLeaves();
     } catch (error: any) {
       console.error('Error applying leave:', error);
       toast.error(error.response?.data?.message || 'Failed to apply for leave');
@@ -101,12 +66,9 @@ const LeavePage: React.FC = () => {
 
   const handleCancelLeave = async (leaveId: string) => {
     try {
-      const response = await apiClient.put(`/leaves/${leaveId}/cancel`);
-      
-      if (response.data.success) {
-        toast.success('Leave cancelled successfully');
-        fetchLeaves();
-      }
+      await staffService.cancelLeave(leaveId);
+      toast.success('Leave cancelled successfully');
+      fetchLeaves();
     } catch (error: any) {
       console.error('Error cancelling leave:', error);
       toast.error(error.response?.data?.message || 'Failed to cancel leave');
@@ -277,7 +239,10 @@ const LeavePage: React.FC = () => {
                             {leave.approvedBy && (
                               <>
                                 <i className="ti ti-user-check ms-3 me-1"></i>
-                                Approved by: {leave.approvedBy.name}
+                                Approved by:{' '}
+                                {typeof leave.approvedBy === 'object'
+                                  ? leave.approvedBy.name
+                                  : leave.approvedBy}
                               </>
                             )}
                           </div>

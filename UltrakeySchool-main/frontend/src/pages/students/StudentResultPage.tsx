@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
-import StudentSelector from '../../components/students/StudentSelector';
 
 interface Student {
   _id: string;
@@ -49,23 +48,23 @@ const StudentResultPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [results, setResults] = useState<ExamResult[]>([]);
-  const [selectedYear, setSelectedYear] = useState('2024/2025');
+  const [selectedYear, setSelectedYear] = useState('2024-2025');
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || (() => { try { const u = JSON.parse(localStorage.getItem('user') || '{}'); return u.institutionId || ''; } catch { return ''; } })();
 
   const fetchStudent = async () => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get(`/students/${id}`, {
-        params: { schoolId }
-      });
+      let response;
+      if (id) {
+        response = await apiClient.get(`/students/${id}`, {
+          params: { institutionId }
+        });
+      } else {
+        response = await apiClient.get('/students/me');
+      }
 
       if (response.data.success) {
         setStudent(response.data.data);
@@ -81,14 +80,15 @@ const StudentResultPage: React.FC = () => {
   };
 
   const fetchResults = async () => {
-    if (!id) return;
+    const studentId = id || student?._id || student?._id;
+    if (!studentId) return;
 
     try {
       setResultsLoading(true);
 
-      const response = await apiClient.get(`/students/${id}/results`, {
+      const response = await apiClient.get(`/students/${studentId}/results`, {
         params: { 
-          schoolId,
+          institutionId,
           academicYear: selectedYear
         }
       });
@@ -114,10 +114,12 @@ const StudentResultPage: React.FC = () => {
     }
   }, [student, selectedYear]);
 
+  if (!student) return null;
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const capitalize = (str?: string) => {
@@ -140,15 +142,6 @@ const StudentResultPage: React.FC = () => {
   }
 
   if (error || !student) {
-    if (!id && !error) {
-      return (
-        <StudentSelector
-          redirectPath="/students/results"
-          title="Select Student for Results"
-          description="Choose a student to view their exam results"
-        />
-      );
-    }
     return (
       <div className="card">
         <div className="card-body text-center py-5">
@@ -257,9 +250,9 @@ const StudentResultPage: React.FC = () => {
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
                 >
-                  <option value="2024/2025">Year: 2024 / 2025</option>
-                  <option value="2023/2024">Year: 2023 / 2024</option>
-                  <option value="2022/2023">Year: 2022 / 2023</option>
+                  <option value="2024-2025">Year: 2024-2025</option>
+                  <option value="2023-2024">Year: 2023-2024</option>
+                  <option value="2022-2023">Year: 2022-2023</option>
                 </select>
               </div>
             </div>

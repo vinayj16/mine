@@ -1,7 +1,4 @@
-// Role-based dashboard configuration
-
-// Type definitions for dashboard items
-type DashboardItem = {
+export type DashboardItem = {
   label: string;
   path: string;
   icon: string;
@@ -12,7 +9,7 @@ type DashboardItem = {
   [key: string]: any;
 };
 
-type SidebarMenuItem = {
+export type SidebarMenuItem = {
   label: string;
   path?: string;
   icon?: string;
@@ -20,7 +17,7 @@ type SidebarMenuItem = {
   roles?: string[];
 };
 
-type RoleKey = 'superadmin' | 'institution-admin' | 'principal' | 'admin' | 'teacher' | 'student' | 'parent' | 'accountant' | 'staff';
+export type RoleKey = 'superadmin' | 'institution-admin' | 'principal' | 'admin' | 'teacher' | 'student' | 'parent' | 'accountant' | 'staff' | 'hr_manager' | 'transport_manager' | 'hostel_warden' | 'agent';
 
 // Maps roles to their dashboard endpoints
 export const roleDashboardConfig: Record<string, any> = {
@@ -31,16 +28,16 @@ export const roleDashboardConfig: Record<string, any> = {
     label: 'Super Admin',
     canManageInstitution: true
   },
-  
+
   // Institution Admin - Manages institution operations
   institution_admin: {
-    dashboard: '/dashboard/institute-admin', 
+    dashboard: '/dashboard/institute-admin',
     sidebar: 'institution-admin',
     label: 'Institution Admin',
     institutionId: true,
     canManageInstitution: true
   },
-  
+
   // Principal - Academic head
   principal: {
     dashboard: '/dashboard/principal',
@@ -49,7 +46,7 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
   // Admin - School level admin
   admin: {
     dashboard: '/dashboard/admin',
@@ -58,7 +55,7 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
   // Teacher
   teacher: {
     dashboard: '/dashboard/teacher',
@@ -67,7 +64,7 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
   // Student
   student: {
     dashboard: '/dashboard/student',
@@ -76,7 +73,7 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
   // Parent
   parent: {
     dashboard: '/dashboard/parent',
@@ -85,7 +82,16 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
+  // Librarian
+  librarian: {
+    dashboard: '/dashboard/library',
+    sidebar: 'librarian',
+    label: 'Librarian',
+    institutionId: true,
+    canManageInstitution: false
+  },
+
   // Accountant
   accountant: {
     dashboard: '/dashboard/accountant',
@@ -94,7 +100,7 @@ export const roleDashboardConfig: Record<string, any> = {
     institutionId: true,
     canManageInstitution: false
   },
-  
+
   // HR Manager
   hr_manager: {
     dashboard: '/dashboard/hr',
@@ -111,15 +117,41 @@ export const roleDashboardConfig: Record<string, any> = {
     label: 'Staff',
     institutionId: true,
     canManageInstitution: false
+  },
+
+  // Transport Manager
+  transport_manager: {
+    dashboard: '/transport',
+    sidebar: 'transport',
+    label: 'Transport Manager',
+    institutionId: true,
+    canManageInstitution: false
+  },
+
+  // Hostel Warden
+  hostel_warden: {
+    dashboard: '/dashboard/hostel',
+    sidebar: 'hostel',
+    label: 'Hostel Warden',
+    institutionId: true,
+    canManageInstitution: false
+  },
+
+  // Agent
+  agent: {
+    dashboard: '/agent',
+    sidebar: 'agent',
+    label: 'Agent',
+    canManageInstitution: false
   }
 };
 
 // Sidebar menu items per role
-export const roleSidebarMenus = {
+export const roleSidebarMenus: Record<string, any> = {
   'institution-admin': [
     { label: 'Main Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'Analytics', path: '/dashboard/analytics', icon: 'ti ti-chart-bar' },
-    { label: 'Finance', path: '/dashboard/finance', icon: 'ti ti-money' },
+    { label: 'Finance', path: '/dashboard/main/finance', icon: 'ti ti-money' },
     { label: 'USER MANAGEMENT', type: 'header' },
     { label: 'Create Credentials', path: '/dashboard/create-credentials', icon: 'ti ti-plus' },
     { label: 'User Directory', path: '/dashboard/users', icon: 'ti ti-list' },
@@ -142,7 +174,7 @@ export const roleSidebarMenus = {
     { label: 'Attendance Report', path: '/dashboard/reports/attendance', icon: 'ti ti-file' },
     { label: 'Fees Report', path: '/dashboard/reports/fees', icon: 'ti ti-file' },
   ],
-  
+
   'principal': [
     { label: 'Main Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'Teaching Overview', path: '/dashboard/teaching', icon: 'ti ti-book' },
@@ -162,7 +194,7 @@ export const roleSidebarMenus = {
     { label: 'Grades', path: '/dashboard/grades', icon: 'ti ti-star' },
     { label: 'Results', path: '/dashboard/results', icon: 'ti ti-trophy' },
   ],
-  
+
   'admin': [
     { label: 'Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'USER MANAGEMENT', type: 'header' },
@@ -171,7 +203,7 @@ export const roleSidebarMenus = {
     { label: 'Parents', path: '/dashboard/parents', icon: 'ti ti-user' },
     { label: 'Staff', path: '/dashboard/staff', icon: 'ti ti-users' },
   ],
-  
+
   'teacher': [
     { label: 'Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'My Classes', path: '/dashboard/classes', icon: 'ti ti-book' },
@@ -180,7 +212,7 @@ export const roleSidebarMenus = {
     { label: 'Attendance', path: '/dashboard/attendance', icon: 'ti ti-check' },
     { label: 'Grades', path: '/dashboard/grades', icon: 'ti ti-star' },
   ],
-  
+
   'student': [
     { label: 'Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'My Subjects', path: '/dashboard/subjects', icon: 'ti ti-notebook' },
@@ -189,7 +221,7 @@ export const roleSidebarMenus = {
     { label: 'Grades', path: '/dashboard/grades', icon: 'ti ti-star' },
     { label: 'Fees', path: '/dashboard/fees', icon: 'ti ti-dollar' },
   ],
-  
+
   'parent': [
     { label: 'Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'My Children', path: '/dashboard/children', icon: 'ti ti-user' },
@@ -198,13 +230,22 @@ export const roleSidebarMenus = {
     { label: 'Grades', path: '/dashboard/grades', icon: 'ti ti-star' },
     { label: 'Fees', path: '/dashboard/fees', icon: 'ti ti-dollar' },
   ],
-  
+
   'accountant': [
     { label: 'Dashboard', path: '/dashboard', icon: 'ti ti-home' },
     { label: 'Fees Collection', path: '/dashboard/fees', icon: 'ti ti-dollar' },
     { label: 'Expenses', path: '/dashboard/expenses', icon: 'ti ti-minus' },
     { label: 'Income', path: '/dashboard/income', icon: 'ti ti-plus' },
     { label: 'Invoices', path: '/dashboard/invoices', icon: 'ti ti-file' },
+  ],
+
+  'librarian': [
+    { label: 'Library Dashboard', path: '/dashboard/library', icon: 'ti ti-layout-dashboard' },
+    { label: 'Members', path: '/dashboard/library/members', icon: 'ti ti-users' },
+    { label: 'Books', path: '/dashboard/library/books', icon: 'ti ti-book' },
+    { label: 'Issue Book', path: '/dashboard/library/issue', icon: 'ti ti-book-upload' },
+    { label: 'Return Book', path: '/dashboard/library/return', icon: 'ti ti-book-download' },
+    { label: 'My Profile', path: '/dashboard/library/profile', icon: 'ti ti-user' },
   ],
 
   'staff': [

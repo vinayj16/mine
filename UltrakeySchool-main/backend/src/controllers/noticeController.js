@@ -1,4 +1,5 @@
 import noticeService from '../services/noticeService.js';
+import notificationService from '../services/notificationService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -6,7 +7,7 @@ import mongoose from 'mongoose';
 // Validation constants
 const VALID_NOTICE_STATUSES = ['draft', 'published', 'archived', 'scheduled'];
 const VALID_NOTICE_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
-const VALID_RECIPIENTS = ['all', 'students', 'teachers', 'parents', 'staff', 'administrators'];
+const VALID_RECIPIENTS = ['all', 'student', 'parent', 'teacher', 'admin', 'accountant', 'librarian', 'receptionist', 'superadmin', 'staff', 'principal', 'institution_admin', 'hr_manager', 'hostel_warden', 'transport_manager'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 const MAX_TITLE_LENGTH = 200;
 const MAX_CONTENT_LENGTH = 10000;
@@ -65,8 +66,12 @@ const createNotice = async (req, res) => {
   try {
     logger.info('Creating new notice');
     
-    const { title, content, institutionId, academicYear, status, priority, recipient, publishDate, expiryDate, attachments } = req.body;
+    const { title, description, content, institutionId, academicYear, status, priority, recipient, recipients, noticeDate, publishDate, expiryDate, attachments } = req.body;
+    const noticeContent = description || content || '';
+    const noticeRecipients = recipients || (recipient ? recipient.split(',').map(r => r.trim()) : []);
     
+    logger.info('Notice create payload:', { title, institutionId, status, priority, recipients, noticeDate, publishDate });
+
     // Validation
     const errors = [];
     
@@ -76,9 +81,9 @@ const createNotice = async (req, res) => {
       errors.push('Title must not exceed ' + MAX_TITLE_LENGTH + ' characters');
     }
     
-    if (!content || content.trim().length === 0) {
+    if (!noticeContent || noticeContent.trim().length === 0) {
       errors.push('Notice content is required');
-    } else if (content.length > MAX_CONTENT_LENGTH) {
+    } else if (noticeContent.length > MAX_CONTENT_LENGTH) {
       errors.push('Content must not exceed ' + MAX_CONTENT_LENGTH + ' characters');
     }
     
@@ -102,10 +107,20 @@ const createNotice = async (req, res) => {
       errors.push('Invalid priority. Must be one of: ' + VALID_NOTICE_PRIORITIES.join(', '));
     }
     
-    if (recipient && !VALID_RECIPIENTS.includes(recipient)) {
-      errors.push('Invalid recipient. Must be one of: ' + VALID_RECIPIENTS.join(', '));
+    if (recipient && !recipients) {
+      const recips = recipient.split(',').map(r => r.trim()).filter(Boolean);
+      for (const r of recips) {
+        if (!VALID_RECIPIENTS.includes(r)) {
+          errors.push('Invalid recipient "' + r + '". Must be one of: ' + VALID_RECIPIENTS.join(', '));
+        }
+      }
     }
     
+    if (noticeDate) {
+      const noticeDateError = validateDate(noticeDate, 'Notice date');
+      if (noticeDateError) errors.push(noticeDateError);
+    }
+
     if (publishDate) {
       const publishDateError = validateDate(publishDate, 'Publish date');
       if (publishDateError) errors.push(publishDateError);
@@ -132,9 +147,52 @@ const createNotice = async (req, res) => {
     }
     
     const notice = await noticeService.createNotice({
-      ...req.body,
+      title,
+      description: noticeContent,
+      recipients: noticeRecipients,
+      noticeDate: noticeDate || publishDate || new Date(),
+      publishDate: publishDate || noticeDate || new Date(),
+      priority: priority || 'medium',
+      status: status || 'published',
+      academicYear: academicYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+      institutionId,
       metadata: { createdBy: req.user?.id || req.body.metadata?.createdBy }
     });
+    
+    // Auto-create notifications for published notices
+    if (notice && (!status || status !== 'draft')) {
+      try {
+        const User = mongoose.model('User');
+        // Determine which roles to notify
+        let targetRoles = ['teacher', 'student', 'admin'];
+        if (noticeRecipients.length > 0) {
+          if (noticeRecipients.includes('all')) {
+            // Notify all user roles
+            targetRoles = ['teacher', 'student', 'admin', 'principal', 'staff', 'accountant', 'librarian', 'receptionist', 'institution_admin', 'hr_manager', 'hostel_warden', 'transport_manager'];
+          } else {
+            targetRoles = noticeRecipients;
+          }
+        }
+        const users = await User.find({
+          institutionId,
+          role: { $in: targetRoles }
+        }).select('_id').limit(50).lean();
+        
+        const notificationPromises = users.map(u =>
+          notificationService.createNotification(institutionId, {
+            recipientId: u._id,
+            type: 'info',
+            title: 'New Notice: ' + title,
+            message: noticeContent.substring(0, 200),
+            priority: priority || 'medium',
+            metadata: { source: 'notice', sourceId: notice._id.toString() }
+          }).catch(() => {})
+        );
+        await Promise.allSettled(notificationPromises);
+      } catch (notifErr) {
+        logger.warn('Failed to auto-create notice notifications:', notifErr.message);
+      }
+    }
     
     logger.info('Notice created successfully:', { noticeId: notice._id });
     return createdResponse(res, notice, 'Notice created successfully');
@@ -214,7 +272,7 @@ const getAllNotices = async (req, res) => {
     
     // Extract params from params[] format if needed
     const params = req.query.params || {};
-    const finalInstitutionId = institutionId || params.institutionId;
+    const finalInstitutionId = institutionId || params.institutionId || req.tenantId || req.user?.institutionId;
     const finalAcademicYear = academicYear || params.academicYear;
     
     const result = await noticeService.getAllNotices(
@@ -273,7 +331,7 @@ const updateStatus = async (req, res) => {
 const getNoticesByRecipient = async (req, res) => {
   try {
     const { institutionId, academicYear } = req.query;
-    const notices = await noticeService.getNoticesByRecipient(req.params.recipient, institutionId, academicYear);
+    const notices = await noticeService.getNoticesByRecipient(req.params.recipient, institutionId || req.tenantId || req.user?.institutionId, academicYear);
     res.json({ success: true, data: notices });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -283,7 +341,7 @@ const getNoticesByRecipient = async (req, res) => {
 const getPublishedNotices = async (req, res) => {
   try {
     const { institutionId, academicYear } = req.query;
-    const notices = await noticeService.getPublishedNotices(institutionId, academicYear);
+    const notices = await noticeService.getPublishedNotices(institutionId || req.tenantId || req.user?.institutionId, academicYear);
     res.json({ success: true, data: notices });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -293,7 +351,7 @@ const getPublishedNotices = async (req, res) => {
 const getUpcomingNotices = async (req, res) => {
   try {
     const { institutionId, academicYear } = req.query;
-    const notices = await noticeService.getUpcomingNotices(institutionId, academicYear);
+    const notices = await noticeService.getUpcomingNotices(institutionId || req.tenantId || req.user?.institutionId, academicYear);
     res.json({ success: true, data: notices });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -312,7 +370,7 @@ const incrementViews = async (req, res) => {
 const getNoticeStatistics = async (req, res) => {
   try {
     const { institutionId, academicYear } = req.query;
-    const statistics = await noticeService.getNoticeStatistics(institutionId, academicYear);
+    const statistics = await noticeService.getNoticeStatistics(institutionId || req.tenantId || req.user?.institutionId, academicYear);
     res.json({ success: true, data: statistics });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -322,7 +380,7 @@ const getNoticeStatistics = async (req, res) => {
 const searchNotices = async (req, res) => {
   try {
     const { q, institutionId } = req.query;
-    const notices = await noticeService.searchNotices(q, institutionId);
+    const notices = await noticeService.searchNotices(q, institutionId || req.tenantId || req.user?.institutionId);
     res.json({ success: true, data: notices });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

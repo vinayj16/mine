@@ -7,9 +7,11 @@ export const getAttendanceWithSummaryValidation = [
 ];
 
 export const markAttendanceValidation = [
-  body('studentId').isMongoId().withMessage('Invalid student ID'),
-  body('date').isISO8601().withMessage('Invalid date'),
-  body('status').isIn(['present', 'absent', 'late', 'excused']).withMessage('Invalid status')
+  body('userId').optional().isMongoId().withMessage('Invalid user ID'),
+  body('staffId').optional().isMongoId().withMessage('Invalid staff ID'),
+  body('studentId').optional().isMongoId().withMessage('Invalid student ID'),
+  body('date').optional().isISO8601().withMessage('Invalid date'),
+  body('status').isIn(['present', 'absent', 'late', 'excused', 'half_day']).withMessage('Invalid status')
 ];
 
 export const getStatsValidation = [
@@ -20,7 +22,7 @@ export const getStatsValidation = [
 export const getHistoryValidation = [
   query('userId').optional().isMongoId().withMessage('Invalid user ID'),
   query('userType').optional().isIn(['student', 'teacher', 'staff']).withMessage('Invalid user type'),
-  query('schoolId').optional().isMongoId().withMessage('Invalid school ID'),
+  query('institutionId').optional().isMongoId().withMessage('Invalid school ID'),
   query('startDate').optional().isISO8601().withMessage('Invalid start date'),
   query('endDate').optional().isISO8601().withMessage('Invalid end date'),
   query('status').optional().isIn(['present', 'absent', 'late', 'excused']).withMessage('Invalid status'),

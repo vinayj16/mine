@@ -8,11 +8,15 @@ import AgentLayout from "../layouts/AgentLayout";
 import AdminLayout from "../layouts/AdminLayout";
 import TransportLayout from "../layouts/TransportLayout";
 import RoleBasedDashboardRedirect from "../components/RoleBasedDashboardRedirect";
+import UnderMaintenance from "../pages/Under Maintenance/UnderMaintenance";
+import NotFoundPage from "../pages/NotFoundPage";
 
 // Auth Pages
 import LoginPage from "../pages/Authentication/Login/Login";
 import RegisterPage from "../pages/Authentication/Login/Register/Register";
 import ForgotPasswordPage from "../pages/Authentication/Login/ForgotPassword/ForgotPassword";
+import PrivacyPolicyPage from "../pages/Authentication/PrivacyPolicyPage";
+import TermsConditionsPage from "../pages/Authentication/TermsConditionsPage";
 
 // Super Admin Pages
 import AddInstitutionPage from "../pages/superadmin/AddInstitutionPage";
@@ -79,6 +83,7 @@ import ExamPage from "../pages/academic/ExamPage";
 import ExamSchedulePage from "../pages/academic/ExamSchedulePage";
 import GradePage from "../pages/academic/GradePage";
 import ClassTimeTablePage from "../pages/academic/ClassTimeTablePage";
+import ClassDetailPage from "../pages/academic/ClassDetailPage";
 import ExamAttendancePage from "../pages/academic/ExamAttendancePage";
 import ExamResultsPage from "../pages/academic/ExamResultsPage";
 
@@ -86,19 +91,29 @@ import ExamResultsPage from "../pages/academic/ExamResultsPage";
 import StudentListPage from "../pages/students/StudentListPage";
 import StudentAdd from "../pages/students/StudentAdd";
 import StudentPromotionPage from "../pages/students/StudentPromotionPage";
-import StudentTimeTablePage from "../pages/students/StudentTimeTablePage";
 import StudentLeavesPage from "../pages/students/StudentLeavesPage";
 import StudentFeesPage from "../pages/students/StudentFeesPage";
-import StudentResultPage from "../pages/students/StudentResultPage";
 import StudentLibraryPage from "../pages/students/StudentLibraryPage";
+
+// Student Dashboard Pages
+import StudentOwnTimeTablePage from "../pages/dashboard/Student/StudentOwnTimeTablePage";
+import StudentOwnResultsPage from "../pages/dashboard/Student/StudentOwnResultsPage";
+import StudentOwnGenericPage from "../pages/dashboard/Student/StudentOwnGenericPage";
 
 // Institution Teacher Pages
 import TeacherListPage from "../pages/teachers/TeacherListPage";
 import TeacherAddPage from "../pages/teachers/TeacherAddPage";
 import TeacherRoutinePage from "../pages/teachers/TeacherRoutinePage";
+import TeacherDetailsPage from "../pages/teachers/TeacherDetailsPage";
 import TeacherLeavesPage from "../pages/teachers/TeacherLeavesPage";
 import TeacherSalaryPage from "../pages/teachers/TeacherSalaryPage";
 import TeacherLibraryPage from "../pages/teachers/TeacherLibraryPage";
+import TeacherTransportFeesPage from "../pages/teachers/TeacherTransportFeesPage";
+
+// Parent Child View Pages
+import StudentDetailsPage from "../pages/students/StudentDetailsPage";
+import StudentTimeTablePage from "../pages/students/StudentTimeTablePage";
+import StudentResultPage from "../pages/students/StudentResultPage";
 
 // Institution Parent Pages
 import ParentListPage from "../pages/parents/ParentListPage";
@@ -120,10 +135,18 @@ import LibraryReturnPage from "../pages/library/LibraryReturnPage";
 // Institution Sports
 import SportsPage from "../pages/sports/SportsPage";
 
+// PTM Pages
+import ParentPTMPage from "../pages/ptm/ParentPTMPage";
+import TeacherPTMPage from "../pages/ptm/TeacherPTMPage";
+import AdminPTMPage from "../pages/ptm/AdminPTMPage";
+
 // Institution Hostel Pages
 import HostelRoomsPage from "../pages/hostel/HostelRoomsPage";
 import HostelRoomTypesPage from "../pages/hostel/HostelRoomTypesPage";
 import HostelReportPage from "../pages/hostel/HostelReportPage";
+import HostelListPage from "../pages/hostel/HostelListPage";
+import FeesPage from "../pages/hostel/FeesPage";
+import PaymentsPage from "../pages/hostel/PaymentsPage";
 
 // Institution Transport Pages
 import TransportRoutesPage from "../pages/transport/TransportRoutesPage";
@@ -136,6 +159,7 @@ import TransportReportPage from "../pages/transport/TransportReportPage";
 // Institution Attendance Pages
 import StudentAttendancePage from "../pages/attendance/StudentAttendancePage";
 import StaffAttendancePage from "../pages/attendance/StaffAttendancePage";
+import TeacherAttendancePage from "../pages/attendance/TeacherAttendancePage";
 
 // Institution hrM Pages
 import StaffsPage from "../pages/hrm/StaffsPage";
@@ -154,6 +178,11 @@ import ExpensesCategoryPage from "../pages/finance/ExpensesCategoryPage";
 import IncomePage from "../pages/finance/IncomePage";
 import InvoicesPage from "../pages/finance/InvoicesPage";
 import TransactionsPage from "../pages/finance/TransactionsPage";
+import SalariesPage from "../pages/finance/SalariesPage";
+import BudgetsPage from "../pages/finance/BudgetsPage";
+import InventoryPage from "../pages/hr/InventoryPage";
+import HREmailLogsPage from "../pages/hr/HREmailLogsPage";
+import VehicleMaintenancePage from "../pages/transport/VehicleMaintenancePage";
 
 // Institution Announcements
 import NoticeBoardPage from "../pages/announcements/NoticeBoardPage";
@@ -168,7 +197,6 @@ import LeaveReportPage from "../pages/reports/LeaveReportPage";
 import FeesReportPage from "../pages/reports/FeesReportPage";
 
 // Institution Users/Roles
-import UsersPage from "../pages/users/UsersPage";
 import RolesPermissionsPage from "../pages/users/RolesPermissionsPage";
 import DeleteAccountPage from "../pages/users/DeleteAccountPage";
 
@@ -177,6 +205,7 @@ import TicketsPage from "../pages/support/TicketsPage";
 
 // Admin Pages
 import InstitutionSettingsPage from "../pages/dashboard/InstituteAdmin/InstitutionSettingsPage";
+import InstitutionBrandingSettings from "../pages/dashboard/InstituteAdmin/InstitutionBrandingSettings";
 import AdminDashboard from "../pages/dashboard/Admin/AdminDashboard";
 import AdminAddStudentPage from "../pages/dashboard/Admin/AdminAddStudentPage";
 import AdminFeesPage from "../pages/dashboard/Admin/AdminFeesPage";
@@ -200,12 +229,13 @@ import AdminProfileSettingsPage from "../pages/dashboard/Admin/AdminProfileSetti
 import AdminNotificationsPage from "../pages/dashboard/Admin/AdminNotificationsPage";
 import AdminSchoolSettingsPage from "../pages/dashboard/Admin/AdminSchoolSettingsPage";
 import AdminUserDirectoryPage from "../pages/dashboard/Admin/AdminUserDirectoryPage";
+import AdminStaffPage from "../pages/dashboard/Admin/AdminStaffPage";
 import AdminPendingRequestsPage from "../pages/dashboard/Admin/AdminPendingRequestsPage";
 import AdminCreateCredentialsPage from "../pages/dashboard/Admin/AdminCreateCredentialsPage";
 import PrincipalAnalyticsPage from "../pages/dashboard/Principal/PrincipalAnalyticsPage";
 import FinancePage from "../pages/dashboard/FinancePage";
-import StudentsOverviewPage from "../pages/overview/StudentsOverviewPage";
-import TeachersOverviewPage from "../pages/overview/TeachersOverviewPage";
+// import StudentsOverviewPage from "../pages/overview/StudentsOverviewPage";
+// import TeachersOverviewPage from "../pages/overview/TeachersOverviewPage";
 import ParentsOverviewPage from "../pages/overview/ParentsOverviewPage";
 
 // Teacher Pages
@@ -216,20 +246,25 @@ import StudentDashboardPage from "../pages/dashboard/Student/StudentDashboard";
 
 // Parent Pages
 import ParentDashboardPage from "../pages/dashboard/Parent/ParentDashboardPage";
+import ParentChildActivityPage from "../pages/dashboard/Parent/ParentChildActivityPage";
 
 // Staff Pages
 import StaffDashboardPage from "../pages/dashboard/Staff/StaffDashboard";
 import StaffProfilePage from "../pages/staff/ProfilePage";
 import TasksPage from "../pages/staff/TasksPage";
 import LeavePage from "../pages/staff/LeavePage";
+import StaffNotificationsPage from "../pages/staff/StaffNotificationsPage";
 import MessagesPage from "../pages/communication/MessagesPage";
 
 // Accountant Pages
 import AccountantDashboardPage from "../pages/dashboard/Accountant/AccountantDashboardPage";
+import AccountantFeesPage from "../pages/dashboard/Accountant/AccountantFeesPage";
 import FeeCollectionPage from "../pages/dashboard/Accountant/FeeCollectionPage";
 
 // Librarian Pages
 import LibrarianDashboardPage from "../pages/dashboard/LibraryDashboardPage";
+import HRDashboardPage from "../pages/dashboard/Hr/HRDashboardPage";
+import HostelDashboardPage from "../pages/dashboard/HostelDashboardPage";
 
 // Transport Manager Pages
 import TransportManagerDashboardPage from "../pages/dashboard/TransportDashboardPage";
@@ -271,1068 +306,692 @@ import UserDirectoryPage from "../pages/dashboard/InstituteAdmin/UserDirectoryPa
 import PrincipalDashboard from "../pages/dashboard/Principal/PrincipalDashboard";
 import CollectFeesPage from "../pages/fees/CollectFeesPage";
 import SubscriptionPage from "../pages/dashboard/InstituteAdmin/SubscriptionPage";
+import ResultsListPage from "../pages/dashboard/Results/ResultsListPage";
+import InactivityMonitor from "../components/common/InactivityMonitor";
+
+// PTM Router - picks the right PTM component based on user role
+import { useAuthStore } from "../store/authStore";
+
+const PTMRouter = () => {
+  const { user } = useAuthStore();
+  const role = user?.role?.toLowerCase();
+  if (role === "parent" || role === "guardian") return <ParentPTMPage />;
+  if (role === "teacher") return <TeacherPTMPage />;
+  if (role === "admin" || role === "institution_admin" || role === "institutionadmin" || role === "principal") return <AdminPTMPage />;
+  return <Navigate to="/dashboard" replace />;
+};
+
+// Global Root Layout to handle cross-cutting concerns like inactivity monitoring
+const RootLayout = () => {
+  return (
+    <>
+      <InactivityMonitor />
+      <Outlet />
+    </>
+  );
+};
 
 // Create finalized router
 const router = createBrowserRouter([
-  // Root - Home Page
   {
     path: "/",
-    element: <HomePage />,
-  },
-
-  // Authentication Routes (no layout)
-  {
-    path: "/login",
-    element: <LoginPage />,
-  },
-  {
-    path: "/register",
-    element: <RegisterPage />,
-  },
-  {
-    path: "/forgot-password",
-    element: <ForgotPasswordPage />,
-  },
-
-  // Settings Routes (accessible from sidebar with InstitutionLayout)
-  {
-    path: "/settings",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "institution_owner",
-          "institutionowner",
-          "institution_admin",
-          "institutionadmin",
-          "admin",
-          "admin",
-          "principal",
-          "teacher",
-          "teacher",
-          "student",
-          "student",
-          "parent",
-          "parent",
-          "staff",
-          "staff",
-          "accountant",
-          "accountant",
-          "hr",
-          "hr",
-          "librarian",
-          "librarian",
-          "transportmanager",
-          "transport_manager",
-          "hostelwarden",
-          "hostel_warden",
-        ]}
-        element={<InstitutionLayout />}
-      />
-    ),
+    element: <RootLayout />,
     children: [
-      { index: true, element: <UserSettingsPage /> },
-      { path: "profile", element: <ProfileSettingsPage /> },
-      { path: "security", element: <SecuritySettingsPage /> },
-      { path: "notifications", element: <NotificationsSettingsPage /> },
-    ],
-  },
-
-  // Super Admin Routes (SEPARATE LAYOUT)
-  {
-    path: "/super-admin",
-    element: <SuperAdminLayout />,
-    children: [
+      // Root - Home Page
       {
-        index: true,
-        element: <Navigate to="/super-admin/dashboard" replace />,
+        path: "/",
+        element: <HomePage />,
       },
+      // Generic Results Page
       {
-        path: "dashboard",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<SuperAdminDashboard />}
-          />
-        ),
-      },
-      {
-        path: "institutions/add",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AddInstitutionPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/:id",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsDetailsPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/:id/edit",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsEditPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/:id/upgrade",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsUpgradePage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/:id/admin",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsAdminManagementPage />}
-          />
-        ),
-      },
-      // Institution type routes
-      {
-        path: "institutions/schools",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsSchoolsPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/inter-colleges",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsInterCollegesPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/degree-colleges",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsDegreeCollegesPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/engineering-colleges",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsEngineeringCollegesPage />}
-          />
-        ),
-      },
-      {
-        path: "institutions/engineering",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionsManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "institution-setup",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstituteSetupPage />}
-          />
-        ),
-      },
-      {
-        path: "institution-management",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InstitutionManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "user-setup",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<CreateCredentialsPage />}
-          />
-        ),
-      },
-      {
-        path: "create-credentials",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<CreateCredentialsPage />}
-          />
-        ),
-      },
-      {
-        path: "branches",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<BranchesMonitoringPage />}
-          />
-        ),
-      },
-      {
-        path: "branches/:id",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<BranchDetailsPage />}
-          />
-        ),
-      },
-      {
-        path: "branches/:id/edit",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<BranchEditPage />}
-          />
-        ),
-      },
-      {
-        path: "branches/:id/students",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<BranchStudentsPage />}
-          />
-        ),
-      },
-      {
-        path: "impersonate",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<ImpersonatePage />}
-          />
-        ),
-      },
-      {
-        path: "transactions",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<TransactionsManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "transactions/:id",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<TransactionDetailsPage />}
-          />
-        ),
-      },
-      {
-        path: "transactions/:id/invoice",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<InvoiceDetailsPage />}
-          />
-        ),
-      },
-      {
-        path: "subscription-approvals",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<SubscriptionApprovalPage />}
-          />
-        ),
-      },
-      {
-        path: "revenue",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<RevenueAnalyticsPage />}
-          />
-        ),
-      },
-      {
-        path: "analytics/revenue",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<RevenueAnalyticsPage />}
-          />
-        ),
-      },
-      {
-        path: "analytics",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<SuperAdminAnalyticsPage />}
-          />
-        ),
-      },
-      {
-        path: "analytics-reports",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AnalyticsReportsPage />}
-          />
-        ),
-      },
-      {
-        path: "audit-logs",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AuditLogsPage />}
-          />
-        ),
-      },
-      {
-        path: "platform-users",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<PlatformUsersPage />}
-          />
-        ),
-      },
-      {
-        path: "agents",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AgentsManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "agents/add",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AddAgentPage />}
-          />
-        ),
-      },
-      {
-        path: "agents/:id",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AgentDetailsPage />}
-          />
-        ),
-      },
-      {
-        path: "agents/:id/edit",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<EditAgentPage />}
-          />
-        ),
-      },
-      {
-        path: "agent-analytics",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AgentAnalyticsPage />}
-          />
-        ),
-      },
-      {
-        path: "all-data",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AllDataPage />}
-          />
-        ),
-      },
-      {
-        path: "memberships",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<MembershipsManagementPage />}
-          />
-        ),
-      },
-      {
-        path: "tickets",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<SupportTicketsPage />}
-          />
-        ),
-      },
-      {
-        path: "modules",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<ModulesControlPage />}
-          />
-        ),
-      },
-      {
-        path: "pending-requests",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<PendingRequestsPage />}
-          />
-        ),
-      },
-      {
-        path: "settings",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<PlatformSettingsPage />}
-          />
-        ),
-      },
-      {
-        path: "alerts",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<AlertsPage />}
-          />
-        ),
-      },
-      {
-        path: "maintenance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<MaintenancePage />}
-          />
-        ),
-      },
-      // Applications Routes for Super Admin
-      {
-        path: "apps",
+        path: "dashboard/results",
+        element: <ProtectedRoute requiredRoles={["principal", "admin", "institution_admin", "institutionadmin", "institutionowner"]} element={<MainLayout />} />,
         children: [
-          {
-            path: "calendar",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<CalendarPage />}
-              />
-            ),
-          },
-          {
-            path: "call",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<CallPage />}
-              />
-            ),
-          },
-          {
-            path: "chat",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<ChatPage />}
-              />
-            ),
-          },
-          {
-            path: "email",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<EmailPage />}
-              />
-            ),
-          },
-          {
-            path: "file-manager",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<FileManagerPage />}
-              />
-            ),
-          },
-          {
-            path: "notes",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<NotesPage />}
-              />
-            ),
-          },
-          {
-            path: "todo",
-            element: (
-              <ProtectedRoute
-                requiredRoles={["superadmin"]}
-                element={<TodoPage />}
-              />
-            ),
-          },
-        ],
+          { index: true, element: <ResultsListPage /> }
+        ]
       },
-      // Fallback route for unmatched paths
+      // Backwards-compatible redirect: support legacy `/transport` path
       {
-        path: "*",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["superadmin"]}
-            element={<SuperAdminDashboard />}
-          />
-        ),
+        path: "transport",
+        element: <Navigate to="/dashboard/transport" replace />,
       },
-    ],
-  },
+      // Backwards-compatible redirects for transport apps paths
+      {
+        path: "transport/apps",
+        element: <Navigate to="/dashboard/transport/apps" replace />,
+      },
+      {
+        path: "transport/apps/:app",
+        element: <Navigate to="/dashboard/transport/apps/:app" replace />,
+      },
 
-  // Institution Layout Routes — auth guard is in InstitutionLayout, no per-route ProtectedRoute needed
-  {
-    path: "/institution",
-    element: <InstitutionLayout />,
-    children: [
-      { index: true, element: <InstitutionDashboard /> },
-      { path: "dashboard", element: <InstitutionDashboard /> },
-      { path: "analytics", element: <InstituteAnalyticsDashboardPage /> },
-      { path: "finance", element: <InstituteFinanceDashboardPage /> },
-      { path: "subscription", element: <SubscriptionPage /> },
-      { path: "overview/teaching", element: <TeachersOverviewPage /> },
-      { path: "overview/students", element: <StudentsOverviewPage /> },
-      { path: "overview/parents", element: <ParentsOverviewPage /> },
-      // User Management
-      { path: "pending-requests", element: <InstitutionPendingRequestsPage /> },
+      // Authentication Routes (no layout)
       {
-        path: "create-credentials",
-        element: <InstitutionCreateCredentialsPage />,
-      },
-      { path: "users", element: <UserDirectoryPage /> },
-      // Academic
-      { path: "academic/classes", element: <ClassesPage /> },
-      { path: "academic/sections", element: <ClassSectionPage /> },
-      { path: "academic/subjects", element: <ClassSubjectPage /> },
-      { path: "academic/syllabus", element: <ClassSyllabusPage /> },
-      { path: "academic/classrooms", element: <ClassRoomPage /> },
-      { path: "academic/class-routine", element: <ClassRoutinePage /> },
-      { path: "academic/homework", element: <ClassHomeWorkPage /> },
-      // Students
-      { path: "students", element: <StudentListPage /> },
-      { path: "students/add", element: <StudentAdd /> },
-      { path: "students/promotion", element: <StudentPromotionPage /> },
-      { path: "students/timetable", element: <StudentTimeTablePage /> },
-      { path: "students/leaves", element: <StudentLeavesPage /> },
-      { path: "students/fees", element: <StudentFeesPage /> },
-      { path: "students/results", element: <StudentResultPage /> },
-      { path: "students/library", element: <StudentLibraryPage /> },
-      // Teachers
-      { path: "teachers", element: <TeacherListPage /> },
-      { path: "teachers/add", element: <TeacherAddPage /> },
-      { path: "teachers/routine", element: <TeacherRoutinePage /> },
-      { path: "teachers/leaves", element: <TeacherLeavesPage /> },
-      { path: "teachers/salary", element: <TeacherSalaryPage /> },
-      { path: "teachers/library", element: <TeacherLibraryPage /> },
-      // Parents & Guardians
-      { path: "parents", element: <ParentListPage /> },
-      { path: "parents/details", element: <ParentDetailsPage /> },
-      { path: "guardians", element: <GuardianListPage /> },
-      // Fees
-      { path: "fees/collection", element: <CollectFeesPage /> },
-      { path: "fees/groups", element: <FeesGroupPage /> },
-      { path: "fees/types", element: <FeesTypePage /> },
-      { path: "fees/masters", element: <FeesMasterPage /> },
-      { path: "fees/assignment", element: <FeesAssignPage /> },
-      { path: "fees/collect", element: <CollectFeesPage /> },
-      // Library
-      { path: "library/members", element: <LibraryMembersPage /> },
-      { path: "library/books", element: <LibraryBooksPage /> },
-      { path: "library/issue", element: <LibraryIssueBookPage /> },
-      { path: "library/return", element: <LibraryReturnPage /> },
-      // Sports
-      { path: "sports", element: <SportsPage /> },
-      // Transport
-      { path: "transport/routes", element: <TransportRoutesPage /> },
-      {
-        path: "transport/pickup-points",
-        element: <TransportPickupPointsPage />,
-      },
-      { path: "transport/vehicles", element: <TransportVehiclePage /> },
-      { path: "transport/drivers", element: <TransportVehicleDriversPage /> },
-      { path: "transport/assign", element: <TransportAssignVehiclePage /> },
-      { path: "transport/reports", element: <TransportReportPage /> },
-      // Hostel
-      { path: "hostel", element: <HostelRoomsPage /> },
-      { path: "hostel/rooms", element: <HostelRoomsPage /> },
-      { path: "hostel/room-types", element: <HostelRoomTypesPage /> },
-      { path: "hostel/reports", element: <HostelReportPage /> },
-      { path: "hostel/hostels", element: <HostelRoomsPage /> },
-      { path: "hostel/fees", element: <CollectFeesPage /> },
-      { path: "hostel/payments", element: <CollectFeesPage /> },
-      // Attendance
-      { path: "attendance/students", element: <StudentAttendancePage /> },
-      { path: "attendance/staff", element: <StaffAttendancePage /> },
-      // Examinations
-      { path: "exams", element: <ExamPage /> },
-      { path: "exams/schedule", element: <ExamSchedulePage /> },
-      { path: "exams/grades", element: <GradePage /> },
-      { path: "exams/attendance", element: <ExamAttendancePage /> },
-      { path: "exams/results", element: <ExamResultsPage /> },
-      // hrM
-      { path: "hrm/staffs", element: <StaffsPage /> },
-      { path: "hrm/staffs/overview", element: <StaffOverviewPage /> },
-      { path: "hrm/staffs/documents", element: <StaffDocumentsPage /> },
-      { path: "hrm/departments", element: <DepartmentsPage /> },
-      { path: "hrm/designations", element: <DesignationsPage /> },
-      { path: "hrm/leaves", element: <LeavesPage /> },
-      { path: "hrm/approvals", element: <ApprovalsPage /> },
-      { path: "hrm/holidays", element: <HolidaysPage /> },
-      { path: "hrm/payroll", element: <PayrollPage /> },
-      // Finance & Accounts
-      { path: "accounts/expenses", element: <ExpensesPage /> },
-      {
-        path: "accounts/expense-categories",
-        element: <ExpensesCategoryPage />,
-      },
-      { path: "accounts/income", element: <IncomePage /> },
-      { path: "accounts/invoices", element: <InvoicesPage /> },
-      { path: "accounts/transactions", element: <TransactionsPage /> },
-      // Announcements
-      { path: "notice-board", element: <NoticeBoardPage /> },
-      { path: "events", element: <EventsPage /> },
-      // Reports
-      { path: "reports/attendance", element: <AttendanceReportPage /> },
-      { path: "reports/class", element: <ClassReportPage /> },
-      { path: "reports/student", element: <StudentReportPage /> },
-      { path: "reports/grade", element: <GradeReportPage /> },
-      { path: "reports/leave", element: <LeaveReportPage /> },
-      { path: "reports/fees", element: <FeesReportPage /> },
-      // User Management (branches/roles)
-      { path: "branches", element: <StudentsOverviewPage /> },
-      { path: "all-users", element: <UserDirectoryPage /> },
-      { path: "roles", element: <RolesPermissionsPage /> },
-      { path: "delete-requests", element: <DeleteAccountPage /> },
-      // Support
-      { path: "support/tickets", element: <TicketsPage /> },
-      // Applications
-      { path: "apps/applications", element: <InstitutionDashboard /> },
-      { path: "apps/calendar", element: <CalendarPage /> },
-      { path: "apps/call", element: <CallPage /> },
-      { path: "apps/chat", element: <ChatPage /> },
-      { path: "apps/email", element: <EmailPage /> },
-      { path: "apps/file-manager", element: <FileManagerPage /> },
-      { path: "apps/notes", element: <NotesPage /> },
-      { path: "apps/todo", element: <TodoPage /> },
-      // Settings - Unified Institution Settings Page
-      { path: "settings", element: <InstitutionSettingsPage /> },
-      { path: "settings/modules", element: <InstitutionSettingsPage /> },
-      { path: "settings/profile", element: <InstitutionSettingsPage /> },
-      { path: "settings/security", element: <InstitutionSettingsPage /> },
-      { path: "settings/notifications", element: <InstitutionSettingsPage /> },
-      { path: "settings/company", element: <InstitutionSettingsPage /> },
-      { path: "settings/localization", element: <InstitutionSettingsPage /> },
-      { path: "settings/email", element: <InstitutionSettingsPage /> },
-      { path: "settings/sms", element: <InstitutionSettingsPage /> },
-      { path: "settings/payment", element: <InstitutionSettingsPage /> },
-      { path: "settings/tax", element: <InstitutionSettingsPage /> },
-      { path: "settings/school", element: <InstitutionSettingsPage /> },
-      { path: "settings/storage", element: <InstitutionSettingsPage /> },
-      { path: "parents/:id", element: <ParentDetailsPage /> },
-    ],
-  },
-
-  // Agent Routes (Standalone - at root level)
-  {
-    path: "/agent",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["agent", "agent"]}
-        element={<AgentLayout />}
-      />
-    ),
-    children: [
-      {
-        index: true,
-        element: <AgentDashboard />,
+        path: "/login",
+        element: <LoginPage />,
       },
       {
-        path: "institutions",
-        element: <AgentInstitutionsPage />,
+        path: "/register",
+        element: <RegisterPage />,
       },
       {
-        path: "institutions/:id",
-        element: <AgentInstitutionDetailsPage />,
+        path: "/forgot-password",
+        element: <ForgotPasswordPage />,
       },
       {
-        path: "institutions/:id/edit",
-        element: <AgentInstitutionEditPage />,
+        path: "/privacy",
+        element: <PrivacyPolicyPage />,
       },
       {
-        path: "institutions/add",
-        element: <AgentAddInstitutionPage />,
+        path: "/terms",
+        element: <TermsConditionsPage />,
       },
+      // PTM Route - role-based rendering
       {
-        path: "add-institution",
-        element: <AgentAddInstitutionPage />,
-      },
-      {
-        path: "commissions",
-        element: <AgentCommissionsPage />,
-      },
-      {
-        path: "performance",
-        element: <AgentPerformancePage />,
-      },
-      {
-        path: "profile",
-        element: <AgentProfilePage />,
-      },
-      {
-        path: "settings",
-        element: <AgentSettingsPage />,
-      },
-      {
-        path: "applications/chat",
-        element: <ChatPage />,
-      },
-      {
-        path: "applications/call",
-        element: <CallPage />,
-      },
-      {
-        path: "applications/calendar",
-        element: <CalendarPage />,
-      },
-      {
-        path: "applications/notes",
-        element: <NotesPage />,
-      },
-      {
-        path: "applications/email",
-        element: <EmailPage />,
-      },
-      {
-        path: "applications/file-manager",
-        element: <FileManagerPage />,
-      },
-      {
-        path: "applications/todo",
-        element: <TodoPage />,
-      },
-    ],
-  },
-
-  // Transport Layout Routes (standalone)
-  {
-    path: "/transport",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["transportmanager", "transport_manager"]}
-        element={<TransportLayout />}
-      />
-    ),
-    children: [
-      { index: true, element: <TransportManagerDashboardPage /> },
-      { path: "routes", element: <TransportRoutesPage /> },
-      { path: "vehicles", element: <TransportVehiclePage /> },
-      { path: "drivers", element: <TransportVehicleDriversPage /> },
-      { path: "pickup-points", element: <TransportPickupPointsPage /> },
-      { path: "assign", element: <TransportAssignVehiclePage /> },
-      { path: "reports", element: <TransportReportPage /> },
-    ],
-  },
-
-  // Transport Routes — for transport_manager (MainLayout via /dashboard) + principal fallback
-  {
-    path: "/transport",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["principal", "transport_manager", "transportmanager"]}
-        element={<InstitutionLayout />}
-      />
-    ),
-    children: [
-      { index: true, element: <TransportManagerDashboardPage /> },
-      { path: "routes", element: <TransportRoutesPage /> },
-      { path: "pickup-points", element: <TransportPickupPointsPage /> },
-      { path: "vehicles", element: <TransportVehiclePage /> },
-      { path: "drivers", element: <TransportVehicleDriversPage /> },
-      { path: "assign", element: <TransportAssignVehiclePage /> },
-      { path: "reports", element: <TransportReportPage /> },
-    ],
-  },
-
-  // Hostel Layout Routes (standalone)
-  {
-    path: "/hostel",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["hostelwarden", "hostel_warden", "principal"]}
-        element={<InstitutionLayout />}
-      />
-    ),
-    children: [
-      { index: true, element: <HostelRoomsPage /> },
-      { path: "rooms", element: <HostelRoomsPage /> },
-      { path: "room-types", element: <HostelRoomTypesPage /> },
-      { path: "reports", element: <HostelReportPage /> },
-    ],
-  },
-
-  // Fees Layout Routes (standalone)
-  {
-    path: "/fees",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["accountant", "principal", "admin"]}
-        element={<InstitutionLayout />}
-      />
-    ),
-    children: [
-      { index: true, element: <CollectFeesPage /> },
-      { path: "collection", element: <CollectFeesPage /> },
-      { path: "groups", element: <FeesGroupPage /> },
-      { path: "types", element: <FeesTypePage /> },
-      { path: "masters", element: <FeesMasterPage /> },
-      { path: "assignment", element: <FeesAssignPage /> },
-      { path: "reports", element: <FeesReportPage /> },
-    ],
-  },
-
-  // Institution Layout Routes — auth guard is in InstitutionLayout, no per-route ProtectedRoute needed
-  {
-    path: "/dashboard",
-    element: <MainLayout />,
-    children: [
-      {
-        index: true,
+        path: "/ptm",
         element: (
           <ProtectedRoute
             requiredRoles={[
-              "institutionowner",
-              "institutionowner",
-              "institutionowner",
-              "institutionadmin",
-              "institutionadmin",
+              "parent",
+              "parent",
+              "teacher",
+              "teacher",
               "admin",
               "admin",
+              "institution_admin",
+              "institutionadmin",
+              "principal",
             ]}
-            element={<RoleBasedDashboardRedirect />}
+            element={<PTMRouter />}
           />
         ),
       },
+
+      // Settings Routes (accessible from sidebar with InstitutionLayout)
       {
-        path: "main",
+        path: "/settings",
         element: (
           <ProtectedRoute
             requiredRoles={[
+              "institution_owner",
               "institutionowner",
               "institution_admin",
               "institutionadmin",
               "admin",
+              "admin",
+              "principal",
+              "teacher",
+              "teacher",
+              "student",
+              "student",
+              "parent",
+              "parent",
+              "staff",
+              "staff",
+              "accountant",
+              "accountant",
+              "hr",
+              "hr",
+              "librarian",
+              "librarian",
+              "transportmanager",
+              "transport_manager",
+              "hostelwarden",
+              "hostel_warden",
             ]}
-            element={<InstitutionDashboard />}
-          />
-        ),
-      },
-      // Principal routes - inherits MainLayout from parent /dashboard
-      {
-        path: "principal",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["principal", "principal"]}
-            element={<Outlet />}
+            element={<InstitutionLayout />}
           />
         ),
         children: [
-          { index: true, element: <PrincipalDashboard /> },
-          // MAIN
-          { path: "analytics", element: <PrincipalAnalyticsPage /> },
-          { path: "finance", element: <FinancePage /> },
-          { path: "teaching-overview", element: <TeachersOverviewPage /> },
-          { path: "student-overview", element: <StudentsOverviewPage /> },
-          { path: "student-overview", element: <StudentsOverviewPage /> },
-          // ACADEMIC
-          { path: "classes", element: <ClassesPage /> },
-          { path: "sections", element: <ClassSectionPage /> },
-          { path: "subjects", element: <ClassSubjectPage /> },
-          { path: "classroom", element: <ClassRoomPage /> },
-          { path: "homework", element: <ClassHomeWorkPage /> },
-          // PEOPLES
-          { path: "students", element: <StudentListPage /> },
-          { path: "students/add", element: <StudentAdd /> },
-          { path: "teachers", element: <TeacherListPage /> },
-          { path: "parents", element: <ParentsOverviewPage /> },
-          // FEES
-          { path: "fees-collection", element: <CollectFeesPage /> },
-          { path: "fees-report", element: <FeesReportPage /> },
-          // TRANSPORT MANAGEMENT
+          { index: true, element: <UserSettingsPage /> },
+          { path: "profile", element: <ProfileSettingsPage /> },
+          { path: "security", element: <SecuritySettingsPage /> },
+          { path: "notifications", element: <NotificationsSettingsPage /> },
+        ],
+      },
+      // Super Admin Routes (SEPARATE LAYOUT)
+      {
+        path: "/super-admin",
+        element: <SuperAdminLayout/>,
+        children: [
           {
-            path: "transport/analytics",
-            element: <InstituteAnalyticsDashboardPage />,
+            index: true,
+            element: <Navigate to="/super-admin/dashboard" replace />,
           },
-          { path: "transport/revenue", element: <FinancePage /> },
-          // ATTENDANCE
-          { path: "attendance/student", element: <AdminAttendancePage /> },
-          { path: "attendance/staff", element: <StaffAttendancePage /> },
-          // LIBRARY
-          { path: "library", element: <AdminLibraryPage /> },
-          { path: "library/members", element: <AdminLibraryMembersPage /> },
-          // TRANSPORT
-          { path: "transport/routes", element: <TransportRoutesPage /> },
           {
-            path: "transport/pickup-points",
-            element: <TransportPickupPointsPage />,
+            path: "dashboard",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<SuperAdminDashboard />}
+              />
+            ),
           },
-          { path: "transport/vehicles", element: <TransportVehiclePage /> },
           {
-            path: "transport/drivers",
-            element: <TransportVehicleDriversPage />,
+            path: "institutions/add",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AddInstitutionPage />}
+              />
+            ),
           },
-          { path: "transport/assign", element: <TransportAssignVehiclePage /> },
-          { path: "transport/reports", element: <TransportReportPage /> },
-          // HOSTEL
-          { path: "hostel/rooms", element: <HostelRoomsPage /> },
-          { path: "hostel/room-types", element: <HostelRoomTypesPage /> },
-          { path: "hostel/reports", element: <HostelReportPage /> },
-          // NOTICE & EVENTS
-          { path: "notice-board", element: <NoticeBoardPage /> },
-          { path: "events", element: <EventsPage /> },
-          // SETTINGS (rendered inside MainLayout for principal)
-          { path: "settings", element: <ProfileSettingsPage /> },
-          { path: "settings/profile", element: <ProfileSettingsPage /> },
-          { path: "settings/security", element: <SecuritySettingsPage /> },
           {
-            path: "settings/notifications",
-            element: <NotificationsSettingsPage />,
+            path: "institutions",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/:id",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsDetailsPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/:id/edit",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsEditPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/:id/upgrade",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsUpgradePage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/:id/admin",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsAdminManagementPage />}
+              />
+            ),
+          },
+          // Institution type routes
+          {
+            path: "institutions/schools",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsSchoolsPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/inter-colleges",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsInterCollegesPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/degree-colleges",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsDegreeCollegesPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/engineering-colleges",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsEngineeringCollegesPage />}
+              />
+            ),
+          },
+          {
+            path: "institutions/engineering",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionsManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "institution-setup",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstituteSetupPage />}
+              />
+            ),
+          },
+          {
+            path: "institution-management",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InstitutionManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "user-setup",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<CreateCredentialsPage />}
+              />
+            ),
+          },
+          {
+            path: "create-credentials",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<CreateCredentialsPage />}
+              />
+            ),
+          },
+          {
+            path: "branches",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<BranchesMonitoringPage />}
+              />
+            ),
+          },
+          {
+            path: "branches/:id",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<BranchDetailsPage />}
+              />
+            ),
+          },
+          {
+            path: "branches/:id/edit",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<BranchEditPage />}
+              />
+            ),
+          },
+          {
+            path: "branches/:id/students",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<BranchStudentsPage />}
+              />
+            ),
+          },
+          {
+            path: "impersonate",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<ImpersonatePage />}
+              />
+            ),
+          },
+          {
+            path: "transactions",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<TransactionsManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "transactions/:id",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<TransactionDetailsPage />}
+              />
+            ),
+          },
+          {
+            path: "transactions/:id/invoice",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<InvoiceDetailsPage />}
+              />
+            ),
+          },
+          {
+            path: "subscription-approvals",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<SubscriptionApprovalPage />}
+              />
+            ),
+          },
+          {
+            path: "revenue",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<RevenueAnalyticsPage />}
+              />
+            ),
+          },
+          {
+            path: "analytics/revenue",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<RevenueAnalyticsPage />}
+              />
+            ),
+          },
+          {
+            path: "analytics",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<SuperAdminAnalyticsPage />}
+              />
+            ),
+          },
+          {
+            path: "analytics-reports",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AnalyticsReportsPage />}
+              />
+            ),
+          },
+          {
+            path: "audit-logs",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AuditLogsPage />}
+              />
+            ),
+          },
+          {
+            path: "platform-users",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<PlatformUsersPage />}
+              />
+            ),
+          },
+          {
+            path: "agents",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AgentsManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "agents/add",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AddAgentPage />}
+              />
+            ),
+          },
+          {
+            path: "agents/:id",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AgentDetailsPage />}
+              />
+            ),
+          },
+          {
+            path: "agents/:id/edit",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<EditAgentPage />}
+              />
+            ),
+          },
+          {
+            path: "agent-analytics",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AgentAnalyticsPage />}
+              />
+            ),
+          },
+          {
+            path: "all-data",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AllDataPage />}
+              />
+            ),
+          },
+          {
+            path: "memberships",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<MembershipsManagementPage />}
+              />
+            ),
+          },
+          {
+            path: "tickets",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<SupportTicketsPage />}
+              />
+            ),
+          },
+          {
+            path: "modules",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<ModulesControlPage />}
+              />
+            ),
+          },
+          {
+            path: "pending-requests",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<PendingRequestsPage />}
+              />
+            ),
+          },
+          {
+            path: "settings",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<PlatformSettingsPage />}
+              />
+            ),
+          },
+          {
+            path: "profile",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<ProfileSettingsPage />}
+              />
+            ),
+          },
+          {
+            path: "alerts",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<AlertsPage />}
+              />
+            ),
+          },
+          {
+            path: "maintenance",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["superadmin"]}
+                element={<MaintenancePage />}
+              />
+            ),
+          },
+          // Applications Routes for Super Admin
+          {
+            path: "apps",
+            children: [
+              {
+                path: "calendar",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<CalendarPage />}
+                  />
+                ),
+              },
+              {
+                path: "call",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<CallPage />}
+                  />
+                ),
+              },
+              {
+                path: "chat",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<ChatPage />}
+                  />
+                ),
+              },
+              {
+                path: "email",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<EmailPage />}
+                  />
+                ),
+              },
+              {
+                path: "file-manager",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<FileManagerPage />}
+                  />
+                ),
+              },
+              {
+                path: "notes",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<NotesPage />}
+                  />
+                ),
+              },
+              {
+                path: "todo",
+                element: (
+                  <ProtectedRoute
+                    requiredRoles={["superadmin"]}
+                    element={<TodoPage />}
+                  />
+                ),
+              },
+            ],
+          },
+          {
+            path: "profile",
+            element: (
+              <ProtectedRoute requiredRoles={["superadmin"]} element={<ProfileSettingsPage />} />
+            ),
+          },
+          {
+            path: "settings",
+            element: (
+              <ProtectedRoute requiredRoles={["superadmin"]} element={<NotificationsSettingsPage />} />
+            ),
           },
         ],
       },
-      // Teacher routes - inherits MainLayout from parent /dashboard
       {
-        path: "teacher",
+        path: "departments",
         element: (
-          <ProtectedRoute
-            requiredRoles={["teacher", "teacher"]}
-            element={<Outlet />}
-          />
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
         ),
-        children: [
-          { index: true, element: <TeacherDashboardPage /> },
-          { path: "classes", element: <ClassesPage /> },
-          { path: "subjects", element: <ClassSubjectPage /> },
-          { path: "syllabus", element: <ClassSyllabusPage /> },
-          { path: "classrooms", element: <ClassRoomPage /> },
-          { path: "class-routine", element: <ClassRoutinePage /> },
-          { path: "timetable", element: <ClassTimeTablePage /> },
-          { path: "homework", element: <ClassHomeWorkPage /> },
-          { path: "students", element: <StudentListPage /> },
-          { path: "attendance", element: <AdminAttendancePage /> },
-          { path: "exams", element: <AdminExaminationsPage /> },
-          { path: "grades", element: <GradePage /> },
-          { path: "salary", element: <TeacherSalaryPage /> },
-          { path: "library", element: <TeacherLibraryPage /> },
-        ],
-      },
-      // Student routes - inherits MainLayout from parent /dashboard
-      {
-        path: "student",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["student", "student"]}
-            element={<Outlet />}
-          />
-        ),
-        children: [
-          { index: true, element: <StudentDashboardPage /> },
-          { path: "subjects", element: <ClassSubjectPage /> },
-          { path: "timetable", element: <ClassTimeTablePage /> },
-          { path: "homework", element: <ClassHomeWorkPage /> },
-          { path: "syllabus", element: <ClassSyllabusPage /> },
-          { path: "leaves", element: <StudentLeavesPage /> },
-          { path: "library", element: <StudentLibraryPage /> },
-          { path: "attendance", element: <StudentAttendancePage /> },
-          { path: "exams/schedule", element: <ExamSchedulePage /> },
-          { path: "exams/results", element: <ExamResultsPage /> },
-          { path: "fees", element: <StudentFeesPage /> },
-        ],
-      },
-      // Parent routes - inherits MainLayout from parent /dashboard
-      {
-        path: "parent",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["parent", "parent"]}
-            element={<Outlet />}
-          />
-        ),
-        children: [
-          { index: true, element: <ParentDashboardPage /> },
-          { path: "attendance", element: <StudentAttendancePage /> },
-          { path: "homework", element: <ClassHomeWorkPage /> },
-          { path: "exams/results", element: <ExamResultsPage /> },
-          { path: "fees", element: <StudentFeesPage /> },
-          { path: "messages", element: <ChatPage /> },
-        ],
-      },
-      // Staff and other single-role routes below
-      {
-        path: "staff",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["staff", "staff_member"]}
-            element={<MainLayout />}
-          />
-        ),
-        children: [
-          { index: true, element: <StaffDashboardPage /> },
-          { path: "dashboard", element: <StaffDashboardPage /> },
-          { path: "attendance", element: <StaffAttendancePage /> },
-          { path: "attendance-report", element: <AttendanceReportPage /> },
-          { path: "profile", element: <StaffProfilePage /> },
-          { path: "documents", element: <StaffDocumentsPage /> },
-          { path: "tasks", element: <TasksPage /> },
-          { path: "leave", element: <LeavePage /> },
-        ],
+        children: [{ index: true, element: <DepartmentsPage /> }],
       },
       {
-        path: "accountant",
+        path: "designations",
+        element: (
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
+        ),
+        children: [{ index: true, element: <DesignationsPage /> }],
+      },
+      {
+        path: "staff-leaves",
+        element: (
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
+        ),
+        children: [{ index: true, element: <LeavesPage /> }],
+      },
+      {
+        path: "approvals",
+        element: (
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
+        ),
+        children: [{ index: true, element: <ApprovalsPage /> }],
+      },
+      {
+        path: "holidays",
+        element: (
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
+        ),
+        children: [{ index: true, element: <HolidaysPage /> }],
+      },
+      {
+        path: "payroll",
+        element: (
+          <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />
+        ),
+        children: [{ index: true, element: <PayrollPage /> }],
+      },
+
+      {
+        path: "accounts",
         element: (
           <ProtectedRoute
             requiredRoles={["accountant", "accountant"]}
@@ -1340,138 +999,193 @@ const router = createBrowserRouter([
           />
         ),
         children: [
-          { index: true, element: <AccountantDashboardPage /> },
-          { path: "fee-collection", element: <FeeCollectionPage /> },
-          { path: "fees-collection", element: <AccountantDashboardPage /> },
-          { path: "fees-groups", element: <FeesGroupPage /> },
-          { path: "fees-master", element: <FeesMasterPage /> },
-          { path: "fees-type", element: <FeesTypePage /> },
-          { path: "collect-fees", element: <CollectFeesPage /> },
-          { path: "fees-assign", element: <FeesAssignPage /> },
-          { path: "transactions", element: <TransactionsPage /> },
-          { path: "invoices", element: <InvoicesPage /> },
           { path: "expenses", element: <ExpensesPage /> },
+          { path: "expense-categories", element: <ExpensesCategoryPage /> },
           { path: "income", element: <IncomePage /> },
+          { path: "invoices", element: <InvoicesPage /> },
+          { path: "transactions", element: <TransactionsPage /> },
         ],
       },
+
+      // Student Root Routes
       {
-        path: "librarian",
+        path: "class-subject",
         element: (
           <ProtectedRoute
-            requiredRoles={["librarian", "librarian"]}
+            requiredRoles={["student", "student"]}
             element={<MainLayout />}
           />
         ),
-        children: [{ index: true, element: <LibrarianDashboardPage /> }],
+        children: [{ index: true, element: <ClassSubjectPage /> }],
       },
       {
-        path: "institute-admin",
+        path: "class-timetable",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <ClassTimeTablePage /> }],
+      },
+      {
+        path: "exam-results",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student", "parent", "parent"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <ExamResultsPage /> }],
+      },
+      {
+        path: "exam-schedule",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <ExamSchedulePage /> }],
+      },
+      {
+        path: "homework",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student", "parent", "parent"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <ClassHomeWorkPage /> }],
+      },
+      {
+        path: "syllabus",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <ClassSyllabusPage /> }],
+      },
+      {
+        path: "students",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "student"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [
+          { path: "timetable", element: <ClassTimeTablePage /> },
+          { path: "leaves", element: <StudentLeavesPage /> },
+          { path: "library", element: <StudentLibraryPage /> },
+          { path: "fees", element: <StudentFeesPage /> },
+        ],
+      },
+      {
+        path: "attendance",
+        element: (
+          <ProtectedRoute
+            requiredRoles={["student", "parent", "staff", "staff_member", "hr", "hr_manager", "hrmanager"]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [
+          { path: "student", element: <StudentAttendancePage /> },
+          { path: "staff", element: <StaffAttendancePage /> },
+        ],
+      },
+      {
+        path: "messages",
         element: (
           <ProtectedRoute
             requiredRoles={[
+              "parent",
+              "parent",
+              "teacher",
+              "teacher",
+              "staff",
+              "staff_member",
+            ]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [{ index: true, element: <MessagesPage /> }],
+      },
+      {
+        path: "reports",
+        element: (
+          <ProtectedRoute
+            requiredRoles={[
+              "teacher",
+              "hr",
+              "hr_manager",
+              "hrmanager",
+              "accountant",
+              "student",
+              "parent",
+              "staff",
+              "staff_member",
+              "librarian",
+              "transportmanager",
+              "transport_manager",
+              "hostelwarden",
+              "hostel_warden",
+            ]}
+            element={<MainLayout />}
+          />
+        ),
+        children: [
+          { path: "attendance", element: <AttendanceReportPage /> },
+          { path: "grade", element: <GradeReportPage /> },
+          { path: "fees", element: <FeesReportPage /> },
+        ],
+      },
+
+      // Applications nested dashboard routes (resolves 404 for sidebars)
+      {
+        path: "dashboard/applications",
+        element: (
+          <ProtectedRoute
+            requiredRoles={[
+              "superadmin",
               "institutionowner",
+              "institution_owner",
+              "institutionadmin",
               "institution_admin",
-              "institutionadmin",
               "admin",
+              "principal",
+              "teacher",
+              "student",
+              "parent",
+              "staff",
+              "staff_member",
+              "accountant",
+              "hr",
+              "hr_manager",
+              "hrmanager",
+              "librarian",
+              "transportmanager",
+              "transport_manager",
+              "hostelwarden",
+              "hostel_warden",
             ]}
-            element={<InstitutionDashboard />}
+            element={<MainLayout />}
           />
         ),
+        children: [
+          { path: "calendar", element: <CalendarPage /> },
+          { path: "call", element: <CallPage /> },
+          { path: "chat", element: <ChatPage /> },
+          { path: "email", element: <EmailPage /> },
+          { path: "file-manager", element: <FileManagerPage /> },
+          { path: "notes", element: <NotesPage /> },
+          { path: "todo", element: <TodoPage /> },
+        ],
       },
-      {
-        path: "analytics",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institution_admin",
-              "institutionadmin",
-              "admin",
-            ]}
-            element={<InstituteAnalyticsDashboardPage />}
-          />
-        ),
-      },
-      {
-        path: "finance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institution_admin",
-              "institutionadmin",
-              "admin",
-            ]}
-            element={<FinancePage />}
-          />
-        ),
-      },
-      {
-        path: "subscription",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institution_admin",
-              "institutionadmin",
-              "admin",
-            ]}
-            element={<SubscriptionPage />}
-          />
-        ),
-      },
-      {
-        path: "overview/students",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institutionowner",
-              "institutionowner",
-              "institutionadmin",
-              "institutionadmin",
-              "admin",
-              "admin",
-            ]}
-            element={<StudentsOverviewPage />}
-          />
-        ),
-      },
-      {
-        path: "overview/teachers",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institutionowner",
-              "institutionowner",
-              "institutionadmin",
-              "institutionadmin",
-              "admin",
-              "admin",
-            ]}
-            element={<TeachersOverviewPage />}
-          />
-        ),
-      },
-      {
-        path: "overview/parents",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institutionowner",
-              "institutionowner",
-              "institutionowner",
-              "institutionadmin",
-              "institutionadmin",
-              "admin",
-              "admin",
-            ]}
-            element={<ParentsOverviewPage />}
-          />
-        ),
-      },
-      // Shared routes - nested under MainLayout for teachers/students/parents/staff
+
+      // Global Routes for All Users
       {
         path: "notice-board",
         element: (
@@ -1510,1040 +1224,929 @@ const router = createBrowserRouter([
         ),
         children: [{ index: true, element: <EventsPage /> }],
       },
+
+      // Role-Based Dashboards
       {
-        path: "reports/attendance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["teacher", "teacher", "admin", "admin"]}
-            element={<MainLayout />}
-          />
-        ),
-        children: [{ index: true, element: <AttendanceReportPage /> }],
+        path: "dashboard",
+        element: <RoleBasedDashboardRedirect />,
       },
       {
-        path: "reports/grade",
+        path: "dashboard/teacher",
+        element: <ProtectedRoute requiredRoles={["teacher"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <TeacherDashboardPage /> },
+          { path: "list", element: <TeacherListPage /> },
+          { path: "add", element: <TeacherAddPage /> },
+          { path: "routine", element: <TeacherRoutinePage /> },
+          { path: "details", element: <TeacherDetailsPage /> },
+          { path: "leaves", element: <TeacherLeavesPage /> },
+          { path: "salary", element: <TeacherSalaryPage /> },
+          { path: "library", element: <TeacherLibraryPage /> },
+          { path: "classes", element: <ClassesPage /> },
+          { path: "classes/:id", element: <ClassDetailPage /> },
+          { path: "subjects", element: <ClassSubjectPage /> },
+          { path: "syllabus", element: <ClassSyllabusPage /> },
+          { path: "classrooms", element: <ClassRoomPage /> },
+          { path: "class-routine", element: <ClassRoutinePage /> },
+          { path: "timetable", element: <ClassTimeTablePage /> },
+          { path: "homework", element: <ClassHomeWorkPage /> },
+          { path: "students", element: <StudentListPage /> },
+          { path: "students/add", element: <StudentAdd /> },
+          { path: "attendance", element: <StudentAttendancePage /> },
+          { path: "exams", element: <ExamPage /> },
+          { path: "grades", element: <GradePage /> },
+          { path: "transport-fees", element: <TeacherTransportFeesPage /> },
+          { path: "profile", element: <StaffProfilePage /> },
+          { path: "ptm", element: <TeacherPTMPage /> }
+        ]
+      },
+      {
+        path: "dashboard/student",
+        element: <ProtectedRoute requiredRoles={["student"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <StudentDashboardPage /> },
+          { path: "list", element: <StudentListPage /> },
+          { path: "add", element: <StudentAdd /> },
+          { path: "promotions", element: <StudentPromotionPage /> },
+          { path: "timetable", element: <StudentOwnTimeTablePage /> },
+          { path: "results", element: <StudentOwnResultsPage /> },
+          { path: "homework", element: <StudentOwnGenericPage /> },
+          { path: "syllabus", element: <StudentOwnGenericPage /> },
+          { path: "profile", element: <StudentOwnGenericPage /> },
+          { path: "attendance", element: <StudentAttendancePage /> },
+          { path: "fees", element: <StudentFeesPage /> },
+          { path: "library", element: <StudentLibraryPage /> },
+          { path: "exams", element: <StudentOwnGenericPage /> },
+          { path: "grades", element: <StudentOwnGenericPage /> },
+          { path: "transport", element: <StudentOwnGenericPage /> }
+        ]
+      },
+      {
+        path: "dashboard/parent",
+        element: <ProtectedRoute requiredRoles={["parent", "guardian"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <ParentDashboardPage /> },
+          { path: "list", element: <ParentListPage /> },
+          { path: "details/:id", element: <ParentDetailsPage /> },
+          { path: "guardians", element: <GuardianListPage /> },
+          { path: "ptm", element: <ParentPTMPage /> },
+          { path: "profile", element: <ProfileSettingsPage /> },
+          { path: "settings", element: <NotificationsSettingsPage /> },
+          // Child selector pages (from sidebar) — MUST be before child/:id to match first
+          { path: "child/:activity/select", element: <ParentChildActivityPage /> },
+          // Parent child activity picker pages
+          { path: "activity/:activity", element: <ParentChildActivityPage /> },
+          // Child list overview
+          { path: "children", element: <ParentDashboardPage /> },
+          // Child-specific views for parents
+          { path: "child/:id", element: <StudentDetailsPage /> },
+          { path: "child/:id/timetable", element: <StudentTimeTablePage /> },
+          { path: "child/:id/results", element: <StudentResultPage /> },
+          { path: "child/:id/fees", element: <StudentFeesPage /> },
+          { path: "child/:id/attendance", element: <StudentLeavesPage /> },
+          { path: "child/:id/library", element: <StudentLibraryPage /> },
+          // HOSTEL MANAGEMENT Routes for Parent
+          { path: "hostel/hostels", element: <HostelListPage /> },
+          { path: "hostel/rooms", element: <HostelRoomsPage /> },
+          { path: "hostel/room-types", element: <HostelRoomTypesPage /> },
+          { path: "hostel/my-allocation", element: <HostelRoomsPage /> },
+          { path: "hostel/fees", element: <FeesPage /> }
+        ]
+      },
+      {
+        path: "dashboard/staff",
+        element: <ProtectedRoute requiredRoles={["staff", "staff_member"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <StaffDashboardPage /> },
+          { path: "profile", element: <StaffProfilePage /> },
+          { path: "tasks", element: <TasksPage /> },
+          { path: "leaves", element: <LeavePage /> },
+          { path: "notifications", element: <StaffNotificationsPage /> },
+          { path: "settings", element: <NotificationsSettingsPage /> }
+        ]
+      },
+      {
+        path: "dashboard/hr",
+        element: <ProtectedRoute requiredRoles={["hr", "hr_manager", "hrmanager"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <HRDashboardPage /> },
+          { path: "staffs", element: <StaffsPage /> },
+          { path: "documents", element: <StaffDocumentsPage /> },
+          { path: "overview", element: <StaffOverviewPage /> },
+          { path: "inventory", element: <InventoryPage /> },
+          { path: "emails", element: <HREmailLogsPage /> },
+          { path: "profile", element: <StaffProfilePage /> }
+        ]
+      },
+      {
+        path: "dashboard/accountant",
+        element: <ProtectedRoute requiredRoles={["accountant"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <AccountantDashboardPage /> },
+          { path: "fees", element: <AccountantFeesPage /> },
+          { path: "collect-fees", element: <FeeCollectionPage /> },
+          { path: "fees-group", element: <FeesGroupPage /> },
+          { path: "fees-type", element: <FeesTypePage /> },
+          { path: "fees-master", element: <FeesMasterPage /> },
+          { path: "fees-assign", element: <FeesAssignPage /> },
+          { path: "salaries", element: <SalariesPage /> },
+          { path: "payroll", element: <PayrollPage /> },
+          { path: "budgets", element: <BudgetsPage /> },
+          { path: "invoices", element: <InvoicesPage /> },
+          { path: "transactions", element: <TransactionsPage /> },
+          { path: "profile", element: <StaffProfilePage /> }
+        ]
+      },
+      {
+        path: "dashboard/finance",
+        element: <Navigate to="/dashboard/accountant" replace />,
+      },
+      {
+        path: "dashboard/library",
+        element: <ProtectedRoute requiredRoles={["librarian"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <LibrarianDashboardPage /> },
+          { path: "members", element: <LibraryMembersPage /> },
+          { path: "books", element: <LibraryBooksPage /> },
+          { path: "issue", element: <LibraryIssueBookPage /> },
+          { path: "return", element: <LibraryReturnPage /> },
+          { path: "profile", element: <StaffProfilePage /> }
+        ]
+      },
+      {
+        path: "dashboard/transport",
+        element: <ProtectedRoute requiredRoles={["transportmanager", "transport_manager"]} element={<TransportLayout />} />,
+        children: [
+          { index: true, element: <TransportManagerDashboardPage /> },
+          { path: "routes", element: <TransportRoutesPage /> },
+          { path: "pickup-points", element: <TransportPickupPointsPage /> },
+          { path: "vehicles", element: <TransportVehiclePage /> },
+          { path: "drivers", element: <TransportVehicleDriversPage /> },
+          { path: "assign", element: <TransportAssignVehiclePage /> },
+          { path: "reports", element: <TransportReportPage /> },
+          { path: "vehicle-maintenance", element: <VehicleMaintenancePage /> },
+          { path: "profile", element: <StaffProfilePage /> }
+        ]
+      },
+      {
+        path: "dashboard/hostel",
+        element: <ProtectedRoute requiredRoles={["hostelwarden", "hostel_warden"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <HostelDashboardPage /> },
+          { path: "rooms", element: <HostelRoomsPage /> },
+          { path: "hostels", element: <HostelListPage /> },
+          { path: "room-types", element: <HostelRoomTypesPage /> },
+          { path: "fees", element: <FeesPage /> },
+          { path: "payments", element: <PaymentsPage /> },
+          { path: "reports", element: <HostelReportPage /> },
+          { path: "profile", element: <StaffProfilePage /> }
+        ]
+      },
+      {
+        path: "dashboard/principal",
+        element: <ProtectedRoute requiredRoles={["principal"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <PrincipalDashboard /> },
+          { path: "analytics", element: <PrincipalAnalyticsPage /> },
+          // PEOPLES
+          { path: "students", element: <StudentListPage /> },
+          { path: "students/add", element: <StudentAdd /> },
+          { path: "teachers", element: <TeacherListPage /> },
+          { path: "parents", element: <ParentListPage /> },
+          { path: "guardians", element: <GuardianListPage /> },
+          // ACADEMIC
+          { path: "classes", element: <ClassesPage /> },
+          { path: "classes/:id", element: <ClassDetailPage /> },
+          { path: "sections", element: <ClassSectionPage /> },
+          { path: "subjects", element: <ClassSubjectPage /> },
+          { path: "syllabus", element: <ClassSyllabusPage /> },
+          { path: "classroom", element: <ClassRoomPage /> },
+          { path: "class-routine", element: <ClassRoutinePage /> },
+          { path: "timetable", element: <ClassTimeTablePage /> },
+          { path: "homework", element: <ClassHomeWorkPage /> },
+          // MANAGEMENT
+          { path: "fees-collection", element: <FeeCollectionPage /> },
+          { path: "library", element: <LibraryBooksPage /> },
+          { path: "sports", element: <SportsPage /> },
+          // ATTENDANCE
+          { path: "attendance/student", element: <StudentAttendancePage /> },
+          { path: "attendance/teacher", element: <TeacherAttendancePage /> },
+          // EXAMINATIONS
+          { path: "exams", element: <ExamPage /> },
+          { path: "exam-schedule", element: <ExamSchedulePage /> },
+          { path: "grades", element: <GradePage /> },
+          { path: "exams/results", element: <ExamResultsPage /> },
+          // ANNOUNCEMENTS
+          { path: "notice-board", element: <NoticeBoardPage /> },
+          { path: "events", element: <EventsPage /> },
+          // REPORTS
+          { path: "reports/attendance", element: <AttendanceReportPage /> },
+          { path: "reports/students", element: <StudentReportPage /> },
+          { path: "reports/grades", element: <GradeReportPage /> },
+          { path: "fees-report", element: <FeesReportPage /> },
+          // SETTINGS
+          { path: "profile", element: <ProfileSettingsPage /> },
+          { path: "settings", element: <NotificationsSettingsPage /> },
+          { path: "notifications", element: <NotificationsSettingsPage /> },
+          { path: "school-settings", element: <AdminSchoolSettingsPage /> },
+          // HOSTEL MANAGEMENT Routes for Principal
+          { path: "hostel/hostels", element: <HostelListPage /> },
+          { path: "hostel/rooms", element: <HostelRoomsPage /> },
+          { path: "hostel/room-types", element: <HostelRoomTypesPage /> },
+          { path: "hostel/fees", element: <FeesPage /> },
+          { path: "hostel/payments", element: <PaymentsPage /> },
+          { path: "hostel/reports", element: <HostelReportPage /> },
+          // Comprehensive Institution Settings
+          { path: "institution-settings", element: <InstitutionBrandingSettings /> },
+          // FINANCE & PAYROLL
+          { path: "salaries", element: <SalariesPage /> },
+          { path: "payroll", element: <PayrollPage /> },
+          { path: "budgets", element: <BudgetsPage /> },
+          // APPLICATIONS
+          { path: "applications/calendar", element: <CalendarPage /> },
+          { path: "applications/chat", element: <ChatPage /> },
+          { path: "applications/call", element: <CallPage /> },
+          { path: "applications/notes", element: <NotesPage /> },
+          { path: "applications/todo", element: <TodoPage /> },
+          { path: "applications/email", element: <EmailPage /> },
+          { path: "applications/file-manager", element: <FileManagerPage /> }
+        ]
+      },
+      {
+        path: "dashboard/main",
+        element: <ProtectedRoute requiredRoles={["institutionadmin", "institution_admin", "admin", "accountant", "principal"]} element={<MainLayout />} />,
+        children: [
+          { index: true, element: <InstitutionDashboard /> },
+          { path: "analytics", element: <InstituteAnalyticsDashboardPage /> },
+          { path: "finance", element: <InstituteFinanceDashboardPage /> },
+          { path: "users", element: <UserDirectoryPage /> },
+          { path: "subscription", element: <SubscriptionPage /> },
+          { path: "settings/*", element: <InstitutionBrandingSettings /> },
+          { path: "branding", element: <InstitutionBrandingSettings /> },
+          { path: "profile", element: <ProfileSettingsPage /> },
+          { path: "pending-requests", element: <InstitutionPendingRequestsPage /> },
+          { path: "create-credentials", element: <InstitutionCreateCredentialsPage /> },
+          { path: "salaries", element: <SalariesPage /> },
+          { path: "payroll", element: <PayrollPage /> },
+          { path: "budgets", element: <BudgetsPage /> },
+          { path: "transport", element: <TransportRoutesPage /> },
+          { path: "transport/routes", element: <TransportRoutesPage /> },
+          { path: "transport/vehicles", element: <TransportVehiclePage /> },
+          { path: "transport/drivers", element: <TransportVehicleDriversPage /> },
+          { path: "transport/pickup-points", element: <TransportPickupPointsPage /> },
+          { path: "transport/vehicle-maintenance", element: <VehicleMaintenancePage /> },
+          { path: "transport/assign", element: <TransportAssignVehiclePage /> },
+          { path: "transport/reports", element: <TransportReportPage /> }
+        ]
+      },
+
+      // Agent Routes
+      {
+        path: "agent",
+        element: <ProtectedRoute requiredRoles={["agent"]} element={<AgentLayout />} />,
+        children: [
+          { index: true, element: <AgentDashboard /> },
+          { path: "institutions", element: <AgentInstitutionsPage /> },
+          { path: "institutions/add", element: <AgentAddInstitutionPage /> },
+          { path: "institutions/:id", element: <AgentInstitutionDetailsPage /> },
+          { path: "institutions/:id/edit", element: <AgentInstitutionEditPage /> },
+          { path: "commissions", element: <AgentCommissionsPage /> },
+          { path: "performance", element: <AgentPerformancePage /> },
+          { path: "profile", element: <AgentProfilePage /> },
+          { path: "settings", element: <AgentSettingsPage /> },
+
+          // Agent applications
+          { path: "applications/chat", element: <ChatPage /> },
+          { path: "applications/call", element: <CallPage /> },
+          { path: "applications/calendar", element: <CalendarPage /> },
+          { path: "applications/notes", element: <NotesPage /> },
+          { path: "applications/email", element: <EmailPage /> },
+          { path: "applications/file-manager", element: <FileManagerPage /> },
+          { path: "applications/todo", element: <TodoPage /> },
+        ]
+      },
+
+      // Admin Routes (SEPARATE LAYOUT WITH SIDEBAR)
+      {
+        path: "dashboard/admin",
         element: (
           <ProtectedRoute
-            requiredRoles={["teacher", "teacher", "admin", "admin"]}
-            element={<MainLayout />}
+            requiredRoles={[
+              "admin",
+              "institutionowner",
+              "institutionadmin",
+              "superadmin",
+            ]}
+            element={<AdminLayout />}
           />
         ),
-        children: [{ index: true, element: <GradeReportPage /> }],
-      },
-      // Application Routes Section
-      {
-        path: "applications",
         children: [
           {
             index: true,
+            element: <AdminDashboard />,
+          },
+          {
+            path: "analytics",
+            element: <InstituteAnalyticsDashboardPage />,
+          },
+          {
+            path: "sports",
+            element: <SportsPage />,
+          },
+          {
+            path: "support/tickets",
+            element: <TicketsPage />,
+          },
+          {
+            path: "roles-permissions",
+            element: <RolesPermissionsPage />,
+          },
+          {
+            path: "delete-account",
+            element: <DeleteAccountPage />,
+          },
+          {
+            path: "finance",
+            element: <FinancePage />,
+          },
+          {
+            path: "salaries",
+            element: <SalariesPage />,
+          },
+          {
+            path: "payroll",
+            element: <PayrollPage />,
+          },
+          {
+            path: "budgets",
+            element: <BudgetsPage />,
+          },
+          {
+            path: "students",
+            element: <AdminStudentManagementPage />,
+          },
+          {
+            path: "students/list",
+            element: <AdminStudentManagementPage />,
+          },
+          {
+            path: "students/add",
+            element: <AdminAddStudentPage />,
+          },
+          {
+            path: "teachers",
+            element: <AdminTeacherManagementPage />,
+          },
+          {
+            path: "teachers/add",
+            element: <AdminTeacherManagementPage />,
+          },
+          {
+            path: "teachers/list",
+            element: <AdminTeacherManagementPage />,
+          },
+          {
+            path: "parents",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<CalendarPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<ParentsOverviewPage />}
               />
             ),
           },
           {
-            path: "calendar",
+            path: "classes",
+            element: <ClassesPage />,
+          },
+          {
+            path: "sections",
+            element: <ClassSectionPage />,
+          },
+          {
+            path: "subjects",
+            element: <ClassSubjectPage />,
+          },
+          {
+            path: "classroom",
+            element: <ClassRoomPage />,
+          },
+          {
+            path: "staff",
+            element: <AdminStaffPage />,
+          },
+          {
+            path: "fees",
+            element: <AdminFeesPage />,
+            children: [
+              {
+                path: "collect",
+                element: <CollectFeesPage />,
+              },
+            ],
+          },
+          {
+            path: "academic",
             element: (
               <ProtectedRoute
                 requiredRoles={[
-                  "SUPER_admin",
+                  "institution_owner",
                   "institutionadmin",
                   "admin",
                   "teacher",
+                  "principal",
                   "student",
                   "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
                 ]}
-                element={<CalendarPage />}
+                element={<AdminAcademicPage />}
+              />
+            ),
+            children: [
+              { path: "sections", element: <ClassSectionPage /> },
+              { path: "routine", element: <ClassRoutinePage /> },
+              { path: "exams", element: <ExamPage /> },
+              { path: "grades", element: <GradePage /> },
+              { path: "exam-attendance", element: <ExamAttendancePage /> }
+            ]
+          },
+          {
+            path: "attendance",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminAttendancePage />}
               />
             ),
           },
           {
-            path: "call",
+            path: "examinations",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<CallPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminExaminationsPage />}
               />
             ),
           },
           {
-            path: "chat",
+            path: "library",
+            element: <AdminLibraryPage />,
+          },
+          {
+            path: "reports",
+            element: <AdminReportsPage />,
+            children: [
+              { path: "class", element: <ClassReportPage /> },
+              { path: "student", element: <StudentReportPage /> },
+              { path: "leave", element: <LeaveReportPage /> }
+            ]
+          },
+          {
+            path: "attendance-report",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<ChatPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminAttendanceReportPage />}
               />
             ),
           },
           {
-            path: "email",
+            path: "student-report",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<EmailPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminStudentReportPage />}
               />
             ),
           },
           {
-            path: "file-manager",
+            path: "grade-report",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<FileManagerPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminGradeReportPage />}
               />
             ),
           },
           {
-            path: "notes",
+            path: "fees-report",
             element: (
               <ProtectedRoute
-                requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
-                  "admin",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
-                ]}
-                element={<NotesPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminFeesReportPage />}
               />
             ),
           },
           {
-            path: "todo",
+            path: "notice-board",
             element: (
               <ProtectedRoute
                 requiredRoles={[
-                  "SUPER_admin",
-                  "institutionadmin",
                   "admin",
-                  "teacher",
-                  "student",
-                  "parent",
+                  "institutionowner",
+                  "institutionadmin",
                   "staff",
-                  "principal",
-                  "accountant",
-                  "hr",
-                  "librarian",
-                  "transportmanager",
-                  "hostelwarden",
-                  "agent",
+                  "staff_member",
                 ]}
-                element={<TodoPage />}
+                element={<NoticeBoardPage />}
               />
             ),
           },
-        ],
-      },
-      {
-        path: "user-management",
-        children: [
           {
-            path: "directory",
+            path: "events",
             element: (
               <ProtectedRoute
-                requiredRoles={["institutionadmin", "institutionadmin"]}
-                element={<UserDirectoryPage />}
+                requiredRoles={[
+                  "admin",
+                  "institutionowner",
+                  "institutionadmin",
+                  "staff",
+                  "staff_member",
+                ]}
+                element={<EventsPage />}
+              />
+            ),
+          },
+          {
+            path: "student-attendance",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminStudentAttendancePage />}
+              />
+            ),
+          },
+          {
+            path: "teacher-attendance",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminTeacherAttendancePage />}
+              />
+            ),
+          },
+          {
+            path: "library-members",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminLibraryMembersPage />}
+              />
+            ),
+          },
+          {
+            path: "library-books",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminLibraryBooksPage />}
+              />
+            ),
+          },
+          {
+            path: "sports",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminSportsPage />}
+              />
+            ),
+          },
+          {
+            path: "exam",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminExamPage />}
+              />
+            ),
+          },
+          {
+            path: "exam-schedule",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminExamSchedulePage />}
+              />
+            ),
+          },
+          {
+            path: "grades",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminGradesPage />}
+              />
+            ),
+          },
+          {
+            path: "results",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminResultsPage />}
+              />
+            ),
+          },
+          {
+            path: "settings",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminProfileSettingsPage />}
+              />
+            ),
+          },
+          {
+            path: "profile",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminProfileSettingsPage />}
+              />
+            ),
+          },
+          {
+            path: "notifications",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminNotificationsPage />}
+              />
+            ),
+          },
+          {
+            path: "school-settings",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminSchoolSettingsPage />}
+              />
+            ),
+          },
+          {
+            path: "user-management",
+            element: <AdminUserDirectoryPage />,
+          },
+          {
+            path: "pending-requests",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminPendingRequestsPage />}
               />
             ),
           },
           {
             path: "create-credentials",
+            element: <AdminCreateCredentialsPage />,
+          },
+          {
+            path: "promotions",
             element: (
               <ProtectedRoute
-                requiredRoles={["institutionadmin", "institutionadmin"]}
-                element={<CreateCredentialsPage />}
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminExaminationsPage />}
+              />
+            ),
+          },
+          {
+            path: "library/members",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminLibraryMembersPage />}
+              />
+            ),
+          },
+          {
+            path: "library/books",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminLibraryBooksPage />}
+              />
+            ),
+          },
+          {
+            path: "transport",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportRoutesPage />}
+              />
+            ),
+          },
+          {
+            path: "transport/vehicles",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportVehiclePage />}
+              />
+            ),
+          },
+          {
+            path: "transport/drivers",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportVehicleDriversPage />}
+              />
+            ),
+          },
+          {
+            path: "transport/pickup-points",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportPickupPointsPage />}
+              />
+            ),
+          },
+          {
+            path: "transport/assign",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportAssignVehiclePage />}
+              />
+            ),
+          },
+          {
+            path: "transport/reports",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<TransportReportPage />}
+              />
+            ),
+          },
+          {
+            path: "transport/vehicle-maintenance",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<VehicleMaintenancePage />}
+              />
+            ),
+          },
+          // Academic routes
+          {
+            path: "classes",
+            element: <ClassesPage />,
+          },
+          {
+            path: "sections",
+            element: <ClassesPage />,
+          },
+          {
+            path: "subjects",
+            element: <ClassSubjectPage />,
+          },
+          {
+            path: "classrooms",
+            element: <ClassRoomPage />,
+          },
+          {
+            path: "class-routine",
+            element: <ScheduleClassesPage />,
+          },
+          {
+            path: "homework",
+            element: <ClassHomeWorkPage />,
+          },
+          {
+            path: "exam-grades",
+            element: <AdminGradesPage />,
+          },
+          {
+            path: "upload-grades",
+            element: <AdminGradesPage />,
+          },
+          // Fees routes
+          {
+            path: "fees/groups",
+            element: <AdminFeesPage />,
+          },
+          {
+            path: "fees/types",
+            element: <AdminFeesPage />,
+          },
+          {
+            path: "fees/masters",
+            element: <AdminFeesPage />,
+          },
+          {
+            path: "fees/collect",
+            element: <AdminFeesPage />,
+          },
+          {
+            path: "fees/assignment",
+            element: <AdminFeesPage />,
+          },
+          {
+            path: "homework",
+            element: <AdminAcademicPage />,
+          },
+          {
+            path: "ptm",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<AdminPTMPage />}
+              />
+            ),
+          },
+          // Hostel Management Routes for Admin
+          {
+            path: "hostel/hostels",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<HostelListPage />}
+              />
+            ),
+          },
+          {
+            path: "hostel/rooms",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<HostelRoomsPage />}
+              />
+            ),
+          },
+          {
+            path: "hostel/room-types",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<HostelRoomTypesPage />}
+              />
+            ),
+          },
+          {
+            path: "hostel/fees",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<FeesPage />}
+              />
+            ),
+          },
+          {
+            path: "hostel/payments",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<PaymentsPage />}
+              />
+            ),
+          },
+          {
+            path: "hostel/reports",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<HostelReportPage />}
+              />
+            ),
+          },
+          // Comprehensive Institution Settings (logo, payment gateway, email config, support email)
+          {
+            path: "settings/institution",
+            element: (
+              <ProtectedRoute
+                requiredRoles={["admin", "institutionowner", "institutionadmin"]}
+                element={<InstitutionSettingsPage />}
               />
             ),
           },
         ],
       },
-    ],
-  },
 
-  // hr Routes (MainLayout)
-  {
-    path: "/dashboard/hr",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <StaffDashboardPage /> }],
-  },
+      // Under Maintenance
 
-  // Root level hr routes
-  {
-    path: "/staffs",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [
-      { index: true, element: <StaffsPage /> },
-      { path: "documents", element: <StaffsPage /> },
-    ],
-  },
-  {
-    path: "/departments",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <DepartmentsPage /> }],
-  },
-  {
-    path: "/designations",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <DesignationsPage /> }],
-  },
-  {
-    path: "/staff-leaves",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <LeavesPage /> }],
-  },
-  {
-    path: "/approvals",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <ApprovalsPage /> }],
-  },
-  {
-    path: "/holidays",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <HolidaysPage /> }],
-  },
-  {
-    path: "/payroll",
-    element: (
-      <ProtectedRoute requiredRoles={["hr", "hr"]} element={<MainLayout />} />
-    ),
-    children: [{ index: true, element: <PayrollPage /> }],
-  },
+      {
+        path: "under-maintenance",
+        element: <UnderMaintenance />,
+      },
 
-  // Accountant Routes
-  {
-    path: "accountant",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["accountant", "accountant"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [
-      { index: true, element: <AccountantDashboardPage /> },
-      { path: "fees-collection", element: <AccountantDashboardPage /> },
-      { path: "fees-groups", element: <FeesGroupPage /> },
-      { path: "fees-master", element: <FeesMasterPage /> },
-      { path: "fees-type", element: <FeesTypePage /> },
-      { path: "collect-fees", element: <CollectFeesPage /> },
-      { path: "fees-assign", element: <FeesAssignPage /> },
-      { path: "transactions", element: <TransactionsPage /> },
-      { path: "invoices", element: <InvoicesPage /> },
-      { path: "expenses", element: <ExpensesPage /> },
-      { path: "income", element: <IncomePage /> },
-    ],
-  },
-  {
-    path: "/accounts",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["accountant", "accountant"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [
-      { path: "expenses", element: <ExpensesPage /> },
-      { path: "expense-categories", element: <ExpensesCategoryPage /> },
-      { path: "income", element: <IncomePage /> },
-      { path: "invoices", element: <InvoicesPage /> },
-      { path: "transactions", element: <TransactionsPage /> },
-    ],
-  },
+      // Unauthorized route — redirect to login
+      {
+        path: "unauthorized",
+        element: <Navigate to="/login" replace />
+      },
 
-  // Student Root Routes
-  {
-    path: "/class-subject",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ClassSubjectPage /> }],
-  },
-  {
-    path: "/class-timetable",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ClassTimeTablePage /> }],
-  },
-  {
-    path: "/exam-results",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student", "parent", "parent"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ExamResultsPage /> }],
-  },
-  {
-    path: "/exam-schedule",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ExamSchedulePage /> }],
-  },
-  {
-    path: "/homework",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student", "parent", "parent"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ClassHomeWorkPage /> }],
-  },
-  {
-    path: "/syllabus",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <ClassSyllabusPage /> }],
-  },
-  {
-    path: "/students",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [
-      { path: "timetable", element: <ClassTimeTablePage /> },
-      { path: "leaves", element: <StudentLeavesPage /> },
-      { path: "library", element: <StudentLibraryPage /> },
-      { path: "fees", element: <StudentFeesPage /> },
-    ],
-  },
-  {
-    path: "/attendance",
-    element: (
-      <ProtectedRoute
-        requiredRoles={["student", "student", "parent", "parent", "hr", "hr"]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [
-      { path: "student", element: <StudentAttendancePage /> },
-      { path: "staff", element: <StaffAttendancePage /> },
-    ],
-  },
-  {
-    path: "/messages",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "parent",
-          "parent",
-          "teacher",
-          "teacher",
-          "staff",
-          "staff_member",
-        ]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <MessagesPage /> }],
-  },
-  {
-    path: "/reports",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "teacher",
-          "teacher",
-          "hr",
-          "hr",
-          "accountant",
-          "accountant",
-        ]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [
-      { path: "attendance", element: <AttendanceReportPage /> },
-      { path: "grade", element: <GradeReportPage /> },
-      { path: "fees", element: <FeesReportPage /> },
-    ],
-  },
-
-  // Global Routes for All Users
-  {
-    path: "/notice-board",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "teacher",
-          "teacher",
-          "student",
-          "student",
-          "parent",
-          "parent",
-          "staff",
-          "staff_member",
-        ]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <NoticeBoardPage /> }],
-  },
-  {
-    path: "/events",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "teacher",
-          "teacher",
-          "student",
-          "student",
-          "parent",
-          "parent",
-          "staff",
-          "staff_member",
-        ]}
-        element={<MainLayout />}
-      />
-    ),
-    children: [{ index: true, element: <EventsPage /> }],
-  },
-
-  // Admin Routes (SEPARATE LAYOUT WITH SIDEBAR)
-  {
-    path: "/dashboard/admin",
-    element: (
-      <ProtectedRoute
-        requiredRoles={[
-          "admin",
-          "institutionowner",
-          "institutionadmin",
-          "superadmin",
-        ]}
-        element={<AdminLayout />}
-      />
-    ),
-    children: [
+      // Catch all route — show 404 page
       {
-        index: true,
-        element: <AdminDashboard />,
+        path: "*",
+        element: <NotFoundPage />
       },
-      {
-        path: "analytics",
-        element: <InstituteAnalyticsDashboardPage />,
-      },
-      {
-        path: "finance",
-        element: <FinancePage />,
-      },
-      {
-        path: "students",
-        element: <AdminStudentManagementPage />,
-      },
-      {
-        path: "students/list",
-        element: <AdminStudentManagementPage />,
-      },
-      {
-        path: "students/add",
-        element: <AdminAddStudentPage />,
-      },
-      {
-        path: "teachers",
-        element: <AdminTeacherManagementPage />,
-      },
-      {
-        path: "teachers/add",
-        element: <AdminTeacherManagementPage />,
-      },
-      {
-        path: "teachers/list",
-        element: <AdminTeacherManagementPage />,
-      },
-      {
-        path: "parents",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<ParentsOverviewPage />}
-          />
-        ),
-      },
-      {
-        path: "fees",
-        element: <AdminFeesPage />,
-        children: [
-          {
-            path: "collect",
-            element: <CollectFeesPage />,
-          },
-        ],
-      },
-      {
-        path: "academic",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "institution_owner",
-              "institutionadmin",
-              "admin",
-              "teacher",
-              "principal",
-              "student",
-              "parent",
-            ]}
-            element={<AdminAcademicPage />}
-          />
-        ),
-      },
-      {
-        path: "attendance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminAttendancePage />}
-          />
-        ),
-      },
-      {
-        path: "examinations",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminExaminationsPage />}
-          />
-        ),
-      },
-      {
-        path: "library",
-        element: <AdminLibraryPage />,
-      },
-      {
-        path: "reports",
-        element: <AdminReportsPage />,
-      },
-      {
-        path: "attendance-report",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminAttendanceReportPage />}
-          />
-        ),
-      },
-      {
-        path: "student-report",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminStudentReportPage />}
-          />
-        ),
-      },
-      {
-        path: "grade-report",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminGradeReportPage />}
-          />
-        ),
-      },
-      {
-        path: "fees-report",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminFeesReportPage />}
-          />
-        ),
-      },
-      {
-        path: "notice-board",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "admin",
-              "institutionowner",
-              "institutionadmin",
-              "staff",
-              "staff_member",
-            ]}
-            element={<NoticeBoardPage />}
-          />
-        ),
-      },
-      {
-        path: "events",
-        element: (
-          <ProtectedRoute
-            requiredRoles={[
-              "admin",
-              "institutionowner",
-              "institutionadmin",
-              "staff",
-              "staff_member",
-            ]}
-            element={<EventsPage />}
-          />
-        ),
-      },
-      {
-        path: "student-attendance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminStudentAttendancePage />}
-          />
-        ),
-      },
-      {
-        path: "teacher-attendance",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminTeacherAttendancePage />}
-          />
-        ),
-      },
-      {
-        path: "library-members",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminLibraryMembersPage />}
-          />
-        ),
-      },
-      {
-        path: "library-books",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminLibraryBooksPage />}
-          />
-        ),
-      },
-      {
-        path: "sports",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminSportsPage />}
-          />
-        ),
-      },
-      {
-        path: "exam",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminExamPage />}
-          />
-        ),
-      },
-      {
-        path: "exam-schedule",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminExamSchedulePage />}
-          />
-        ),
-      },
-      {
-        path: "grades",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminGradesPage />}
-          />
-        ),
-      },
-      {
-        path: "results",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminResultsPage />}
-          />
-        ),
-      },
-      {
-        path: "settings",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminProfileSettingsPage />}
-          />
-        ),
-      },
-      {
-        path: "profile",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminProfileSettingsPage />}
-          />
-        ),
-      },
-      {
-        path: "notifications",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminNotificationsPage />}
-          />
-        ),
-      },
-      {
-        path: "school-settings",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminSchoolSettingsPage />}
-          />
-        ),
-      },
-      {
-        path: "user-management",
-        element: <AdminUserDirectoryPage />,
-      },
-      {
-        path: "pending-requests",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminPendingRequestsPage />}
-          />
-        ),
-      },
-      {
-        path: "create-credentials",
-        element: <AdminCreateCredentialsPage />,
-      },
-      {
-        path: "classes",
-        element: <AdminAcademicPage />,
-      },
-      {
-        path: "promotions",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminExaminationsPage />}
-          />
-        ),
-      },
-      {
-        path: "library/members",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminLibraryMembersPage />}
-          />
-        ),
-      },
-      {
-        path: "library/books",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<AdminLibraryBooksPage />}
-          />
-        ),
-      },
-      {
-        path: "transport",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportRoutesPage />}
-          />
-        ),
-      },
-      {
-        path: "transport/vehicles",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportVehiclePage />}
-          />
-        ),
-      },
-      {
-        path: "transport/drivers",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportVehicleDriversPage />}
-          />
-        ),
-      },
-      {
-        path: "transport/pickup-points",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportPickupPointsPage />}
-          />
-        ),
-      },
-      {
-        path: "transport/assign",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportAssignVehiclePage />}
-          />
-        ),
-      },
-      {
-        path: "transport/reports",
-        element: (
-          <ProtectedRoute
-            requiredRoles={["admin", "institutionowner", "institutionadmin"]}
-            element={<TransportReportPage />}
-          />
-        ),
-      },
-      // Academic routes
-      {
-        path: "classes",
-        element: <ClassesPage />,
-      },
-      {
-        path: "sections",
-        element: <ClassesPage />,
-      },
-      {
-        path: "subjects",
-        element: <ClassSubjectPage />,
-      },
-      {
-        path: "classrooms",
-        element: <ClassRoomPage />,
-      },
-      {
-        path: "class-routine",
-        element: <ScheduleClassesPage />,
-      },
-      {
-        path: "homework",
-        element: <ClassHomeWorkPage />,
-      },
-      {
-        path: "exam-grades",
-        element: <AdminGradesPage />,
-      },
-      {
-        path: "upload-grades",
-        element: <AdminGradesPage />,
-      },
-      // Fees routes
-      {
-        path: "fees/groups",
-        element: <AdminFeesPage />,
-      },
-      {
-        path: "fees/types",
-        element: <AdminFeesPage />,
-      },
-      {
-        path: "fees/masters",
-        element: <AdminFeesPage />,
-      },
-      {
-        path: "fees/collect",
-        element: <AdminFeesPage />,
-      },
-      {
-        path: "fees/assignment",
-        element: <AdminFeesPage />,
-      },
-      {
-        path: "homework",
-        element: <AdminAcademicPage />,
-      },
-    ],
-  },
-
-  // Catch all route for 404
-  {
-    path: "*",
-    element: (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          textAlign: "center",
-          padding: "2rem",
-        }}
-      >
-        <h1 style={{ fontSize: "4rem", margin: "0", color: "#6366f1" }}>404</h1>
-        <h2 style={{ fontSize: "2rem", margin: "1rem 0", color: "#374151" }}>
-          Page Not Found
-        </h2>
-        <p
-          style={{ fontSize: "1.2rem", margin: "0 0 2rem 0", color: "#6b7280" }}
-        >
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <a
-          href="/login"
-          style={{
-            display: "inline-block",
-            padding: "0.75rem 2rem",
-            backgroundColor: "#6366f1",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "0.5rem",
-            fontSize: "1rem",
-            fontWeight: "500",
-            transition: "background-color 0.2s",
-          }}
-          onMouseOver={(e) =>
-            (e.currentTarget.style.backgroundColor = "#4f46e5")
-          }
-          onMouseOut={(e) =>
-            (e.currentTarget.style.backgroundColor = "#6366f1")
-          }
-        >
-          Go to Login
-        </a>
-        <p
-          style={{
-            position: "fixed",
-            bottom: "1rem",
-            right: "1rem",
-            fontSize: "0.875rem",
-            color: "#9ca3af",
-          }}
-        >
-          Copyright © 2026 - Ultrakey
-        </p>
-      </div>
-    ),
-  },
-]);
-
+    ]
+  }
+]
+);
+// eslint-disable-next-line react-refresh/only-export-components
 export default router;
+
+

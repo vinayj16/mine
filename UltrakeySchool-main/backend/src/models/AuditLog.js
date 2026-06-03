@@ -1,85 +1,39 @@
 import mongoose from 'mongoose';
 
 const auditLogSchema = new mongoose.Schema({
-  institutionId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Institution',
-    default: null
-  },
-  userId: {
-    type: mongoose.Schema.Types.Mixed,
-    ref: 'User',
-    default: null
-  },
-  userName: {
+  timestamp: { type: Date, default: Date.now, index: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+  userName: { type: String, default: '' },
+  userRole: { type: String, default: '' },
+  action: { type: String, required: true, index: true },
+  category: {
     type: String,
-    default: ''
+    enum: ['plan-change', 'suspension', 'password-reset', 'login', 'impersonation', 'module-change', 'settings-change', 'other'],
+    default: 'other',
+    index: true
   },
-  userEmail: {
-    type: String,
-    default: ''
-  },
-  userRole: {
-    type: String,
-    default: ''
-  },
-  action: {
-    type: String,
-    required: true
-  },
-  actionType: {
-    type: String,
-    default: ''
-  },
-  description: {
-    type: String,
-    default: ''
-  },
-  entityType: {
-    type: String,
-    default: ''
-  },
-  entityId: {
-    type: mongoose.Schema.Types.Mixed
-  },
-  details: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  },
-  ipAddress: {
-    type: String,
-    default: 'N/A'
-  },
-  userAgent: {
-    type: String,
-    default: null
-  },
+  resource: { type: String, default: '' },
+  resourceId: { type: String, default: '' },
+  details: { type: mongoose.Schema.Types.Mixed },
+  ipAddress: { type: String, default: '' },
+  userAgent: { type: String, default: '' },
   status: {
     type: String,
     enum: ['success', 'failure', 'warning'],
-    default: 'success'
+    default: 'success',
+    index: true
   },
-  institutionCode: {
-    type: String,
-    default: ''
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
-  },
-  metadata: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  }
+  institutionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Institution', index: true },
+  institutionName: { type: String, default: '' }
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'auditlogs'
 });
 
-// Indexes for performance and compliance
-auditLogSchema.index({ institutionId: 1, createdAt: -1 });
-// auditLogSchema.index({ userId: 1, createdAt: -1 }); // Removed duplicate index
-auditLogSchema.index({ action: 1, createdAt: -1 });
-auditLogSchema.index({ entityType: 1, entityId: 1 });
-auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 }); // 1 year retention
+auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ category: 1, createdAt: -1 });
+auditLogSchema.index({ status: 1, createdAt: -1 });
 
-export default mongoose.model('AuditLog', auditLogSchema, 'auditlogs');
+const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+
+export default AuditLog;

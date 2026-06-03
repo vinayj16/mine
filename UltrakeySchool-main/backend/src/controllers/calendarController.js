@@ -39,11 +39,11 @@ const validateDateRange = (startDate, endDate) => {
 
 const getCalendarEvents = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, entityTypes, status, search, page = 1, limit = 50 } = req.query;
     
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -87,8 +87,8 @@ const getCalendarEvents = async (req, res, next) => {
     if (status) filters.status = status;
     if (search) filters.search = search;
 
-    logger.info(`Fetching calendar events for school ${schoolId} from ${startDate} to ${endDate}`);
-    const result = await calendarService.getCalendarEvents(schoolId, startDate, endDate, {
+    logger.info(`Fetching calendar events for school ${institutionId} from ${startDate} to ${endDate}`);
+    const result = await calendarService.getCalendarEvents(institutionId, startDate, endDate, {
       ...filters,
       page: pageNum,
       limit: limitNum
@@ -107,11 +107,11 @@ const getCalendarEvents = async (req, res, next) => {
 
 const getCalendarAnalytics = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, groupBy = 'day' } = req.query;
     
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -132,8 +132,8 @@ const getCalendarAnalytics = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'groupBy', message: 'groupBy must be one of: ' + validGroupBy.join(', ') }]);
     }
 
-    logger.info(`Fetching calendar analytics for school ${schoolId}`);
-    const analytics = await calendarService.getCalendarAnalytics(schoolId, startDate, endDate, { groupBy });
+    logger.info(`Fetching calendar analytics for school ${institutionId}`);
+    const analytics = await calendarService.getCalendarAnalytics(institutionId, startDate, endDate, { groupBy });
 
     return successResponse(res, analytics, 'Calendar analytics fetched successfully', {
       dateRange: { startDate, endDate },
@@ -151,12 +151,12 @@ const getCalendarAnalytics = async (req, res, next) => {
  */
 const createCalendarEvent = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { title, description, entityType, startDate, endDate, location, attendees, isAllDay } = req.body;
     const createdBy = req.user?.id;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -191,8 +191,8 @@ const createCalendarEvent = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Creating calendar event for school ${schoolId}`);
-    const event = await calendarService.createCalendarEvent(schoolId, {
+    logger.info(`Creating calendar event for school ${institutionId}`);
+    const event = await calendarService.createCalendarEvent(institutionId, {
       title,
       description,
       entityType,
@@ -216,12 +216,12 @@ const createCalendarEvent = async (req, res, next) => {
  */
 const updateCalendarEvent = async (req, res, next) => {
   try {
-    const { schoolId, eventId } = req.params;
+    const { institutionId, eventId } = req.params;
     const { title, description, startDate, endDate, location, status } = req.body;
     const updatedBy = req.user?.id;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -244,7 +244,7 @@ const updateCalendarEvent = async (req, res, next) => {
     }
 
     logger.info(`Updating calendar event ${eventId}`);
-    const event = await calendarService.updateCalendarEvent(schoolId, eventId, {
+    const event = await calendarService.updateCalendarEvent(institutionId, eventId, {
       title,
       description,
       startDate,
@@ -270,10 +270,10 @@ const updateCalendarEvent = async (req, res, next) => {
  */
 const deleteCalendarEvent = async (req, res, next) => {
   try {
-    const { schoolId, eventId } = req.params;
+    const { institutionId, eventId } = req.params;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -283,7 +283,7 @@ const deleteCalendarEvent = async (req, res, next) => {
     }
 
     logger.info(`Deleting calendar event ${eventId}`);
-    const result = await calendarService.deleteCalendarEvent(schoolId, eventId);
+    const result = await calendarService.deleteCalendarEvent(institutionId, eventId);
 
     if (!result) {
       return notFoundResponse(res, 'Calendar event not found');
@@ -301,10 +301,10 @@ const deleteCalendarEvent = async (req, res, next) => {
  */
 const getCalendarEventById = async (req, res, next) => {
   try {
-    const { schoolId, eventId } = req.params;
+    const { institutionId, eventId } = req.params;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -314,7 +314,7 @@ const getCalendarEventById = async (req, res, next) => {
     }
 
     logger.info(`Fetching calendar event ${eventId}`);
-    const event = await calendarService.getCalendarEventById(schoolId, eventId);
+    const event = await calendarService.getCalendarEventById(institutionId, eventId);
 
     if (!event) {
       return notFoundResponse(res, 'Calendar event not found');
@@ -332,11 +332,11 @@ const getCalendarEventById = async (req, res, next) => {
  */
 const getUpcomingEvents = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { days = 7, entityTypes, limit = 10 } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -362,8 +362,8 @@ const getUpcomingEvents = async (req, res, next) => {
       }
     }
 
-    logger.info(`Fetching upcoming events for school ${schoolId}, next ${daysNum} days`);
-    const events = await calendarService.getUpcomingEvents(schoolId, {
+    logger.info(`Fetching upcoming events for school ${institutionId}, next ${daysNum} days`);
+    const events = await calendarService.getUpcomingEvents(institutionId, {
       days: daysNum,
       entityTypes: entityTypes ? entityTypes.split(',') : null,
       limit: limitNum
@@ -384,11 +384,11 @@ const getUpcomingEvents = async (req, res, next) => {
  */
 const exportCalendarEvents = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, format = 'json', entityTypes } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -409,8 +409,8 @@ const exportCalendarEvents = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'format', message: 'Format must be one of: ' + validFormats.join(', ') }]);
     }
 
-    logger.info(`Exporting calendar events for school ${schoolId} in ${format} format`);
-    const data = await calendarService.exportCalendarEvents(schoolId, startDate, endDate, {
+    logger.info(`Exporting calendar events for school ${institutionId} in ${format} format`);
+    const data = await calendarService.exportCalendarEvents(institutionId, startDate, endDate, {
       format,
       entityTypes: entityTypes ? entityTypes.split(',') : null
     });
@@ -436,11 +436,11 @@ const exportCalendarEvents = async (req, res, next) => {
  */
 const getCalendarConflicts = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, resourceId } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -461,8 +461,8 @@ const getCalendarConflicts = async (req, res, next) => {
       }
     }
 
-    logger.info(`Checking calendar conflicts for school ${schoolId}`);
-    const conflicts = await calendarService.getCalendarConflicts(schoolId, startDate, endDate, { resourceId });
+    logger.info(`Checking calendar conflicts for school ${institutionId}`);
+    const conflicts = await calendarService.getCalendarConflicts(institutionId, startDate, endDate, { resourceId });
 
     return successResponse(res, conflicts, 'Calendar conflicts checked successfully', {
       dateRange: { startDate, endDate },

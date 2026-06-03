@@ -1,9 +1,3 @@
-/**
- * Institution Filter Middleware
- * Automatically adds institutionId filter to all database queries
- * to ensure data isolation between institutions
- */
-
 const institutionFilterMiddleware = (req, res, next) => {
   // Skip institution filtering for superadmin and agent roles
   if (req.user && (req.user.role === 'superadmin' || req.user.role === 'agent')) {
@@ -88,9 +82,6 @@ const institutionFilterMiddleware = (req, res, next) => {
     'AdminActivity',
     'AuditLog',
     'BannedIP',
-    'Blog',
-    'BlogComment',
-    'BlogTag',
     'Branch',
     'CallLog',
     'ClassRoom',
@@ -140,16 +131,12 @@ const institutionFilterMiddleware = (req, res, next) => {
     'StorageSettings',
     'Subscription',
     'SubscriptionRequest',
-    'SuperAdminMenuItem',
     'TaxRate',
     'TransportAssignment',
     'TransportFee',
     'TransportReport',
     'TransportRoute',
     'UserCredential',
-    'canteenMenuItem',
-    'canteenOrder',
-    'canteenPayment',
     'hostelAttendance',
     'hostelFee'
   ];

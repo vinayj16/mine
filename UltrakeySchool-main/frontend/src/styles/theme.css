@@ -1,0 +1,66 @@
+:root {
+  --bg-primary: #ffffff;
+  --text-primary: #212529;
+  --bg-card: #f8f9fa;
+  --border-color: #dee2e6;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #333333;
+}
+
+[data-bs-theme='dark'] {
+  --bg-primary: #121212;
+  --text-primary: #f8f9fa;
+  --bg-card: #1e1e1e;
+  --border-color: #333333;
+  --sidebar-bg: #1e1e1e;
+  --sidebar-text: #f8f9fa;
+}
+
+body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.card {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.table {
+  color: var(--text-primary) !important;
+}
+
+.table thead th {
+  border-bottom-color: var(--border-color) !important;
+}
+
+.table td, .table th {
+  border-top-color: var(--border-color) !important;
+}
+
+.modal-content {
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+
+.modal-header, .modal-footer {
+  border-color: var(--border-color) !important;
+}
+
+.form-control, .form-select {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.breadcrumb-item a {
+  color: var(--text-primary);
+}

@@ -1,7 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import OfflineBanner from './components/OfflineBanner';
 import './styles/global.css';
+import './styles/dark-mode.css';
 import './index.css';
 import { useAuthStore } from './store/authStore';
 
@@ -111,6 +113,7 @@ if (!rootElement) {
 const renderApp = () => {
   createRoot(rootElement).render(
     <React.StrictMode>
+      <OfflineBanner />
       <App />
     </React.StrictMode>
   );
@@ -142,8 +145,10 @@ const bootstrapApp = async () => {
       const authService = (await import('./api/authService')).default;
       const user = await authService.getProfile();
       if (user) {
+        // Ensure photo field is synced with avatar for header/sidebar display
+        const userWithPhoto = { ...user, photo: user.avatar || user.photo || '' };
         useAuthStore.setState({
-          user: user as any,
+          user: userWithPhoto as any,
           isAuthenticated: true,
           isLoading: false,
           error: null
@@ -161,6 +166,7 @@ const bootstrapApp = async () => {
     }
   } else {
     console.log('No valid token found, showing home page');
+    useAuthStore.setState({ isLoading: false });
   }
 };
 

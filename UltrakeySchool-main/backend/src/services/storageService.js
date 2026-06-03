@@ -40,12 +40,19 @@ class StorageService {
 
   resolveKeyPath(key) {
     const normalized = key.replace(/^\/*/, '').split('/').filter(Boolean);
+    const rootDirName = path.basename(this.rootDir);
+    
+    // Avoid doubling the root directory name in the path
+    if (normalized[0] === rootDirName) {
+      normalized.shift();
+    }
+    
     return path.join(this.rootDir, ...normalized);
   }
 
   buildUrl(key) {
     const normalized = key.replace(/^\/*/, '');
-    return `${this.baseUrl}/${normalized}`;
+    return `/${normalized}`;
   }
 
   buildKey(folder = 'uploads', institutionId, fileName) {

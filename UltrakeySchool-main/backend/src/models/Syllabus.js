@@ -10,9 +10,9 @@ const topicSchema = new mongoose.Schema({
 }, { _id: true });
 
 const syllabusSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -59,7 +59,7 @@ const syllabusSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-syllabusSchema.index({ schoolId: 1, classId: 1, subjectId: 1 });
+syllabusSchema.index({ institutionId: 1, classId: 1, subjectId: 1 });
 syllabusSchema.index({ academicYear: 1, term: 1 });
 
 export default mongoose.model('Syllabus', syllabusSchema);

@@ -30,19 +30,19 @@ router.get('/', getAllPickupPoints);
 
 // Pickup point CRUD operations (TESTED & VERIFIED)
 router.get('/:id', getPickupPointById);  
-router.post('/', authorize(['admin', 'principal', 'super_admin']), createPickupPoint);  
-router.put('/:id', authorize(['admin', 'principal', 'super_admin']), updatePickupPoint);  
-router.delete('/:id', authorize(['admin', 'principal', 'super_admin']), deletePickupPoint);  
+router.post('/', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), createPickupPoint);  
+router.put('/:id', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), updatePickupPoint);  
+router.delete('/:id', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), deletePickupPoint);  
 
 // Advanced pickup point operations (TESTED & VERIFIED)
-router.post('/bulk-delete', authorize(['admin', 'principal', 'super_admin']), bulkDeletePickupPoints);  
+router.post('/bulk-delete', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), bulkDeletePickupPoints);  
 router.get('/route/:routeId', getPickupPointsByRoute);  
-router.get('/statistics', authorize(['admin', 'principal', 'super_admin']), getPickupPointStatistics);  
-router.get('/export', authorize(['admin', 'principal', 'super_admin']), exportPickupPoints);  
+router.get('/statistics', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), getPickupPointStatistics);  
+router.get('/export', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), exportPickupPoints);  
 router.get('/nearby', getNearbyPickupPoints);  
-router.patch('/:id/status', authorize(['admin', 'principal', 'super_admin']), updatePickupPointStatus);  
+router.patch('/:id/status', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), updatePickupPointStatus);  
 router.get('/status/:status', getPickupPointsByStatus);  
-router.post('/:id/assign-students', authorize(['admin', 'principal', 'super_admin']), assignStudentsToPickupPoint);  
+router.post('/:id/assign-students', authorize(['admin', 'principal', 'super_admin', 'institution_admin', 'transport_manager']), assignStudentsToPickupPoint);  
 router.get('/:id/capacity', getPickupPointCapacity);  
 
 export default router;

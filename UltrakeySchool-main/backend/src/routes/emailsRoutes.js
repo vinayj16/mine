@@ -23,10 +23,8 @@ router.get('/', async (req, res) => {
     
     if (folder) {
       query.folder = folder;
-    }
-    
-    // Exclude trash folder by default
-    if (folder !== 'trash') {
+    } else {
+      // Exclude trash folder by default
       query.folder = { $ne: 'trash' };
     }
 
@@ -332,18 +330,21 @@ router.patch('/:id/star', async (req, res) => {
 router.patch('/:id/important', async (req, res) => {
   try {
     const { isImportant } = req.body;
-    const emailIndex = mockEmails.findIndex(e => e._id === req.params.id);
+    const query = { _id: req.params.id };
     
-    if (emailIndex === -1) {
-      return res.status(404).json({ success: false, message: 'Email not found' });
+    if (!['superadmin', 'admin', 'principal', 'institution_admin'].includes(req.user.role)) {
+      query.userId = req.user.id;
     }
+    
+    const email = await Email.findOne(query);
+    if (!email) return res.status(404).json({ success: false, message: 'Email not found' });
 
-    mockEmails[emailIndex].isImportant = isImportant;
-    mockEmails[emailIndex].updatedAt = new Date();
+    email.isImportant = isImportant;
+    await email.save();
 
     res.json({
       success: true,
-      data: mockEmails[emailIndex],
+      data: email,
       message: `Email marked as ${isImportant ? 'important' : 'not important'}`
     });
   } catch (error) {
@@ -355,54 +356,31 @@ router.patch('/:id/important', async (req, res) => {
 router.patch('/:id/move', async (req, res) => {
   try {
     const { folder } = req.body;
-    const emailIndex = mockEmails.findIndex(e => e._id === req.params.id);
+    const query = { _id: req.params.id };
     
-    if (emailIndex === -1) {
-      return res.status(404).json({ success: false, message: 'Email not found' });
+    if (!['superadmin', 'admin', 'principal', 'institution_admin'].includes(req.user.role)) {
+      query.userId = req.user.id;
     }
-
+    
     const validFolders = ['inbox', 'sent', 'drafts', 'trash'];
     if (!validFolders.includes(folder)) {
       return res.status(400).json({ success: false, message: 'Invalid folder' });
     }
 
-    mockEmails[emailIndex].folder = folder;
-    mockEmails[emailIndex].updatedAt = new Date();
+    const email = await Email.findOne(query);
+    if (!email) return res.status(404).json({ success: false, message: 'Email not found' });
+
+    email.folder = folder;
+    if (folder === 'trash') email.isRead = true;
+    await email.save();
 
     res.json({
       success: true,
-      data: mockEmails[emailIndex],
+      data: email,
       message: `Email moved to ${folder}`
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to move email', error: error.message });
-  }
-});
-
-// Delete email (move to trash)
-router.delete('/:id', async (req, res) => {
-  try {
-    const emailIndex = mockEmails.findIndex(e => e._id === req.params.id);
-    
-    if (emailIndex === -1) {
-      return res.status(404).json({ success: false, message: 'Email not found' });
-    }
-
-    // Move to trash if not already there
-    if (mockEmails[emailIndex].folder !== 'trash') {
-      mockEmails[emailIndex].folder = 'trash';
-      mockEmails[emailIndex].updatedAt = new Date();
-    } else {
-      // Permanent delete if already in trash
-      mockEmails.splice(emailIndex, 1);
-    }
-
-    res.json({
-      success: true,
-      message: mockEmails[emailIndex] ? 'Email moved to trash' : 'Email permanently deleted'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to delete email', error: error.message });
   }
 });
 

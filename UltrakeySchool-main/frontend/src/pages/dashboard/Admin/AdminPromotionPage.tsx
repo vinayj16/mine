@@ -475,7 +475,7 @@ const AdminPromotionPage: React.FC = () => {
                                 </div>
                                 <div>
                                   <h6 className="mb-0">{promotion.studentName}</h6>
-                                  <small className="text-muted">ID: {promotion.studentId}</small>
+                                  <small className="text-muted">ID: {typeof promotion.studentId === 'object' ? promotion.studentId?.name || promotion.studentId?._id || '-' : promotion.studentId}</small>
                                 </div>
                               </div>
                             </td>

@@ -178,8 +178,8 @@ class InstitutionService {
     const objectId = ObjectId.isValid(id) ? new ObjectId(id) : null;
     const institution = objectId ? await Institution.findById(objectId).lean() : null;
     const institutionMatch = objectId
-      ? { $or: [{ institutionId: objectId }, { institutionId: id }, { institution: objectId }, { institution: id }, { schoolId: objectId }, { schoolId: id }] }
-      : { $or: [{ institutionId: id }, { institution: id }, { schoolId: id }] };
+      ? { $or: [{ institutionId: objectId }, { institutionId: id }, { institution: objectId }, { institution: id }, { institutionId: objectId }, { institutionId: id }] }
+      : { $or: [{ institutionId: id }, { institution: id }, { institutionId: id }] };
 
     if (!institution) {
       logger.warn(`Institution document not found for dashboard stats: ${id}. Falling back to scoped collection counts.`);
@@ -377,7 +377,7 @@ async getInstitutionStaffSummary(institutionId) {
     });
     
     if (pendingFees > 10) {
-      alerts.push({ type: 'warning', icon: 'ti ti-currency-dollar', title: 'Fee Pending Above Limit', desc: `${pendingFees} students have dues pending` });
+      alerts.push({ type: 'warning', icon: 'ti ti-currency-rupee', title: 'Fee Pending Above Limit', desc: `${pendingFees} students have dues pending` });
     }
     
     const pendingLeaves = await db.collection('leaves').countDocuments({ 
@@ -403,8 +403,8 @@ async getInstitutionStaffSummary(institutionId) {
     ];
   }
 
-  async migrateFromSchool(schoolId) {
-    const school = await School.findById(schoolId);
+  async migrateFromSchool(institutionId) {
+    const school = await School.findById(institutionId);
     if (!school) throw new Error('School not found');
     const typeMap = { 'School': 'School', 'Inter College': 'Inter College', 'Degree College': 'Degree College' };
     const categoryMap = { 'School': 'secondary', 'Inter College': 'higher-secondary', 'Degree College': 'undergraduate' };
@@ -412,10 +412,10 @@ async getInstitutionStaffSummary(institutionId) {
       name: school.name, shortName: school.code, type: typeMap[school.type] || 'School', category: categoryMap[school.type] || 'secondary',
       established: new Date().getFullYear(), contact: { email: school.contact?.email || '', phone: school.contact?.phone || '', address: { street: school.address?.street || '', city: school.address?.city || '', state: school.address?.state || '', country: school.address?.country || 'United States', postalCode: school.address?.zipCode || '' } },
       principalName: school.adminName || '', principalEmail: school.adminEmail || '', principalPhone: school.adminPhone || '',
-      subscription: { planId: school.subscriptionPlan || 'basic', planName: school.subscriptionPlan ? school.subscriptionPlan.charAt(0).toUpperCase() + school.subscriptionPlan.slice(1) : 'Basic', status: school.isActive ? 'active' : 'inactive', startDate: school.createdAt || new Date(), endDate: school.subscriptionExpiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), billingCycle: 'monthly', monthlyCost: school.monthlyRevenue || 0, currency: 'USD' },
+      subscription: { planId: school.subscriptionPlan || 'basic', planName: school.subscriptionPlan ? school.subscriptionPlan.charAt(0).toUpperCase() + school.subscriptionPlan.slice(1) : 'Basic', status: school.isActive ? 'active' : 'inactive', startDate: school.createdAt || new Date(), endDate: school.subscriptionExpiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), billingCycle: 'monthly', monthlyCost: school.monthlyRevenue || 0, currency: 'INR' },
       features: { maxUsers: 100, maxStudents: 500, maxTeachers: 20, storageLimit: 10, customDomain: false, whiteLabel: false, advancedAnalytics: false, prioritySupport: false, trainingSessions: 0, integrations: [] },
       analytics: { totalStudents: school.students || 0, totalTeachers: 0, totalStaff: 0, activeUsers: school.students || 0, monthlyActiveUsers: Math.floor((school.students || 0) * 0.8), loginFrequency: 70, growthRate: 0, retentionRate: 95 },
-      status: school.isActive ? 'active' : 'inactive', legacySchoolId: school._id
+      status: school.isActive ? 'active' : 'inactive', legacyInstitutionId: school._id
     };
     const institution = await this.createInstitution(institutionData);
     school.isActive = false;

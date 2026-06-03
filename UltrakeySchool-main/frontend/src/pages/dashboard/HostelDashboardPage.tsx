@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../../api/client'
 import { toast } from 'react-toastify'
+import { useAuth } from '../../store/authStore'
+import InstitutionDetailsCard from '../../components/dashboard/InstitutionDetailsCard'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const HostelDashboardPage = () => {
+  const { user, institutionData } = useAuth();
   const [loading, setLoading] = useState(true)
 
   const [stats, setStats] = useState({
@@ -22,6 +26,8 @@ const HostelDashboardPage = () => {
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false)
   const [showEditRoomModal, setShowEditRoomModal] = useState(false)
   const [showCreateFeeModal, setShowCreateFeeModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'hostel' | 'room' | 'deallocate' } | null>(null)
 
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
   const [selectedFee, setSelectedFee] = useState<any>(null)
@@ -102,12 +108,9 @@ const HostelDashboardPage = () => {
     } catch { toast.error('Failed to create hostel') }
   }
 
-  const handleDeleteHostel = async (id: string) => {
-    if (!confirm('Delete this hostel?')) return
-    try {
-      const res = await apiClient.delete(`/hostel/hostels/${id}`)
-      if (res.data.success) { toast.success('Hostel deleted'); fetchData() }
-    } catch { toast.error('Failed to delete') }
+  const handleDeleteHostel = (id: string) => {
+    setDeleteTarget({ id, type: 'hostel' })
+    setShowDeleteModal(true)
   }
 
   // ROOM CRUD
@@ -147,12 +150,9 @@ const HostelDashboardPage = () => {
     } catch { toast.error('Failed to update') }
   }
 
-  const handleDeleteRoom = async (id: string) => {
-    if (!confirm('Delete this room?')) return
-    try {
-      const res = await apiClient.delete(`/hostel/rooms/${id}`)
-      if (res.data.success) { toast.success('Room deleted'); fetchData() }
-    } catch { toast.error('Failed to delete') }
+  const handleDeleteRoom = (id: string) => {
+    setDeleteTarget({ id, type: 'room' })
+    setShowDeleteModal(true)
   }
 
   // STUDENT ALLOCATION
@@ -163,12 +163,29 @@ const HostelDashboardPage = () => {
     } catch (err: any) { toast.error(err.response?.data?.message || 'Failed') }
   }
 
-  const handleDeallocateStudent = async (studentId: string) => {
-    if (!confirm('Remove student from hostel?')) return
+  const handleDeallocateStudent = (studentId: string) => {
+    setDeleteTarget({ id: studentId, type: 'deallocate' })
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    const { id, type } = deleteTarget
     try {
-      const res = await apiClient.post('/hostel/deallocate', { studentId })
-      if (res.data.success) { toast.success('Student deallocated'); fetchData() }
+      if (type === 'hostel') {
+        const res = await apiClient.delete(`/hostel/hostels/${id}`)
+        if (res.data.success) { toast.success('Hostel deleted') }
+      } else if (type === 'room') {
+        const res = await apiClient.delete(`/hostel/rooms/${id}`)
+        if (res.data.success) { toast.success('Room deleted') }
+      } else if (type === 'deallocate') {
+        const res = await apiClient.post('/hostel/deallocate', { studentId: id })
+        if (res.data.success) { toast.success('Student deallocated') }
+      }
+      fetchData()
     } catch { toast.error('Failed') }
+    setShowDeleteModal(false)
+    setDeleteTarget(null)
   }
 
   // FEE CRUD
@@ -211,6 +228,10 @@ const HostelDashboardPage = () => {
 
   return (
     <div className="content">
+      <InstitutionDetailsCard
+        institution={institutionData || user?.institutionData}
+        userRole={user?.role}
+      />
       {/* PAGE HEADER */}
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div>
@@ -223,6 +244,7 @@ const HostelDashboardPage = () => {
         </div>
       </div>
 
+
       {/* STATS CARDS */}
       <div className="row g-3 mb-3">
         <div className="col-6 col-xl-3"><div className="card border-0 shadow-sm h-100"><div className="card-body py-2"><div className="d-flex align-items-center"><div><p className="text-muted mb-1 small">Residents</p><h3 className="mb-0">{stats.totalResidents}</h3></div><div className="avatar avatar-sm bg-primary rounded-circle ms-auto"><i className="ti ti-users text-white" /></div></div></div></div></div>
@@ -232,19 +254,42 @@ const HostelDashboardPage = () => {
       </div>
 
       {/* TABLES ROW */}
-      <div className="row g-3">
+      <div className="row g-3 mb-4">
         {/* Hostel Students */}
         <div className="col-xl-6">
-          <div className="card border-0 shadow-sm">
-            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2"><h6 className="mb-0">Hostel Students ({allocatedStudents.length})</h6><button className="btn btn-xs btn-primary" onClick={() => setShowAllocateModal(true)}><i className="ti ti-plus me-1" />Allocate</button></div>
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
+              <h6 className="mb-0">Hostel Students ({allocatedStudents.length})</h6>
+              <button className="btn btn-xs btn-primary" onClick={() => setShowAllocateModal(true)}>
+                <i className="ti ti-plus me-1" />Allocate
+              </button>
+            </div>
             <div className="card-body p-0">
               {allocatedStudents.length > 0 ? (
-                <table className="table table-hover table-sm mb-0"><thead className="table-light"><tr><th className="py-2 px-3">Student</th><th className="py-2">Room</th><th className="py-2">Actions</th></tr></thead><tbody>
-                  {allocatedStudents.map(s => {
-                    const room = rooms.find(r => r._id === s.roomId)
-                    return <tr key={s._id}><td className="py-2 px-3"><span className="fw-medium">{s.firstName} {s.lastName}</span><br /><small className="text-muted">{s.class}-{s.section}</small></td><td className="py-2">{room ? `R${room.roomNumber}` : '-'}</td><td className="py-2"><button className="btn btn-xs btn-outline-danger" onClick={() => handleDeallocateStudent(s._id)} title="Remove"><i className="ti ti-trash" /></button></td></tr>
-                  })}
-                </tbody></table>
+                <table className="table table-hover table-sm mb-0">
+                  <thead className="table-light">
+                    <tr><th className="py-2 px-3">Student</th><th className="py-2">Room</th><th className="py-2">Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {allocatedStudents.map(s => {
+                      const room = rooms.find(r => r._id === s.roomId)
+                      return (
+                        <tr key={s._id}>
+                          <td className="py-2 px-3">
+                            <span className="fw-medium">{s.firstName} {s.lastName}</span><br />
+                            <small className="text-muted">{s.class}-{s.section}</small>
+                          </td>
+                          <td className="py-2">{room ? `R${room.roomNumber}` : '-'}</td>
+                          <td className="py-2">
+                            <button className="btn btn-xs btn-outline-danger" onClick={() => handleDeallocateStudent(s._id)} title="Remove">
+                              <i className="ti ti-trash" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               ) : <div className="text-center py-4 text-muted">No students allocated</div>}
             </div>
           </div>
@@ -252,14 +297,107 @@ const HostelDashboardPage = () => {
 
         {/* Pending Payments */}
         <div className="col-xl-6">
-          <div className="card border-0 shadow-sm">
-            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2"><h6 className="mb-0">Pending Payments ({pendingFees.length})</h6><span className="badge bg-danger">&#8377;{pendingFees.reduce((s, f) => s + f.dueAmount, 0).toLocaleString()}</span></div>
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
+              <h6 className="mb-0">Pending Payments ({pendingFees.length})</h6>
+              <span className="badge bg-danger">&#8377;{pendingFees.reduce((s, f) => s + f.dueAmount, 0).toLocaleString()}</span>
+            </div>
             <div className="card-body p-0">
               {pendingFees.length > 0 ? (
-                <table className="table table-hover table-sm mb-0"><thead className="table-light"><tr><th className="py-2 px-3">Student</th><th className="py-2">Due</th><th className="py-2">Action</th></tr></thead><tbody>
-                  {pendingFees.map(f => <tr key={f._id}><td className="py-2 px-3"><span className="fw-medium">{f.studentName}</span><br /><small className="text-muted">{f.period}</small></td><td className="py-2"><span className="badge bg-danger">&#8377;{f.dueAmount.toLocaleString()}</span></td><td className="py-2"><button className="btn btn-xs btn-success" onClick={() => { setSelectedFee(f); setPaymentAmount(f.dueAmount.toString()); setShowPaymentModal(true) }}><i className="ti ti-cash" /></button></td></tr>)}
-                </tbody></table>
+                <table className="table table-hover table-sm mb-0">
+                  <thead className="table-light">
+                    <tr><th className="py-2 px-3">Student</th><th className="py-2">Due</th><th className="py-2">Action</th></tr>
+                  </thead>
+                  <tbody>
+                    {pendingFees.map(f => (
+                      <tr key={f._id}>
+                        <td className="py-2 px-3">
+                          <span className="fw-medium">{f.studentName}</span><br />
+                          <small className="text-muted">{f.period}</small>
+                        </td>
+                        <td className="py-2"><span className="badge bg-danger">&#8377;{f.dueAmount.toLocaleString()}</span></td>
+                        <td className="py-2">
+                          <button className="btn btn-xs btn-success" onClick={() => { setSelectedFee(f); setPaymentAmount(f.dueAmount.toString()); setShowPaymentModal(true) }}>
+                            <i className="ti ti-cash" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               ) : <div className="text-center py-4"><i className="ti ti-check-circle text-success" /><p className="text-muted mb-0">All fees paid!</p></div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MANAGE HOSTELS & ROOMS */}
+      <div className="row g-3">
+        {/* Hostels List */}
+        <div className="col-xl-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
+              <h6 className="mb-0">Manage Hostels ({hostels.length})</h6>
+              <button className="btn btn-xs btn-info text-white" onClick={() => setShowCreateHostelModal(true)}>
+                <i className="ti ti-plus me-1" />Add Hostel
+              </button>
+            </div>
+            <div className="card-body p-0">
+              <table className="table table-hover table-sm mb-0">
+                <thead className="table-light">
+                  <tr><th className="py-2 px-3">Name</th><th className="py-2">Code</th><th className="py-2">Actions</th></tr>
+                </thead>
+                <tbody>
+                  {hostels.map(h => (
+                    <tr key={h._id}>
+                      <td className="py-2 px-3">{h.name}</td>
+                      <td className="py-2">{h.code}</td>
+                      <td className="py-2">
+                        <button className="btn btn-xs btn-outline-danger" onClick={() => handleDeleteHostel(h._id)}>
+                          <i className="ti ti-trash" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Rooms List */}
+        <div className="col-xl-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
+              <h6 className="mb-0">Manage Rooms ({rooms.length})</h6>
+              <button className="btn btn-xs btn-info text-white" onClick={() => setShowCreateRoomModal(true)}>
+                <i className="ti ti-plus me-1" />Add Room
+              </button>
+            </div>
+            <div className="card-body p-0">
+              <div className="table-responsive" style={{ maxHeight: '300px' }}>
+                <table className="table table-hover table-sm mb-0">
+                  <thead className="table-light position-sticky top-0">
+                    <tr><th className="py-2 px-3">No</th><th className="py-2">Rent</th><th className="py-2">Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {rooms.map(r => (
+                      <tr key={r._id}>
+                        <td className="py-2 px-3">R{r.roomNumber}</td>
+                        <td className="py-2">&#8377;{r.rent}</td>
+                        <td className="py-2">
+                          <button className="btn btn-xs btn-outline-primary me-1" onClick={() => { setSelectedRoom(r); setShowEditRoomModal(true) }}>
+                            <i className="ti ti-edit" />
+                          </button>
+                          <button className="btn btn-xs btn-outline-danger" onClick={() => handleDeleteRoom(r._id)}>
+                            <i className="ti ti-trash" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -353,6 +491,8 @@ const HostelDashboardPage = () => {
           </div></div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message={deleteTarget?.type === 'hostel' ? 'Delete this hostel?' : deleteTarget?.type === 'room' ? 'Delete this room?' : 'Remove student from hostel?'} />
 
       {/* PAYMENT HISTORY MODAL */}
       {showPaymentHistory && (

@@ -1,6 +1,3 @@
-// API Service Layer for Frontend
-// This file wraps the apiClient from ../api/client to match the expected service interface
-
 import { apiClient } from '../api/client';
 import type { ApiResponse as ClientApiResponse } from '../api/client';
 

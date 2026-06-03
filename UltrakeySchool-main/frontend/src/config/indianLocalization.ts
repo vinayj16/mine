@@ -1,8 +1,3 @@
-/**
- * Indian Localization Configuration
- * Contains Indian states, capitals, currency formatting, and other India-specific data
- */
-
 export const INDIAN_STATES = [
   { code: 'AN', name: 'Andaman and Nicobar Islands', capital: 'Port Blair' },
   { code: 'AP', name: 'Andhra Pradesh', capital: 'Amaravati' },
@@ -186,6 +181,22 @@ export const INDIAN_TIMEZONES = [
   { value: 'Asia/Kolkata', label: 'Indian Standard Time (IST)', offset: '+05:30' }
 ];
 
+export const PAYMENT_METHODS = [
+  { id: 'credit_card', name: 'Credit Card', icon: 'ti-credit-card' },
+  { id: 'debit_card', name: 'Debit Card', icon: 'ti-credit-card' },
+  { id: 'upi', name: 'UPI', icon: 'ti-wallet' },
+  { id: 'net_banking', name: 'Net Banking', icon: 'ti-building-bank' }
+];
+
+export const INDIAN_BANKS = [
+  'State Bank of India (SBI)', 'HDFC Bank', 'ICICI Bank', 'Axis Bank',
+  'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+  'Kotak Mahindra Bank', 'IndusInd Bank', 'Yes Bank', 'IDBI Bank',
+  'Federal Bank', 'South Indian Bank', 'Indian Bank'
+];
+
+export const CARD_TYPES = ['Visa', 'Mastercard', 'RuPay', 'American Express'];
+
 export default {
   states: INDIAN_STATES,
   cities: INDIAN_CITIES,
@@ -196,5 +207,8 @@ export default {
   institutionTypes: INDIAN_INSTITUTION_TYPES,
   academicYears: INDIAN_ACADEMIC_YEARS,
   grades: INDIAN_GRADES,
-  timezones: INDIAN_TIMEZONES
+  timezones: INDIAN_TIMEZONES,
+  paymentMethods: PAYMENT_METHODS,
+  banks: INDIAN_BANKS,
+  cardTypes: CARD_TYPES
 };

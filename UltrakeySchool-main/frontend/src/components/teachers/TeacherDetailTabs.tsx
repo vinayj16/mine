@@ -8,11 +8,11 @@ type TeacherDetailTabsProps = {
 
 const TeacherDetailTabs = ({ active }: TeacherDetailTabsProps) => {
   const tabs: { key: TeacherTabKey; label: string; icon: string; to: string }[] = [
-    { key: 'details', label: 'Teacher Details', icon: 'ti ti-school', to: '/teacher-details' },
-    { key: 'routine', label: 'Routine', icon: 'ti ti-table-options', to: '/routine-teachers' },
-    { key: 'leaves', label: 'Leave & Attendance', icon: 'ti ti-calendar-due', to: '/teacher-leaves' },
-    { key: 'salary', label: 'Salary', icon: 'ti ti-report-money', to: '/teacher-salary' },
-    { key: 'library', label: 'Library', icon: 'ti ti-bookmark-edit', to: '/teacher-library' },
+    { key: 'details', label: 'Teacher Details', icon: 'ti ti-school', to: '/dashboard/teacher/details' },
+    { key: 'routine', label: 'Routine', icon: 'ti ti-table-options', to: '/dashboard/teacher/routine' },
+    { key: 'leaves', label: 'Leave & Attendance', icon: 'ti ti-calendar-due', to: '/dashboard/teacher/leaves' },
+    { key: 'salary', label: 'Salary', icon: 'ti ti-report-money', to: '/dashboard/teacher/salary' },
+    { key: 'library', label: 'Library', icon: 'ti ti-bookmark-edit', to: '/dashboard/teacher/library' },
   ]
 
   return (

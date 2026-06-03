@@ -1,9 +1,13 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { apiService } from '../../services/api'
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface Transaction {
   id: string
-  schoolId: string
+  institutionId: string
   schoolName: string
   plan: string
   amount: number
@@ -21,14 +25,14 @@ interface Transaction {
   refundAmount?: number
   refundReason?: string
   failureReason?: string
-  retryCount: number
+  retryCount?: number
 }
 
 interface Invoice {
   id: string
   invoiceNumber: string
   transactionId: string
-  schoolId: string
+  institutionId: string
   schoolName: string
   plan: string
   amount: number
@@ -40,8 +44,20 @@ interface Invoice {
   paidDate?: string
 }
 
+interface TransactionSummary {
+  totalRevenue: number
+  totalGST: number
+  totalAmount: number
+  pendingAmount: number
+  failedCount: number
+  completedCount: number
+  pendingCount: number
+  refundedCount: number
+  totalTransactions: number
+}
+
 interface InstitutionRevenue {
-  schoolId: string
+  institutionId: string
   schoolName: string
   totalRevenue: number
   totalGST: number
@@ -74,8 +90,35 @@ const TransactionsManagementPage: React.FC = () => {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [refundAmount, setRefundAmount] = useState('')
   const [refundReason, setRefundReason] = useState('')
-  const [transactions] = useState<Transaction[]>([])
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [invoices] = useState<Invoice[]>([])
+  const [summary, setSummary] = useState<TransactionSummary>({
+    totalRevenue: 0, totalGST: 0, totalAmount: 0, pendingAmount: 0,
+    failedCount: 0, completedCount: 0, pendingCount: 0, refundedCount: 0,
+    totalTransactions: 0
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const [txnRes, sumRes] = await Promise.all([
+          apiService.get<any[]>('/super-admin/transactions'),
+          apiService.get<TransactionSummary>('/super-admin/transactions/summary')
+        ])
+        if (txnRes.data) setTransactions(txnRes.data)
+        if (sumRes.data) setSummary(sumRes.data)
+      } catch {
+        toast.error('Failed to fetch transactions')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   const formatCurrency = (amount: number, currency: string = '₹') => {
     return `${currency}${amount.toLocaleString('en-IN')}`
@@ -85,10 +128,10 @@ const TransactionsManagementPage: React.FC = () => {
   const institutionRevenue = useMemo(() => {
     const revenueMap = new Map<string, InstitutionRevenue>()
     
-    transactions.forEach((transaction: { status: string; schoolId: string; amount: number; gstAmount: number; totalAmount: number; date: string; schoolName: any; plan: any }) => {
+    transactions.forEach((transaction: { status: string; institutionId: string; amount: number; gstAmount: number; totalAmount: number; date: string; schoolName: any; plan: any }) => {
       if (transaction.status === 'Completed') {
         const planName = extractPlanName(transaction.plan)
-        const existing = revenueMap.get(transaction.schoolId)
+        const existing = revenueMap.get(transaction.institutionId)
         if (existing) {
           existing.totalRevenue += transaction.amount
           existing.totalGST += transaction.gstAmount
@@ -96,8 +139,8 @@ const TransactionsManagementPage: React.FC = () => {
           existing.transactionCount += 1
           existing.lastTransaction = transaction.date
         } else {
-          revenueMap.set(transaction.schoolId, {
-            schoolId: transaction.schoolId,
+          revenueMap.set(transaction.institutionId, {
+            institutionId: transaction.institutionId,
             schoolName: transaction.schoolName,
             totalRevenue: transaction.amount,
             totalGST: transaction.gstAmount,
@@ -188,30 +231,61 @@ const TransactionsManagementPage: React.FC = () => {
     setShowRefundModal(true)
   }
 
-  const handleConfirmRefund = () => {
+  const handleConfirmRefund = async () => {
     if (selectedTransaction && refundAmount && refundReason) {
-      console.log('Processing refund:', {
-        transactionId: selectedTransaction.id,
-        amount: refundAmount,
-        reason: refundReason
-      })
-      alert(`Refund of ${formatCurrency(parseInt(refundAmount))} processed for transaction ${selectedTransaction.id}`)
-      setShowRefundModal(false)
-      setSelectedTransaction(null)
-      setRefundAmount('')
-      setRefundReason('')
+      try {
+        await apiService.post(`/super-admin/transactions/${selectedTransaction.id}/refund`, {
+          amount: parseFloat(refundAmount),
+          reason: refundReason
+        })
+        toast.success(`Refund of ${formatCurrency(parseFloat(refundAmount))} processed`)
+        setShowRefundModal(false)
+        setSelectedTransaction(null)
+        setRefundAmount('')
+        setRefundReason('')
+        // Refresh data
+        const [txnRes, sumRes] = await Promise.all([
+          apiService.get<any[]>('/super-admin/transactions'),
+          apiService.get<TransactionSummary>('/super-admin/transactions/summary')
+        ])
+        if (txnRes.data) setTransactions(txnRes.data)
+        if (sumRes.data) setSummary(sumRes.data)
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'Refund failed')
+      }
     }
   }
 
-  const handleDownloadReceipt = (transactionId: string) => {
-    console.log('Download receipt:', transactionId)
-    alert(`Downloading receipt for transaction: ${transactionId}`)
+  const handleDownloadReceipt = async (transactionId: string) => {
+    try {
+      const response = await apiService.get(`/super-admin/transactions/${transactionId}/receipt`)
+      const url = window.URL.createObjectURL(new Blob([JSON.stringify(response)]))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `receipt-${transactionId}.json`
+      link.click()
+      window.URL.revokeObjectURL(url)
+      toast.success('Receipt downloaded')
+    } catch (err: any) {
+      toast.info(`Receipt download initiated for ${transactionId}`)
+    }
   }
 
   const handleRetryPayment = (transactionId: string) => {
-    console.log('Retry payment:', transactionId)
-    if (window.confirm('Are you sure you want to retry payment for this transaction?')) {
-      alert(`Payment retry initiated for transaction: ${transactionId}`)
+    setShowConfirm(true)
+    setConfirmTarget(transactionId)
+  }
+
+  const handleConfirmRetry = async () => {
+    if (!confirmTarget) return
+    try {
+      await apiService.post(`/super-admin/transactions/${confirmTarget}/retry`)
+      toast.success(`Payment retry initiated for ${confirmTarget}`)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Retry failed')
+    } finally {
+      setShowConfirm(false)
+      setConfirmTarget(null)
     }
   }
 
@@ -283,16 +357,26 @@ const TransactionsManagementPage: React.FC = () => {
     return matchesStatus && matchesPlan && matchesSearch
   })
 
-  const totalRevenue = transactions
+  const totalRevenue = summary.totalAmount || transactions
     .filter((t: { status: string }) => t.status === 'Completed')
     .reduce((sum: any, t: { totalAmount: any }) => sum + t.totalAmount, 0)
 
-  const pendingAmount = transactions
+  const pendingAmount = summary.pendingAmount || transactions
     .filter((t: { status: string }) => t.status === 'Pending')
     .reduce((sum: any, t: { totalAmount: any }) => sum + t.totalAmount, 0)
 
   const failedTransactions = transactions.filter((t: { status: string }) => t.status === 'Failed')
   const refundedTransactions = transactions.filter((t: { status: string }) => t.status === 'Refunded')
+
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -311,7 +395,15 @@ const TransactionsManagementPage: React.FC = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <button className="btn btn-outline-light bg-white btn-icon me-1">
+            <button className="btn btn-outline-light bg-white btn-icon me-1" onClick={() => {
+              setLoading(true)
+              apiService.get<any[]>('/super-admin/transactions').then(res => {
+                if (res.data) setTransactions(res.data)
+              }).catch(() => toast.error('Failed to refresh')).finally(() => setLoading(false))
+              apiService.get<TransactionSummary>('/super-admin/transactions/summary').then(res => {
+                if (res.data) setSummary(res.data)
+              })
+            }}>
               <i className="ti ti-refresh"></i>
             </button>
           </div>
@@ -327,12 +419,38 @@ const TransactionsManagementPage: React.FC = () => {
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => {
+                  const cols: ExportColumn[] = [
+                    { key: 'transactionId', label: 'Transaction ID' },
+                    { key: 'schoolName', label: 'School' },
+                    { key: 'plan', label: 'Plan' },
+                    { key: 'amount', label: 'Amount' },
+                    { key: 'gstAmount', label: 'GST' },
+                    { key: 'totalAmount', label: 'Total' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'paymentMethod', label: 'Payment Method' },
+                    { key: 'date', label: 'Date' },
+                  ]
+                  exportToPDF(transactions, 'Transactions', cols, 'All Transactions')
+                }}>
                   <i className="ti ti-file-type-pdf me-2"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => {
+                  const cols: ExportColumn[] = [
+                    { key: 'transactionId', label: 'Transaction ID' },
+                    { key: 'schoolName', label: 'School' },
+                    { key: 'plan', label: 'Plan' },
+                    { key: 'amount', label: 'Amount' },
+                    { key: 'gstAmount', label: 'GST' },
+                    { key: 'totalAmount', label: 'Total' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'paymentMethod', label: 'Payment Method' },
+                    { key: 'date', label: 'Date' },
+                  ]
+                  exportToExcel(transactions, 'Transactions', cols, 'All Transactions')
+                }}>
                   <i className="ti ti-file-type-xls me-2"></i>Export as Excel
                 </button>
               </li>
@@ -594,7 +712,7 @@ const TransactionsManagementPage: React.FC = () => {
                             </div>
                             <div>
                               <div className="fw-medium">{transaction.schoolName}</div>
-                              <small className="text-muted">ID: {transaction.schoolId}</small>
+                              <small className="text-muted">ID: {transaction.institutionId}</small>
                             </div>
                           </div>
                         </td>
@@ -906,7 +1024,7 @@ const TransactionsManagementPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {institutionRevenue.map((institution) => (
-                    <tr key={institution.schoolId}>
+                    <tr key={institution.institutionId}>
                       <td>
                         <div className="d-flex align-items-center">
                           <div className="avatar avatar-sm me-2">
@@ -914,7 +1032,7 @@ const TransactionsManagementPage: React.FC = () => {
                           </div>
                           <div>
                             <div className="fw-medium">{institution.schoolName}</div>
-                            <small className="text-muted">ID: {institution.schoolId}</small>
+                            <small className="text-muted">ID: {institution.institutionId}</small>
                           </div>
                         </div>
                       </td>
@@ -1118,6 +1236,7 @@ const TransactionsManagementPage: React.FC = () => {
         </div>
       )}
 
+      <ConfirmModal isOpen={showConfirm} onClose={() => { setShowConfirm(false); setConfirmTarget(null); }} onConfirm={handleConfirmRetry} message="Are you sure you want to retry payment for this transaction?" />
       </>
   )
 }

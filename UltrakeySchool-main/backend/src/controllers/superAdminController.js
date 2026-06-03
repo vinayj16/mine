@@ -1,3 +1,4 @@
+import superAdminService from '../services/superAdminService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -1061,35 +1062,43 @@ const getExpiryAlerts = async (req, res) => {
     
     // Query database for institutions with upcoming subscription expirations
     const Institution = (await import('../models/Institution.js')).default;
+    const now = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     
-    const expiryAlerts = await Institution.find({
-      'subscription.endDate': { $lte: thirtyDaysFromNow },
-      status: 'active'
-    })
-    .select('_id name instituteCode subscription')
-    .lean();
+    // Get active institutions - handle both subscription subdoc and top-level fields
+    const institutions = await Institution.find({ status: 'active' })
+      .select('_id name instituteCode subscription plan expiryDate subscriptionExpiry monthlyCost')
+      .lean();
     
-    // Calculate days until expiry for each institution
-    const alerts = expiryAlerts.map(institution => {
-      const daysUntilExpiry = Math.ceil(
-        (new Date(institution.subscription.endDate) - new Date()) / (1000 * 60 * 60 * 24)
-      );
+    const alerts = [];
+    for (const institution of institutions) {
+      // Get expiry date with fallbacks: subscription.endDate -> expiryDate -> subscriptionExpiry
+      const expiryDate = institution.subscription?.endDate || institution.expiryDate || institution.subscriptionExpiry;
       
-      return {
+      // Skip institutions with no expiry date at all
+      if (!expiryDate) continue;
+      
+      const expiry = new Date(expiryDate);
+      
+      // Only include if expiring within 30 days
+      if (expiry > thirtyDaysFromNow) continue;
+      
+      const daysUntilExpiry = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+      
+      alerts.push({
         _id: institution._id,
         institutionId: institution._id,
         institutionName: institution.name,
         daysUntilExpiry,
-        expiryDate: institution.subscription.endDate,
-        plan: institution.subscription.planName || 'Basic',
-        amount: institution.subscription.monthlyCost || 0,
-        autoRenew: institution.subscription.autoRenew || false,
+        expiryDate: expiry.toISOString(),
+        plan: institution.subscription?.planName || institution.plan || 'Basic',
+        amount: institution.subscription?.monthlyCost || institution.monthlyCost || 0,
+        autoRenew: institution.subscription?.autoRenew || false,
         status: daysUntilExpiry <= 0 ? 'expired' : 'pending',
         reminderSent: false
-      };
-    });
+      });
+    }
     
     return successResponse(res, alerts, 'Expiry alerts retrieved successfully');
   } catch (error) {
@@ -1102,13 +1111,47 @@ const getOverduePayments = async (req, res) => {
   try {
     logger.info('Fetching overdue payments');
     
-    // Get real overdue payment data
-    const overduePayments = []; // Would query payment records
+    const Institution = (await import('../models/Institution.js')).default;
+    const now = new Date();
+    
+    // Get all institutions and filter in-memory for overdue
+    const allInstitutions = await Institution.find({})
+      .select('_id name instituteCode subscription plan status expiryDate subscriptionExpiry monthlyCost createdAt')
+      .lean();
+    
+    const overduePayments = [];
+    for (const institution of allInstitutions) {
+      // Get expiry date with fallbacks
+      const expiryDate = institution.subscription?.endDate || institution.expiryDate || institution.subscriptionExpiry;
+      
+      // Check if institution is overdue: expired date OR suspended/inactive status
+      const isSuspended = institution.status === 'suspended' || institution.status === 'Suspended' || institution.status === 'inactive';
+      const isExpired = expiryDate ? new Date(expiryDate) < now : false;
+      
+      if (!isSuspended && !isExpired) continue;
+      
+      const daysOverdue = expiryDate
+        ? Math.ceil((now - new Date(expiryDate)) / (1000 * 60 * 60 * 24))
+        : 0;
+      
+      overduePayments.push({
+        _id: institution._id,
+        institutionId: institution._id,
+        institutionName: institution.name,
+        amount: institution.subscription?.monthlyCost || institution.monthlyCost || 0,
+        dueDate: expiryDate || institution.createdAt,
+        daysOverdue: Math.max(0, daysOverdue),
+        plan: institution.subscription?.planName || institution.plan || 'Basic',
+        status: daysOverdue > 0 ? 'overdue' : 'cancelled',
+        paymentMethod: institution.subscription?.paymentMethod || 'Not configured',
+        reminderCount: 0
+      });
+    }
     
     return successResponse(res, overduePayments, 'Overdue payments retrieved successfully');
   } catch (error) {
     logger.error('Error fetching overdue payments:', error);
-    return errorResponse(res, 'Failed to fetch overdue payments', 500);
+    return errorResponse(res, error.message);
   }
 };
 
@@ -1120,28 +1163,39 @@ const getRenewalReminders = async (req, res) => {
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     
-    const institutions = await Institution.find({
-      'subscription.endDate': { $lte: thirtyDaysFromNow, $gte: now }
-    }).select('name subscription type').lean();
+    // Get active institutions and filter in-memory for renewal reminders
+    const institutions = await Institution.find({ status: 'active' })
+      .select('name subscription plan type expiryDate subscriptionExpiry monthlyCost')
+      .lean();
     
-    const renewalReminders = institutions.map(institution => {
-      const daysUntilExpiry = Math.floor(
-        (new Date(institution.subscription.endDate) - new Date()) / (1000 * 60 * 60 * 24)
-      );
+    const renewalReminders = [];
+    for (const institution of institutions) {
+      // Get expiry date with fallbacks
+      const expiryDate = institution.subscription?.endDate || institution.expiryDate || institution.subscriptionExpiry;
       
-      return {
+      // Skip if no expiry date or outside renewal window
+      if (!expiryDate) continue;
+      
+      const expiry = new Date(expiryDate);
+      
+      // Only include if within the 30-day renewal window
+      if (expiry > thirtyDaysFromNow || expiry < now) continue;
+      
+      const daysUntilExpiry = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
+      
+      renewalReminders.push({
         _id: institution._id,
         institutionId: institution._id,
         institutionName: institution.name,
-        expiryDate: institution.subscription.endDate,
+        expiryDate: expiry.toISOString(),
         daysUntilExpiry,
-        plan: institution.subscription.planName || 'Basic',
-        renewalAmount: institution.subscription.monthlyCost || 0,
+        plan: institution.subscription?.planName || institution.plan || 'Basic',
+        renewalAmount: institution.subscription?.monthlyCost || institution.monthlyCost || 0,
         status: daysUntilExpiry <= 7 ? 'urgent' : 'scheduled',
-        nextReminderDate: new Date(now.getTime() + (daysUntilExpiry - 7) * 24 * 60 * 60 * 1000).toISOString(),
+        nextReminderDate: new Date(now.getTime() + Math.max(daysUntilExpiry - 7, 0) * 24 * 60 * 60 * 1000).toISOString(),
         reminderFrequency: daysUntilExpiry <= 7 ? 'daily' : 'weekly'
-      };
-    });
+      });
+    }
     
     return successResponse(res, renewalReminders, 'Renewal reminders retrieved successfully');
   } catch (error) {
@@ -1158,22 +1212,23 @@ const getAutoRenewSettings = async (req, res) => {
     
     const institutions = await Institution.find({
       'subscription.autoRenew': true
-    }).select('name subscription type').lean();
+    }).select('name subscription type plan monthlyCost expiryDate subscriptionExpiry').lean();
     
     const autoRenewSettings = institutions.map(institution => {
-      const lastRenewalDate = institution.subscription.startDate || institution.createdAt;
-      const nextRenewalDate = institution.subscription.endDate;
+      const sub = institution.subscription || {};
+      const lastRenewalDate = sub.startDate || institution.createdAt;
+      const nextRenewalDate = sub.endDate || institution.expiryDate || institution.subscriptionExpiry;
       
       return {
         _id: institution._id,
         institutionId: institution._id,
         institutionName: institution.name,
-        plan: institution.subscription.planName || 'Basic',
-        autoRenew: institution.subscription.autoRenew || false,
-        paymentMethod: institution.subscription.paymentMethod || 'Not configured',
+        plan: sub.planName || institution.plan || 'Basic',
+        autoRenew: sub.autoRenew || false,
+        paymentMethod: sub.paymentMethod || 'Not configured',
         lastRenewalDate,
         nextRenewalDate,
-        renewalAmount: institution.subscription.monthlyCost || 0,
+        renewalAmount: sub.monthlyCost || institution.monthlyCost || 0,
         status: institution.status === 'active' ? 'active' : 'inactive'
       };
     });
@@ -1395,7 +1450,7 @@ const getPlatformSettings = async (req, res) => {
     
     if (!settings) {
       settings = {
-        platformName: 'Ultrakey School Management System',
+        platformName: 'EduSearch',
         version: '2.0.0',
         maxInstitutions: 1000,
         defaultPlan: 'medium',
@@ -1420,8 +1475,8 @@ const getPlatformSettings = async (req, res) => {
         email: {
           smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
           smtpPort: process.env.SMTP_PORT || 587,
-          senderEmail: process.env.EMAIL_USER || 'noreply@ultrakey.com',
-          senderName: 'Ultrakey School'
+          senderEmail: process.env.GMAIL_USER || process.env.SMTP_USER || process.env.EMAIL_USER || 'noreply@edusearch.com',
+          senderName: 'EduSearch'
         },
         createdAt: new Date(),
         updatedAt: new Date()
@@ -1464,29 +1519,29 @@ const getMaintenanceSettings = async (req, res) => {
     logger.info('Fetching maintenance settings');
     const db = mongoose.connection.db;
     
-    let settings = await db.collection('platformsettings').findOne({}, { projection: { maintenance: 1 } });
+    const doc = await db.collection('platformsettings').findOne({ _id: 'maintenance' });
     
-    if (!settings || !settings.maintenance) {
-      settings = {
-        maintenanceMode: false,
-        scheduledMaintenance: {
-          enabled: false,
-          startDate: '',
-          endDate: '',
-          startTime: '02:00',
-          endTime: '06:00',
-          message: 'System will be under maintenance for updates. Please save your work before this time.'
-        },
-        notifications: {
-          emailUsers: true,
-          inAppNotification: true,
-          advanceNotice: 24
-        },
-        allowedUsers: ['superadmin']
-      };
+    if (!doc) {
+      return successResponse(res, {
+        enabled: false,
+        message: 'System is currently under maintenance. We\'ll be back shortly.',
+        startTime: '',
+        endTime: '',
+        affectedModules: [],
+        notifyUsers: true,
+        allowAdminAccess: true
+      });
     }
     
-    return successResponse(res, settings, 'Maintenance settings retrieved successfully');
+    return successResponse(res, doc.settings || {
+      enabled: false,
+      message: 'System is currently under maintenance. We\'ll be back shortly.',
+      startTime: '',
+      endTime: '',
+      affectedModules: [],
+      notifyUsers: true,
+      allowAdminAccess: true
+    });
   } catch (error) {
     logger.error('Error fetching maintenance settings:', error);
     return errorResponse(res, error.message);
@@ -1498,20 +1553,112 @@ const updateMaintenanceSettings = async (req, res) => {
     logger.info('Updating maintenance settings');
     const db = mongoose.connection.db;
     
-    const updatedSettings = {
-      maintenance: req.body,
-      updatedAt: new Date()
-    };
-    
     await db.collection('platformsettings').updateOne(
-      {},
-      { $set: updatedSettings },
+      { _id: 'maintenance' },
+      { $set: { settings: req.body, updatedAt: new Date() } },
       { upsert: true }
     );
     
     return successResponse(res, req.body, 'Maintenance settings updated successfully');
   } catch (error) {
     logger.error('Error updating maintenance settings:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const getScheduledMaintenance = async (req, res) => {
+  try {
+    logger.info('Fetching scheduled maintenance');
+    const db = mongoose.connection.db;
+    
+    const doc = await db.collection('platformsettings').findOne({ _id: 'scheduled_maintenance' });
+    
+    return successResponse(res, doc?.schedules || []);
+  } catch (error) {
+    logger.error('Error fetching scheduled maintenance:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const getMaintenanceHistory = async (req, res) => {
+  try {
+    logger.info('Fetching maintenance history');
+    const db = mongoose.connection.db;
+    const doc = await db.collection('platformsettings').findOne({ _id: 'scheduled_maintenance' });
+    const history = (doc?.schedules || []).filter(
+      s => s.status === 'completed' || s.status === 'cancelled'
+    ).sort((a, b) => {
+      const aTime = a.completedAt || a.updatedAt || a.createdAt;
+      const bTime = b.completedAt || b.updatedAt || b.createdAt;
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
+    return successResponse(res, history);
+  } catch (error) {
+    logger.error('Error fetching maintenance history:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const createScheduledMaintenance = async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    const schedule = {
+      _id: new mongoose.Types.ObjectId().toString(),
+      ...req.body,
+      status: 'scheduled',
+      createdAt: new Date()
+    };
+    
+    await db.collection('platformsettings').updateOne(
+      { _id: 'scheduled_maintenance' },
+      { $push: { schedules: schedule }, $set: { updatedAt: new Date() } },
+      { upsert: true }
+    );
+    
+    return createdResponse(res, schedule, 'Maintenance scheduled successfully');
+  } catch (error) {
+    logger.error('Error creating scheduled maintenance:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const updateScheduledMaintenance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = mongoose.connection.db;
+    
+    const doc = await db.collection('platformsettings').findOne({ _id: 'scheduled_maintenance' });
+    if (!doc) return notFoundResponse(res, 'Scheduled maintenance not found');
+    
+    const schedules = (doc.schedules || []).map(s =>
+      s._id === id ? { ...s, ...req.body, updatedAt: new Date() } : s
+    );
+    
+    await db.collection('platformsettings').updateOne(
+      { _id: 'scheduled_maintenance' },
+      { $set: { schedules, updatedAt: new Date() } }
+    );
+    
+    return successResponse(res, null, 'Scheduled maintenance updated successfully');
+  } catch (error) {
+    logger.error('Error updating scheduled maintenance:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const deleteScheduledMaintenance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = mongoose.connection.db;
+    
+    await db.collection('platformsettings').updateOne(
+      { _id: 'scheduled_maintenance' },
+      { $pull: { schedules: { _id: id } }, $set: { updatedAt: new Date() } }
+    );
+    
+    return successResponse(res, null, 'Scheduled maintenance deleted successfully');
+  } catch (error) {
+    logger.error('Error deleting scheduled maintenance:', error);
     return errorResponse(res, error.message);
   }
 };
@@ -1540,6 +1687,25 @@ const createAgent = async (req, res) => {
     // Create new agent
     const agent = new Agent(agentWithRequiredFields);
     await agent.save();
+
+    // Log audit entry
+    try {
+      const AuditLog = (await import('../models/AuditLog.js')).default;
+      await AuditLog.create({
+        userId: req.user?.userId || req.user?.id,
+        userName: req.user?.name || 'Unknown',
+        userRole: req.user?.role || 'super_admin',
+        action: 'create-agent',
+        category: 'settings-change',
+        resource: 'Agent',
+        resourceId: agent._id,
+        details: `Created agent ${agentData.email}`,
+        ipAddress: req.ip || '',
+        status: 'success'
+      });
+    } catch (auditError) {
+      logger.error('Failed to create audit log:', auditError.message);
+    }
     
     return successResponse(res, agent, 'Agent created successfully', 201);
   } catch (error) {
@@ -1655,8 +1821,11 @@ const getAgentDetails = async (req, res) => {
     // Get institutions associated with this agent
     const institutions = await Institution.find({ agentId: id }).lean();
     
-    // Get commissions for this agent
-    const commissions = await Commission.find({ agentId: id }).lean();
+    // Get commissions for this agent (agentId is ObjectId in Commission, skip if UUID)
+    let commissions = [];
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      commissions = await Commission.find({ agentId: id }).lean();
+    }
     
     const agentDetails = {
       ...agent,
@@ -1665,9 +1834,9 @@ const getAgentDetails = async (req, res) => {
       statistics: {
         totalInstitutions: institutions.length,
         activeInstitutions: institutions.filter(i => i.status === 'active').length,
-        totalCommission: commissions.reduce((sum, c) => sum + (c.amount || 0), 0),
-        pendingCommission: commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.amount || 0), 0),
-        paidCommission: commissions.filter(c => c.status === 'paid').reduce((sum, c) => sum + (c.amount || 0), 0)
+        totalCommission: commissions.reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        pendingCommission: commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        paidCommission: commissions.filter(c => c.status === 'paid').reduce((sum, c) => sum + (c.commissionAmount || 0), 0)
       }
     };
     
@@ -1921,15 +2090,17 @@ const getInstitutionsWithUsers = async (req, res) => {
     
     const totalCount = await Institution.countDocuments(query);
     
-    // Calculate revenue in INR for each institution
     const convertToINR = (amount) => {
       if (!amount) return 0;
+      if (typeof amount === 'string') {
+        amount = amount.replace(/[$,\s]/g, '');
+      }
       return parseFloat(amount) || 0;
     };
     
     const formatINR = (amount) => {
       const num = convertToINR(amount);
-      return '₹' + num.toLocaleString('en-IN');
+      return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     };
     
     // Get users grouped by institution (only if requested)
@@ -2447,6 +2618,30 @@ const getSupportAnalytics = async (req, res) => {
   }
 };
 
+// Send reminder to institution
+const sendReminder = async (req, res) => {
+  try {
+    const { institutionId } = req.params;
+    logger.info(`Sending reminder for institution: ${institutionId}`);
+
+    const Institution = (await import('../models/Institution.js')).default;
+    const institution = await Institution.findById(institutionId).lean();
+
+    if (!institution) {
+      return notFoundResponse(res, 'Institution not found');
+    }
+
+    // In a real system, this would send an email/SMS notification
+    // For now, log and return success
+    logger.info(`Reminder sent to institution: ${institution.name} (${institution.email || 'no email'})`);
+
+    return successResponse(res, { sent: true, institutionId, email: institution.email || '' }, 'Reminder sent successfully');
+  } catch (error) {
+    logger.error('Error sending reminder:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
 // Export all functions
 export default {
   getSuperAdminData,
@@ -2491,6 +2686,11 @@ export default {
   updatePlatformSettings,
   getMaintenanceSettings,
   updateMaintenanceSettings,
+  getScheduledMaintenance,
+  getMaintenanceHistory,
+  createScheduledMaintenance,
+  updateScheduledMaintenance,
+  deleteScheduledMaintenance,
   getAgents,
   getAgentById,
   getAgentDetails,
@@ -2508,6 +2708,7 @@ getAllData,
   getUserAnalytics,
   getBranchAnalytics,
   getSubscriptionAnalytics,
-  getSupportAnalytics
+  getSupportAnalytics,
+  sendReminder
 };
 

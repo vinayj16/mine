@@ -6,8 +6,8 @@ export const transactionIdValidator = [
     .isString().withMessage('Transaction ID must be a string')
 ];
 
-export const schoolIdValidator = [
-  param('schoolId')
+export const institutionIdValidator = [
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID')
 ];

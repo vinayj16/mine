@@ -221,8 +221,8 @@ class SchoolService {
   /**
    * Get school performance metrics
    */
-  async getSchoolMetrics(schoolId) {
-    const school = await this.getSchoolById(schoolId);
+  async getSchoolMetrics(institutionId) {
+    const school = await this.getSchoolById(institutionId);
     const { performance, facilities, totalStudents, totalTeachers } = school;
 
     return {

@@ -126,13 +126,11 @@ export const useSocket = (options: UseSocketOptions = {}) => {
       const newSocket = new WebSocket(wsUrl);
 
       newSocket.onopen = () => {
-        console.log('WebSocket connected');
         setIsConnected(true);
         reconnectAttempts.current = 0;
       };
 
       newSocket.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
         setSocket(null);
         socketRef.current = null;
@@ -141,7 +139,6 @@ export const useSocket = (options: UseSocketOptions = {}) => {
         if (event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
           reconnectAttempts.current++;
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`Attempting to reconnect (${reconnectAttempts.current}/${maxReconnectAttempts})`);
             connect();
           }, 1000 * reconnectAttempts.current);
         }

@@ -34,14 +34,14 @@ const AdminGradesPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || '' : '';
       
       // Fetch students and results data
       const [studentsRes, resultsRes] = await Promise.allSettled([
-        apiClient.get('/students', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
-        apiClient.get('/results', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } }))
+        apiClient.get('/students', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/results', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } }))
       ]);
       
       const students = studentsRes.status === 'fulfilled' ? (studentsRes.value.data?.data || []) : [];

@@ -9,14 +9,60 @@ const router = express.Router();
 // All results routes require authentication
 router.use(protect);
 
-// Get results by school
-router.get('/schools/:schoolId', async (req, res) => {
+// Get results by institution (delegates to institutionId query)
+router.get('/institutions/:institutionId', async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
+    const { classId, examId, academicYear, term, status, page = 1, limit = 20 } = req.query;
+    
+    const query = { institutionId };
+    
+    if (classId) query.classId = classId;
+    if (examId) query.examId = examId;
+    if (academicYear) query.academicYear = academicYear;
+    if (term) query.term = term;
+    if (status) query.status = status;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    let results = await StudentResult.find(query)
+      .populate('studentId', 'firstName lastName rollNumber admissionNumber')
+      .populate('examId', 'name type')
+      .populate('classId', 'name section')
+      .populate('subjects.subjectId', 'name code')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    const total = await StudentResult.countDocuments(query);
+
+    results = results.map(r => ({
+      ...r,
+      percentage: r.percentage ?? r.overallPercentage ?? 0,
+      overallGrade: r.overallGrade || r.overallGrade || '',
+    }));
+
+    res.json({
+      success: true,
+      data: results,
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Get results by school
+router.get('/schools/:institutionId', async (req, res) => {
+  try {
+    const { institutionId } = req.params;
     const { academicYear, status, page = 1, limit = 20 } = req.query;
     
     // Build query
-    const query = { schoolId };
+    const query = { institutionId };
     
     if (academicYear) {
       query.academicYear = academicYear;
@@ -30,17 +76,21 @@ router.get('/schools/:schoolId', async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const [results, total] = await Promise.all([
-      StudentResult.find(query)
-        .populate('studentId', 'name rollNumber')
-        .populate('examId', 'name type')
-        .populate('classId', 'name section')
-        .populate('subjects.subjectId', 'name code')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum),
-      StudentResult.countDocuments(query)
-    ]);
+    let results = await StudentResult.find(query)
+      .populate('studentId', 'firstName lastName rollNumber admissionNumber')
+      .populate('examId', 'name type')
+      .populate('classId', 'name section')
+      .populate('subjects.subjectId', 'name code')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    results = results.map(r => ({
+      ...r,
+      percentage: r.percentage ?? r.overallPercentage ?? 0,
+      overallGrade: r.overallGrade || r.overallGrade || '',
+    }));
 
     res.json({
       success: true,
@@ -89,17 +139,23 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const [results, total] = await Promise.all([
-      StudentResult.find(query)
-        .populate('studentId', 'name rollNumber')
-        .populate('examId', 'name type')
-        .populate('classId', 'name section')
-        .populate('subjects.subjectId', 'name code')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum),
-      StudentResult.countDocuments(query)
-    ]);
+    let results = await StudentResult.find(query)
+      .populate('studentId', 'firstName lastName rollNumber admissionNumber')
+      .populate('examId', 'name type')
+      .populate('classId', 'name section')
+      .populate('subjects.subjectId', 'name code')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    const total = await StudentResult.countDocuments(query);
+
+    results = results.map(r => ({
+      ...r,
+      percentage: r.percentage ?? r.overallPercentage ?? 0,
+      overallGrade: r.overallGrade || '',
+    }));
 
     res.json({
       success: true,
@@ -200,10 +256,10 @@ router.get('/:id', async (req, res) => {
 // Create new result
 router.post('/', authorize(['admin', 'principal', 'institution_admin', 'teacher']), async (req, res) => {
   try {
-    const { schoolId, studentId, classId, examId, academicYear, term, subjects, totalMarksObtained, totalMaxMarks, percentage, overallGrade, rank, attendance, teacherRemarks, principalRemarks } = req.body;
+    const { institutionId, studentId, classId, examId, academicYear, term, subjects, totalMarksObtained, totalMaxMarks, percentage, overallGrade, rank, attendance, teacherRemarks, principalRemarks } = req.body;
     
     const resultData = {
-      schoolId,
+      institutionId,
       studentId,
       classId,
       examId,
@@ -225,7 +281,7 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin', 'teacher'
     await newResult.save();
     
     // Populate references
-    await newResult.populate('studentId', 'name rollNumber');
+    await newResult.populate('studentId', 'firstName lastName rollNumber admissionNumber');
     await newResult.populate('examId', 'name type');
     await newResult.populate('classId', 'name section');
     await newResult.populate('subjects.subjectId', 'name code');
@@ -236,6 +292,9 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin', 'teacher'
       message: 'Result created successfully'
     });
   } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to create result', error: error.message });
   }
 });

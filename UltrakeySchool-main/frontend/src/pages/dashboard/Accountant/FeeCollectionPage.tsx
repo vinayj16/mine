@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { toast } from 'react-toastify';
+import apiClient from '../../../api/client';
 import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
 
 interface Student {
@@ -7,7 +8,8 @@ interface Student {
   firstName: string;
   lastName: string;
   rollNumber: string;
-  class: string;
+  class?: string;
+  classId?: { name?: string };
   email: string;
 }
 
@@ -26,7 +28,6 @@ const FeeCollectionPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Form state
   const [formData, setFormData] = useState({
     studentId: '',
     feeType: 'Tuition',
@@ -42,23 +43,33 @@ const FeeCollectionPage: React.FC = () => {
 
   const fetchStudents = async () => {
     try {
-      const response = await axios.get('/api/v1/students');
+      const response = await apiClient.get('/students/institution', {
+        params: { limit: 200 }
+      });
+      console.debug('API /students/institution response:', response);
       if (response.data.success) {
-        setStudents(response.data.data || []);
+        const payload = response.data.data;
+        // Support both array response and object-with-students shape
+        const list = Array.isArray(payload)
+          ? payload
+          : (payload && (payload.students || payload.data)) || [];
+        setStudents(list);
       }
     } catch (error) {
       console.error('Error fetching students:', error);
+      toast.error('Failed to load students');
     }
   };
 
   const fetchFees = async () => {
     try {
-      const response = await axios.get('/api/v1/fees');
+      const response = await apiClient.get('/fees');
       if (response.data.success) {
         setFees(response.data.data || []);
       }
     } catch (error) {
       console.error('Error fetching fees:', error);
+      toast.error('Failed to load fees');
     }
   };
 
@@ -68,16 +79,18 @@ const FeeCollectionPage: React.FC = () => {
     setMessage('');
 
     try {
-      const response = await axios.post('/api/v1/fees/create', {
+      const response = await apiClient.post('/fees/create', {
         studentId: formData.studentId,
         feeType: formData.feeType,
         amount: parseFloat(formData.amount),
         dueDate: formData.dueDate,
-        description: formData.description
+        description: formData.description,
+        remarks: formData.description
       });
 
       if (response.data.success) {
-        setMessage('Fee created successfully! Student will be notified.');
+        setMessage('Fee created successfully! Student will see it on their dashboard.');
+        toast.success('Fee created and assigned to student');
         setFormData({
           studentId: '',
           feeType: 'Tuition',
@@ -88,9 +101,25 @@ const FeeCollectionPage: React.FC = () => {
         fetchFees();
       }
     } catch (error: any) {
-      setMessage('Error creating fee: ' + (error.response?.data?.message || error.message));
+      const errMsg = error.response?.data?.message || error.message;
+      setMessage('Error creating fee: ' + errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendReminders = async () => {
+    const pendingIds = fees.filter((f) => f.status !== 'paid').map((f) => f._id);
+    if (pendingIds.length === 0) {
+      toast.info('No pending fees to remind');
+      return;
+    }
+    try {
+      await apiClient.post('/fees/reminders', { feeIds: pendingIds });
+      toast.success(`Reminders sent for ${pendingIds.length} fee(s)`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to send reminders');
     }
   };
 
@@ -109,7 +138,7 @@ const FeeCollectionPage: React.FC = () => {
       'Due Date': new Date(fee.dueDate).toLocaleDateString(),
       Status: fee.status
     }));
-    exportToPDF(data, 'Fees Report');
+    exportToPDF(data, 'fees-report', undefined, 'Fees Report');
   };
 
   const handleExportExcel = () => {
@@ -123,10 +152,15 @@ const FeeCollectionPage: React.FC = () => {
     exportToExcel(data, 'Fees Report');
   };
 
+  const getStudentLabel = (student: Student) => {
+    const className = student.classId?.name || student.class || '';
+    return `${student.firstName} ${student.lastName} - ${student.rollNumber || 'N/A'}${className ? ` (Class ${className})` : ''}`;
+  };
+
   return (
     <div className="container-fluid py-4">
       <h2>Fee Collection</h2>
-      <p className="text-muted">Create fees that will appear in student dashboard for payment</p>
+      <p className="text-muted">Create tuition, hostel, transport and other fees — students pay via Razorpay from their dashboard</p>
 
       {message && (
         <div className={`alert ${message.includes('Error') ? 'alert-danger' : 'alert-success'}`}>
@@ -137,8 +171,11 @@ const FeeCollectionPage: React.FC = () => {
       <div className="row">
         <div className="col-md-5">
           <div className="card">
-            <div className="card-header">
-              <h5>Create New Fee</h5>
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">Create New Fee</h5>
+              <button type="button" className="btn btn-sm btn-outline-warning" onClick={handleSendReminders}>
+                Send Reminders
+              </button>
             </div>
             <div className="card-body">
               <form onSubmit={handleSubmit}>
@@ -154,7 +191,7 @@ const FeeCollectionPage: React.FC = () => {
                     <option value="">-- Select Student --</option>
                     {students.map((student) => (
                       <option key={student._id} value={student._id}>
-                        {student.firstName} {student.lastName} - {student.rollNumber} (Class {student.class})
+                        {getStudentLabel(student)}
                       </option>
                     ))}
                   </select>
@@ -233,7 +270,7 @@ const FeeCollectionPage: React.FC = () => {
         <div className="col-md-7">
           <div className="card">
             <div className="card-header d-flex justify-content-between align-items-center">
-              <h5>All Fees</h5>
+              <h5>All Fees (Institution)</h5>
               <div>
                 <button
                   className="btn btn-outline-success btn-sm me-2"
@@ -274,12 +311,12 @@ const FeeCollectionPage: React.FC = () => {
                       fees.map((fee) => (
                         <tr key={fee._id}>
                           <td>{fee.studentName}</td>
-                          <td>{fee.feeType}</td>
+                          <td className="text-capitalize">{fee.feeType}</td>
                           <td>₹{fee.amount}</td>
                           <td>{new Date(fee.dueDate).toLocaleDateString()}</td>
                           <td>
                             <span className={`badge ${
-                              fee.status === 'paid' ? 'bg-success' : 
+                              fee.status === 'paid' ? 'bg-success' :
                               fee.status === 'pending' ? 'bg-warning' : 'bg-danger'
                             }`}>
                               {fee.status}

@@ -21,10 +21,6 @@ const sectionSchema = new mongoose.Schema({
     ref: 'Institution',
     required: true
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School'
-  },
   classTeacherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Teacher'

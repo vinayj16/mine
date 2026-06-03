@@ -19,9 +19,9 @@ const metadataSchema = new mongoose.Schema({
 }, { _id: false });
 
 const academicReasonSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -85,9 +85,9 @@ const academicReasonSchema = new mongoose.Schema({
 });
 
 // Indexes
-academicReasonSchema.index({ schoolId: 1, role: 1 });
-academicReasonSchema.index({ schoolId: 1, category: 1 });
-academicReasonSchema.index({ schoolId: 1, status: 1 });
+academicReasonSchema.index({ institutionId: 1, role: 1 });
+academicReasonSchema.index({ institutionId: 1, category: 1 });
+academicReasonSchema.index({ institutionId: 1, status: 1 });
 academicReasonSchema.index({ reason: 'text', description: 'text' });
 
 // Virtual for incrementing usage

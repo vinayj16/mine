@@ -20,10 +20,10 @@ const paymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true,
+    ref: 'Institution',
+    required: false,
     index: true
   },
   amount: {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Student {
   _id: string;
@@ -47,8 +48,18 @@ const StudentReportPage: React.FC = () => {
   });
   const [sortBy, setSortBy] = useState('ascending');
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011';
+  // Get institutionId from localStorage
+  const getInstitutionId = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        return user.institutionId || user.institutionId || '';
+      }
+    } catch { /* empty */ }
+    return localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || '';
+  };
+  const institutionId = getInstitutionId();
 
   const fetchStudents = async () => {
     try {
@@ -56,7 +67,7 @@ const StudentReportPage: React.FC = () => {
       setError(null);
 
       const params: any = {
-        schoolId,
+        institutionId,
         limit: 100
       };
 
@@ -134,7 +145,24 @@ const StudentReportPage: React.FC = () => {
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export to ${type} feature coming soon`);
+    if (!students.length) { toast.error('No data to export'); return; }
+    const exportData = students.map(s => ({
+      'Admission No': s.admissionNumber || '',
+      'Roll No': s.rollNumber || 'N/A',
+      Name: `${s.firstName || ''} ${s.lastName || ''}`,
+      Class: s.classId?.name || '',
+      Section: s.sectionId?.name || '',
+      Gender: s.gender || '',
+      Parent: `${s.guardianId?.firstName || ''} ${s.guardianId?.lastName || ''}`,
+      'Date of Join': s.dateOfJoining ? formatDate(s.dateOfJoining) : '-',
+      DOB: s.dateOfBirth ? formatDate(s.dateOfBirth) : '-',
+      Status: s.status || ''
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'student-report', Object.keys(exportData[0]).map(k => ({ key: k, label: k })));
+    } else {
+      exportToExcel(exportData, 'student-report');
+    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -343,9 +371,9 @@ const StudentReportPage: React.FC = () => {
                         onChange={handleFilterChange}
                       >
                         <option value="">All Genders</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                   </div>

@@ -8,10 +8,14 @@ import {
 import institutionService from '../../../services/institutionService'
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
-const PIE_COLORS = ['#10b981','#06b6d4','#ef4444','#f59e0b']
-const PERF_COLORS = ['#6366f1','#f59e0b','#ef4444']
+const PIE_COLORS = ['#10b981', '#06b6d4', '#ef4444', '#f59e0b']
+const PERF_COLORS = ['#6366f1', '#f59e0b', '#ef4444']
+
+import { useAuth } from '../../../store/authStore'
+import InstitutionDetailsCard from '../../../components/dashboard/InstitutionDetailsCard'
 
 const InstituteAdminDashboardPage = () => {
+  const { user, institutionData } = useAuth();
   // ─── UI STATE ─────────────────────────────────────────────────────────────
   const [activeSection] = useState('overview')
   const [alertVisible, setAlertVisible] = useState(true)
@@ -54,10 +58,10 @@ const InstituteAdminDashboardPage = () => {
       const userStr = localStorage.getItem('user')
       let instId = ''
       if (userStr) {
-        try { instId = JSON.parse(userStr)?.institutionId || '' } catch (e) {}
+        try { instId = JSON.parse(userStr)?.institutionId || '' } catch { /* ignore parse error */ }
       }
       if (!instId) { setError('No institution ID found'); setLoading(false); return }
-      
+
       const [statsRes, feesRes, attRes, staffRes, alertsRes] = await Promise.allSettled([
         institutionService.getInstitutionDashboardStats(instId),
         institutionService.getInstitutionFees(instId),
@@ -65,36 +69,36 @@ const InstituteAdminDashboardPage = () => {
         institutionService.getInstitutionStaff(instId),
         institutionService.getInstitutionAlerts(instId),
       ])
-      
+
       if (statsRes.status === 'fulfilled' && statsRes.value) {
         const s = statsRes.value as any
         setTopStats([{ label: 'Total Students', value: s.totalStudents?.toString() || '0', delta: '1.2%', deltaTone: 'bg-danger', icon: '/assets/img/icons/student.svg', active: s.activeStudents?.toString() || '0', inactive: '0', avatarTone: 'bg-danger-transparent' }, { label: 'Total Teachers', value: s.totalTeachers?.toString() || '0', delta: '1.2%', deltaTone: 'bg-skyblue', icon: '/assets/img/icons/teacher.svg', active: s.teachingStaff?.toString() || '0', inactive: '0', avatarTone: 'bg-secondary-transparent' }, { label: 'Total Staff', value: s.totalStaff?.toString() || '0', delta: '1.2%', deltaTone: 'bg-warning', icon: '/assets/img/icons/staff.svg', active: s.presentStaff?.toString() || '0', inactive: '0', avatarTone: 'bg-warning-transparent' }, { label: 'Attendance %', value: (s.attendancePercentage || 0) + '%', delta: '1.2%', deltaTone: 'bg-success', icon: '/assets/img/icons/subject.svg', active: s.presentStudents?.toString() || '0', inactive: '0', avatarTone: 'bg-success-transparent' }])
-        setChairmanStats([{ label: 'Total Classes', value: s.totalClasses?.toString() || '48', delta: '+4', deltaTone: 'bg-primary', icon: '/assets/img/icons/subject.svg', active: 'Active', inactive: 'Inactive', avatarTone: 'bg-primary-transparent' }, { label: 'Total Revenue', value: '$' + (s.totalRevenue || 0), delta: '+8.4%', deltaTone: 'bg-success', icon: '/assets/img/icons/subject.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' }, { label: 'Student Growth', value: '+' + (s.studentGrowth || 0) + '%', delta: '↑ YoY', deltaTone: 'bg-info', icon: '/assets/img/icons/student.svg', active: s.totalStudents?.toString() || '0', inactive: '0', avatarTone: 'bg-info-transparent' }, { label: 'Applications', value: s.newAdmissions?.toString() || '0', delta: '+12.1%', deltaTone: 'bg-warning', icon: '/assets/img/icons/student.svg', active: 'Enrolled', inactive: 'Pending', avatarTone: 'bg-warning-transparent' }])
+        setChairmanStats([{ label: 'Total Classes', value: s.totalClasses?.toString() || '48', delta: '+4', deltaTone: 'bg-primary', icon: '/assets/img/icons/subject.svg', active: 'Active', inactive: 'Inactive', avatarTone: 'bg-primary-transparent' }, { label: 'Total Revenue', value: '₹' + (s.totalRevenue || 0), delta: '+8.4%', deltaTone: 'bg-success', icon: '/assets/img/icons/subject.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' }, { label: 'Student Growth', value: '+' + (s.studentGrowth || 0) + '%', delta: '↑ YoY', deltaTone: 'bg-info', icon: '/assets/img/icons/student.svg', active: s.totalStudents?.toString() || '0', inactive: '0', avatarTone: 'bg-info-transparent' }, { label: 'Applications', value: s.newAdmissions?.toString() || '0', delta: '+12.1%', deltaTone: 'bg-warning', icon: '/assets/img/icons/student.svg', active: 'Enrolled', inactive: 'Pending', avatarTone: 'bg-warning-transparent' }])
       }
-      
+
       if (feesRes.status === 'fulfilled' && feesRes.value) {
         const f = feesRes.value as any
         setFeesChartData(f.chartData || [{ q: "Q1'24", collected: 52000, outstanding: 7100 }, { q: "Q2'24", collected: 67000, outstanding: 5600 }, { q: "Q3'24", collected: 71000, outstanding: 3900 }, { q: "Q4'24", collected: 80000, outstanding: 2800 }])
         setEarningsData(f.earnings || [{ m: 'Jan', v: 32000 }, { m: 'Feb', v: 45000 }, { m: 'Mar', v: 38000 }, { m: 'Apr', v: 52000 }, { m: 'May', v: 48000 }, { m: 'Jun', v: 61000 }])
-        setFeeStats([{ label: 'Total Fees Collected', value: '$' + (f.collectedTotal || 0).toLocaleString(), badgeCls: 'badge-soft-success' }, { label: 'Fine Collected', value: '$' + (f.fineCollected || 0), badgeCls: 'badge-soft-danger' }, { label: 'Students Not Paid', value: '$' + (f.pendingCount || 0), badgeCls: 'badge-soft-info' }, { label: 'Total Outstanding', value: '$' + (f.outstandingTotal || 0).toLocaleString(), badgeCls: 'badge-soft-danger' }])
+        setFeeStats([{ label: 'Total Fees Collected', value: '₹' + (f.collectedTotal || 0).toLocaleString(), badgeCls: 'badge-soft-success' }, { label: 'Fine Collected', value: '₹' + (f.fineCollected || 0), badgeCls: 'badge-soft-danger' }, { label: 'Students Not Paid', value: '₹' + (f.pendingCount || 0), badgeCls: 'badge-soft-info' }, { label: 'Total Outstanding', value: '₹' + (f.outstandingTotal || 0).toLocaleString(), badgeCls: 'badge-soft-danger' }])
       }
-      
+
       if (attRes.status === 'fulfilled' && attRes.value) {
         const a = attRes.value as any
         setAttTabs([{ id: 'students', label: 'Students', emergency: a.studentEmergency || 28, absent: a.studentAbsent || 1, late: a.studentLate || 1, link: '/student-attendance', pie: [{ name: 'Present', value: a.studentPresent || 3614 }, { name: 'Emergency', value: a.studentEmergency || 28 }, { name: 'Absent', value: a.studentAbsent || 1 }, { name: 'Late', value: a.studentLate || 1 }] }, { id: 'teachers', label: 'Teachers', emergency: a.teacherEmergency || 30, absent: a.teacherAbsent || 3, late: a.teacherLate || 3, link: '/teacher-attendance', pie: [{ name: 'Present', value: a.teacherPresent || 248 }, { name: 'Emergency', value: a.teacherEmergency || 30 }, { name: 'Absent', value: a.teacherAbsent || 3 }, { name: 'Late', value: a.teacherLate || 3 }] }, { id: 'staff', label: 'Staff', emergency: a.staffEmergency || 45, absent: a.staffAbsent || 1, late: a.staffLate || 10, link: '/staff-attendance', pie: [{ name: 'Present', value: a.staffPresent || 106 }, { name: 'Emergency', value: a.staffEmergency || 45 }, { name: 'Absent', value: a.staffAbsent || 1 }, { name: 'Late', value: a.staffLate || 10 }] }])
       }
-      
+
       if (staffRes.status === 'fulfilled' && staffRes.value) {
         const st = staffRes.value as any
         setPerformancePie([{ name: 'Top', value: st.topPerformers || 45 }, { name: 'Average', value: st.averagePerformers || 11 }, { name: 'Below Avg', value: st.belowAverage || 2 }])
         setSubjects(st.subjects || [{ name: 'Maths', pct: 20, bar: 'bg-primary' }, { name: 'Physics', pct: 30, bar: 'bg-secondary' }, { name: 'Chemistry', pct: 40, bar: 'bg-info' }, { name: 'English', pct: 70, bar: 'bg-warning' }])
       }
-      
+
       if (alertsRes.status === 'fulfilled' && alertsRes.value) {
         const al = Array.isArray(alertsRes.value) ? alertsRes.value as any[] : []
-        setAlerts(al.length > 0 ? al : [{ type: 'danger', icon: 'ti ti-alert-triangle', title: 'Low Admission Warning', desc: 'Grade VI – only 68% seats filled' }, { type: 'warning', icon: 'ti ti-currency-dollar', title: 'Fee Pending Above Limit', desc: '124 students have dues > 60 days' }, { type: 'info', icon: 'ti ti-users', title: 'Staff Shortage', desc: 'Science Dept: 2 vacancies unfilled' }])
+        setAlerts(al.length > 0 ? al : [{ type: 'danger', icon: 'ti ti-alert-triangle', title: 'Low Admission Warning', desc: 'Grade VI – only 68% seats filled' }, { type: 'warning', icon: 'ti ti-currency-rupee', title: 'Fee Pending Above Limit', desc: '124 students have dues > 60 days' }, { type: 'info', icon: 'ti ti-users', title: 'Staff Shortage', desc: 'Science Dept: 2 vacancies unfilled' }])
       }
-      
+
       setLeaveRequests([{ name: 'James', role: 'Physics Teacher', badge: 'Emergency', badgeCls: 'badge-soft-danger', avatar: '/assets/img/profiles/avatar-14.webp', leave: '12-13 May', applied: '12 May' }, { name: 'Ramien', role: 'Accountant', badge: 'Casual', badgeCls: 'badge-soft-warning', avatar: '/assets/img/profiles/avatar-19.webp', leave: '12-13 May', applied: '11 May' }])
       setNotices([{ icon: 'ti ti-books', bg: 'bg-primary-transparent', title: 'New Syllabus Instructions', date: '11 Mar 2024', days: '20 Days' }, { icon: 'ti ti-bell-check', bg: 'bg-danger-transparent', title: 'Exam Preparation Notification!', date: '13 Mar 2024', days: '12 Days' }])
       setStudentActivity([{ img: '/assets/img/students/student-09.webp', title: '1st place in "Chess"', sub: 'School Competition' }, { img: '/assets/img/students/student-12.webp', title: 'Participated in "Carrom"', sub: 'Justin Lee participated' }, { img: '/assets/img/students/student-11.webp', title: '1st place in "100M"', sub: 'Sports Day Winner' }])
@@ -102,7 +106,7 @@ const InstituteAdminDashboardPage = () => {
       setClassRoutine([{ img: '/assets/img/teachers/teacher-01.webp', month: 'Oct 2024', bar: 'bg-primary' }, { img: '/assets/img/teachers/teacher-02.webp', month: 'Nov 2024', bar: 'bg-warning' }, { img: '/assets/img/teachers/teacher-03.webp', month: 'Dec 2024', bar: 'bg-success' }])
       setScheduleEvents([{ borderCls: 'border-skyblue', iconBg: 'bg-teal-transparent', icon: 'ti ti-user-edit text-info fs-20', title: 'Parents Teacher Meet', date: '15 July 2024', time: '09:10AM - 10:50AM', avatars: ['/assets/img/parents/parent-01.webp', '/assets/img/parents/parent-07.webp'] }, { borderCls: 'border-info', iconBg: 'bg-info-transparent', icon: 'ti ti-user-edit fs-20', title: 'PTA Meeting', date: '20 July 2024', time: '10:00AM - 11:30AM', avatars: ['/assets/img/parents/parent-05.webp', '/assets/img/parents/parent-06.webp'] }])
       setQuickLinks([[{ to: '/class-time-table', bg: 'bg-success-transparent', border: 'border-success', iconBg: 'bg-success', icon: 'ti ti-calendar', label: 'Calendar' }, { to: '/fees-group', bg: 'bg-secondary-transparent', border: 'border-secondary', iconBg: 'bg-secondary', icon: 'ti ti-license', label: 'Fees' }], [{ to: '/exam-results', bg: 'bg-primary-transparent', border: 'border-primary', iconBg: 'bg-primary', icon: 'ti ti-hexagonal-prism', label: 'Exam Result' }, { to: '/class-home-work', bg: 'bg-danger-transparent', border: 'border-danger', iconBg: 'bg-danger', icon: 'ti ti-report-money', label: 'Home Works' }], [{ to: '/student-attendance', bg: 'bg-warning-transparent', border: 'border-warning', iconBg: 'bg-warning', icon: 'ti ti-calendar-share', label: 'Attendance' }, { to: '/attendance-report', bg: 'bg-skyblue-transparent', border: 'border-skyblue', iconBg: 'bg-skyblue', icon: 'ti ti-file-pencil', label: 'Reports' }]])
-      
+
     } catch (err: any) {
       console.error('Error fetching dashboard data:', err)
       setError(err.message || 'Failed to fetch dashboard data')
@@ -110,22 +114,22 @@ const InstituteAdminDashboardPage = () => {
       setLoading(false)
     }
   }
-  
+
   // ─── HELPERS ────────────────────────────────────────────────────────────
   const toggleTodo = (i: number) => setTodos(prev => prev.map((t, idx) => idx === i ? { ...t, done: !t.done } : t))
   const navigateMonth = (direction: string) => {
     setCurrentMonth(prev => { const d = new Date(prev); d.setMonth(prev.getMonth() + (direction === 'next' ? 1 : -1)); return d; })
   }
   const tab = attTabs.find(t => t.id === activeTab) || attTabs[0] || { emergency: 0, absent: 0, late: 0, link: '#', pie: [] }
-  
+
   const today = new Date()
   const year = currentMonth.getFullYear()
   const month = currentMonth.getMonth()
   const firstDay = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const monthName = currentMonth.toLocaleString('default', { month: 'long' })
-  const dayLabels = ['Su','Mo','Tu','We','Th','Fr','Sa']
-  
+  const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
   // ─── CONSTANTS FOR UI ───────────────────────────────────────────────────
   const navigate = useNavigate()
   const welcomeMessage = 'Welcome Back, Institute Admin'
@@ -139,7 +143,7 @@ const InstituteAdminDashboardPage = () => {
     { id: 'transport', label: 'Transport', icon: 'ti ti-bus', path: '/institution/transport/routes' },
     { id: 'schools', label: 'Schools', icon: 'ti ti-building', path: '/institution/overview/teaching' },
     { id: 'performance', label: 'Performance', icon: 'ti ti-chart-line', path: '/institution/analytics' },
-    { id: 'finance', label: 'Finance', icon: 'ti ti-currency-dollar', path: '/institution/finance' },
+    { id: 'finance', label: 'Finance', icon: 'ti ti-currency-rupee', path: '/institution/finance' },
     { id: 'reports', label: 'Reports', icon: 'ti ti-file-text', path: '/institution/reports' }
   ]
   const handleNavClick = (path: string) => {
@@ -170,7 +174,7 @@ const InstituteAdminDashboardPage = () => {
 
   return (
     <>
-      {/* ── PAGE HEADER ── */}
+      {/* ── INSTITUTION DETAILS ── */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
         <div className="my-auto mb-2">
           <h3 className="page-title mb-1">Institution Admin Dashboard</h3>
@@ -229,6 +233,17 @@ const InstituteAdminDashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* ── INSTITUTION DETAILS ── */}
+      <div className="row">
+        <div className="col-md-12">
+          <InstitutionDetailsCard
+            institution={institutionData || user?.institutionData}
+            userRole={user?.role}
+          />
+        </div>
+      </div>
+
 
       {/* ── SECTION NAV TABS ── */}
       <div className="row mb-4">
@@ -370,7 +385,7 @@ const InstituteAdminDashboardPage = () => {
                               <i className="ti ti-users-off me-2" />
                               No user credentials created yet
                               <div className="mt-2">
-                                <button 
+                                <button
                                   className="btn btn-primary btn-sm"
                                   onClick={() => window.location.href = '/user-management/create-credentials'}
                                 >
@@ -400,25 +415,24 @@ const InstituteAdminDashboardPage = () => {
                               </td>
                               <td>{cred.email}</td>
                               <td>
-                                <span className={`badge ${
-                                  cred.role === 'superadmin' ? 'bg-danger' :
+                                <span className={`badge ${cred.role === 'superadmin' ? 'bg-danger' :
                                   cred.role === 'institution_admin' ? 'bg-primary' :
-                                  cred.role === 'admin' ? 'bg-success' :
-                                  cred.role === 'principal' ? 'bg-warning' :
-                                  cred.role === 'teacher' ? 'bg-info' :
-                                  cred.role === 'student' ? 'bg-secondary' :
-                                  cred.role === 'parent' ? 'bg-pink' :
-                                  cred.role === 'accountant' ? 'bg-teal' :
-                                  cred.role === 'hr' ? 'bg-orange' :
-                                  cred.role === 'librarian' ? 'bg-purple' :
-                                  cred.role === 'transport_manager' ? 'bg-indigo' :
-                                  cred.role === 'hostel_warden' ? 'bg-brown' :
-                                  cred.role === 'staff' ? 'bg-light text-dark' :
-                                  cred.role === 'staff_member' ? 'bg-light text-dark' :
-                                  cred.role === 'admin' ? 'bg-dark' :
-                                  cred.role === 'administrator' ? 'bg-dark' :
-                                  'bg-secondary'
-                                }`}>
+                                    cred.role === 'admin' ? 'bg-success' :
+                                      cred.role === 'principal' ? 'bg-warning' :
+                                        cred.role === 'teacher' ? 'bg-info' :
+                                          cred.role === 'student' ? 'bg-secondary' :
+                                            cred.role === 'parent' ? 'bg-pink' :
+                                              cred.role === 'accountant' ? 'bg-teal' :
+                                                cred.role === 'hr' ? 'bg-orange' :
+                                                  cred.role === 'librarian' ? 'bg-purple' :
+                                                    cred.role === 'transport_manager' ? 'bg-indigo' :
+                                                      cred.role === 'hostel_warden' ? 'bg-brown' :
+                                                        cred.role === 'staff' ? 'bg-light text-dark' :
+                                                          cred.role === 'staff_member' ? 'bg-light text-dark' :
+                                                            cred.role === 'admin' ? 'bg-dark' :
+                                                              cred.role === 'administrator' ? 'bg-dark' :
+                                                                'bg-secondary'
+                                  }`}>
                                   {cred.role?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Unknown'}
                                 </span>
                               </td>
@@ -429,11 +443,10 @@ const InstituteAdminDashboardPage = () => {
                                 </div>
                               </td>
                               <td>
-                                <span className={`badge ${
-                                  cred.status === 'active' ? 'bg-success' :
+                                <span className={`badge ${cred.status === 'active' ? 'bg-success' :
                                   cred.status === 'inactive' ? 'bg-danger' :
-                                  'bg-warning'
-                                }`}>
+                                    'bg-warning'
+                                  }`}>
                                   {cred.status || 'Unknown'}
                                 </span>
                               </td>
@@ -458,7 +471,7 @@ const InstituteAdminDashboardPage = () => {
                               </td>
                               <td>
                                 <div className="btn-group" role="group">
-                                  <button 
+                                  <button
                                     className="btn btn-sm btn-outline-primary"
                                     title="View Details"
                                     onClick={() => {
@@ -468,7 +481,7 @@ const InstituteAdminDashboardPage = () => {
                                   >
                                     <i className="ti ti-eye"></i>
                                   </button>
-                                  <button 
+                                  <button
                                     className="btn btn-sm btn-outline-secondary"
                                     title="Edit User"
                                     onClick={() => {
@@ -478,7 +491,7 @@ const InstituteAdminDashboardPage = () => {
                                   >
                                     <i className="ti ti-edit"></i>
                                   </button>
-                                  <button 
+                                  <button
                                     className="btn btn-sm btn-outline-info"
                                     title="Reset Password"
                                     onClick={() => {
@@ -562,8 +575,8 @@ const InstituteAdminDashboardPage = () => {
                   </div>
                   <div className="row gx-3">
                     <div className="col-sm-4"><div className="card bg-light-300"><div className="card-body p-3 text-center"><h5>{tab?.emergency || 0}</h5><p className="fs-12">Emergency</p></div></div></div>
-                    <div className="col-sm-4"><div className="card bg-light-300"><div className="card-body p-3 text-center"><h5>{String(tab?.absent || 0).padStart(2,'0')}</h5><p className="fs-12">Absent</p></div></div></div>
-                    <div className="col-sm-4"><div className="card bg-light-300"><div className="card-body p-3 text-center"><h5>{String(tab?.late || 0).padStart(2,'0')}</h5><p className="fs-12">Late</p></div></div></div>
+                    <div className="col-sm-4"><div className="card bg-light-300"><div className="card-body p-3 text-center"><h5>{String(tab?.absent || 0).padStart(2, '0')}</h5><p className="fs-12">Absent</p></div></div></div>
+                    <div className="col-sm-4"><div className="card bg-light-300"><div className="card-body p-3 text-center"><h5>{String(tab?.late || 0).padStart(2, '0')}</h5><p className="fs-12">Late</p></div></div></div>
                   </div>
                   <div className="text-center">
                     <ResponsiveContainer width="100%" height={200}>
@@ -575,37 +588,6 @@ const InstituteAdminDashboardPage = () => {
                       </PieChart>
                     </ResponsiveContainer>
                     <Link to={tab?.link || '#'} className="btn btn-light"><i className="ti ti-calendar-share me-1" />View All</Link>
-                  </div>
-                </div>
-              </div>
-              {/* Best Performer + Star Students */}
-              <div className="row flex-fill mt-4">
-                <div className="col-sm-6 d-flex flex-column">
-                  <div className="bg-success-800 p-3 br-5 text-center flex-fill mb-4 pb-0 position-relative" style={{background: '#10b981', borderRadius: 8}}>
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                      <button className="btn btn-sm btn-white" onClick={() => setBestPerformerIndex(prev => (prev - 1 + 3) % 3)}><i className="ti ti-chevron-left" /></button>
-                      <h5 className="mb-0 text-white">Best Performer</h5>
-                      <button className="btn btn-sm btn-white" onClick={() => setBestPerformerIndex(prev => (prev + 1) % 3)}><i className="ti ti-chevron-right" /></button>
-                    </div>
-                    <div>
-                      <h4 className="mb-1 text-white">{['Rubell','Sarah Johnson','Michael Chen'][bestPerformerIndex]}</h4>
-                      <p className="text-light">{['Physics Teacher','Mathematics Teacher','Chemistry Teacher'][bestPerformerIndex]}</p>
-                    </div>
-                    <img src={`/assets/img/performer/performer-0${bestPerformerIndex + 1}.webp`} alt="img" style={{maxHeight: 120}} />
-                  </div>
-                </div>
-                <div className="col-sm-6 d-flex flex-column">
-                  <div className="bg-info p-3 br-5 text-center flex-fill mb-4 pb-0 position-relative" style={{background: '#06b6d4', borderRadius: 8}}>
-                    <div className="d-flex justify-content-between align-items-center mb-3">
-                      <button className="btn btn-sm btn-white" onClick={() => setStarStudentIndex(prev => (prev - 1 + 3) % 3)}><i className="ti ti-chevron-left" /></button>
-                      <h5 className="mb-0 text-white">Star Students</h5>
-                      <button className="btn btn-sm btn-white" onClick={() => setStarStudentIndex(prev => (prev + 1) % 3)}><i className="ti ti-chevron-right" /></button>
-                    </div>
-                    <div>
-                      <h4 className="mb-1 text-white">{['Tenesa','Alex Kumar','Emma Wilson'][starStudentIndex]}</h4>
-                      <p className="text-light">{['XII, A','XI, B','X, C'][starStudentIndex]}</p>
-                    </div>
-                    <img src={`/assets/img/performer/student-performer-0${starStudentIndex + 1}.webp`} alt="img" style={{maxHeight: 120}} />
                   </div>
                 </div>
               </div>
@@ -651,7 +633,7 @@ const InstituteAdminDashboardPage = () => {
                   <h4 className="card-title">Performance</h4>
                   <div className="dropdown">
                     <a href="#" className="bg-white dropdown-toggle" data-bs-toggle="dropdown"><i className="ti ti-school-bell me-2" />Class II</a>
-                    <ul className="dropdown-menu mt-2 p-3">{['Class I','Class II','Class III','Class IV'].map(c => <li key={c}><a href="#" className="dropdown-item rounded-1">{c}</a></li>)}</ul>
+                    <ul className="dropdown-menu mt-2 p-3">{['Class I', 'Class II', 'Class III', 'Class IV'].map(c => <li key={c}><a href="#" className="dropdown-item rounded-1">{c}</a></li>)}</ul>
                   </div>
                 </div>
                 <div className="card-body">
@@ -681,18 +663,18 @@ const InstituteAdminDashboardPage = () => {
                   <h4 className="card-title">Fees Collection</h4>
                   <div className="dropdown">
                     <a href="#" className="bg-white dropdown-toggle" data-bs-toggle="dropdown"><i className="ti ti-calendar me-2" />Last 8 Quater</a>
-                    <ul className="dropdown-menu mt-2 p-3">{['This Month','This Year','Last 12 Quater'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
+                    <ul className="dropdown-menu mt-2 p-3">{['This Month', 'This Year', 'Last 12 Quater'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
                   </div>
                 </div>
                 <div className="card-body pb-0">
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={feesChartData} barSize={18} barGap={4}>
                       <XAxis dataKey="q" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v as number)/1000}k`} />
-                      <Tooltip formatter={(v, n) => [`$${(v as number).toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v as number) / 1000}k`} />
+                      <Tooltip formatter={(v, n) => [`₹${(v as number).toLocaleString()}`, n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[6,6,0,0]} />
-                      <Bar dataKey="outstanding" name="Outstanding" fill="#ef4444" radius={[6,6,0,0]} />
+                      <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="outstanding" name="Outstanding" fill="#ef4444" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -743,20 +725,20 @@ const InstituteAdminDashboardPage = () => {
               <div className="card flex-fill">
                 <div className="card-body">
                   <div className="d-flex align-items-center justify-content-between mb-3">
-                    <div><h6 className="mb-1">Total Earnings</h6><h2>$64,522</h2><span className="badge bg-success-soft text-success">+12.5%</span></div>
+                    <div><h6 className="mb-1">Total Earnings</h6><h2>₹64,522</h2><span className="badge bg-success-soft text-success">+12.5%</span></div>
                     <span className="avatar avatar-lg bg-primary"><i className="ti ti-user-dollar" /></span>
                   </div>
                   <div className="d-flex align-items-center justify-content-between mb-3">
-                    <div><h6 className="mb-1">Total Expenses</h6><h2>$42,850</h2><span className="badge bg-danger-soft text-danger">-8.3%</span></div>
+                    <div><h6 className="mb-1">Total Expenses</h6><h2>₹42,850</h2><span className="badge bg-danger-soft text-danger">-8.3%</span></div>
                     <span className="avatar avatar-lg bg-danger"><i className="ti ti-credit-card" /></span>
                   </div>
                 </div>
                 <div style={{ padding: '0 16px 16px' }}>
                   <ResponsiveContainer width="100%" height={200}>
                     <AreaChart data={earningsData}>
-                      <defs><linearGradient id="earnGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
+                      <defs><linearGradient id="earnGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} /><stop offset="95%" stopColor="#6366f1" stopOpacity={0} /></linearGradient></defs>
                       <XAxis dataKey="m" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={v => [`$${(v as number).toLocaleString()}`,'Amount']} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
+                      <Tooltip formatter={v => [`₹${(v as number).toLocaleString()}`, 'Amount']} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
                       <Area type="monotone" dataKey="v" stroke="#6366f1" strokeWidth={2.5} fill="url(#earnGrad)" dot={false} />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -788,32 +770,7 @@ const InstituteAdminDashboardPage = () => {
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* ── TOP SUBJECTS | STUDENT ACTIVITY | TODO ── */}
-          <div className="row">
-            {/* TOP SUBJECTS */}
-            <div className="col-xxl-4 col-xl-6 d-flex">
-              <div className="card flex-fill">
-                <div className="card-header d-flex align-items-center justify-content-between">
-                  <h4 className="card-title">Top Subjects</h4>
-                  <div className="dropdown">
-                    <a href="#" className="bg-white dropdown-toggle" data-bs-toggle="dropdown"><i className="ti ti-school-bell me-2" />Class II</a>
-                    <ul className="dropdown-menu mt-2 p-3">{['Class I','Class II','Class III'].map(c => <li key={c}><a href="#" className="dropdown-item rounded-1">{c}</a></li>)}</ul>
-                  </div>
-                </div>
-                <div className="card-body">
-                  <div className="alert alert-success d-flex align-items-center mb-3" role="alert"><i className="ti ti-info-square-rounded me-2" /><div className="fs-14">Results obtained from syllabus completion</div></div>
-                  <ul className="list-group">
-                    {subjects.map(s => (
-                      <li key={s.name} className="list-group-item">
-                        <div className="row align-items-center"><div className="col-sm-4"><p className="text-dark">{s.name}</p></div><div className="col-sm-8"><div className="progress progress-xs"><div className={`progress-bar ${s.bar}`} style={{ width: `${s.pct}%` }} /></div></div></div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
+          
             {/* STUDENT ACTIVITY */}
             <div className="col-xxl-4 col-xl-6 d-flex">
               <div className="card flex-fill">
@@ -821,7 +778,7 @@ const InstituteAdminDashboardPage = () => {
                   <h4 className="card-title">Student Activity</h4>
                   <div className="dropdown">
                     <a href="#" className="bg-white dropdown-toggle" data-bs-toggle="dropdown"><i className="ti ti-calendar me-2" />This Month</a>
-                    <ul className="dropdown-menu mt-2 p-3">{['This Month','This Year','Last Week'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
+                    <ul className="dropdown-menu mt-2 p-3">{['This Month', 'This Year', 'Last Week'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
                   </div>
                 </div>
                 <div className="card-body">
@@ -841,7 +798,7 @@ const InstituteAdminDashboardPage = () => {
                   <h4 className="card-title">Todo</h4>
                   <div className="dropdown">
                     <a href="#" className="bg-white dropdown-toggle" data-bs-toggle="dropdown"><i className="ti ti-calendar me-2" />Today</a>
-                    <ul className="dropdown-menu mt-2 p-3">{['This Month','This Year','Last Week'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
+                    <ul className="dropdown-menu mt-2 p-3">{['This Month', 'This Year', 'Last Week'].map(o => <li key={o}><a href="#" className="dropdown-item rounded-1">{o}</a></li>)}</ul>
                   </div>
                 </div>
                 <div className="card-body">
@@ -1236,7 +1193,7 @@ const InstituteAdminDashboardPage = () => {
 
       {/* ── MODALS ── */}
       {showEventModal && (
-        <div className="modal fade show d-block" style={{background: 'rgba(0,0,0,0.5)'}}>
+        <div className="modal fade show d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
@@ -1255,7 +1212,7 @@ const InstituteAdminDashboardPage = () => {
         </div>
       )}
       {showRoutineModal && (
-        <div className="modal fade show d-block" style={{background: 'rgba(0,0,0,0.5)'}}>
+        <div className="modal fade show d-block" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">

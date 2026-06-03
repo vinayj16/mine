@@ -95,7 +95,7 @@ export const reasonIdValidator = [
 
 // Validation rules for getting reasons with filters
 export const getReasonsValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty()
     .withMessage('School ID is required')
     .isMongoId()

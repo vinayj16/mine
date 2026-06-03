@@ -1,9 +1,4 @@
-/**
- * Real-time Student Data with API Integration
- * Transforms mock data into dynamic, real-time student performance and management
- */
-
-import { guardianApi } from './guardians'
+import apiClient from '../api/client'
 import type { ReactNode } from 'react'
 // Enhanced student interfaces
 export interface StudentRecord extends StudentSummary {
@@ -18,7 +13,6 @@ export interface StudentRecord extends StudentSummary {
   // Financial status
   financial?: {
     outstandingFees: number
-    scholarshipAmount: number
     paymentHistory: {
       date: string
       amount: number
@@ -202,85 +196,21 @@ export interface StudentStats {
 // Real-time API functions for student management
 export const studentApi = {
   // Get all students with real-time data
-  getAllStudents: async (schoolId?: string, filters?: {
+  getAllStudents: async (institutionId?: string, filters?: {
     class?: string
     section?: string
     status?: 'Active' | 'Inactive'
     gender?: string
   }): Promise<StudentRecord[]> => {
     try {
-      if (!schoolId) {
-        console.warn('[Student API] School ID required for fetching students')
-        return []
-      }
-
-      // TODO: Replace with actual student service API call
-      console.warn('[Student API] Real-time student fetch not implemented yet, using enhanced mock data')
-
-      // Start with existing mock data and enhance it
-      const enhancedStudents = studentSummaries.map(student => ({
-        ...student,
-        academic: {
-          gpa: Math.floor(Math.random() * 30 + 70) / 10, // 7.0-10.0
-          rank: Math.floor(Math.random() * 50) + 1,
-          totalStudents: 100,
-          attendanceRate: Math.floor(Math.random() * 20) + 80, // 80-100%
-          performanceTrend: Math.random() > 0.6 ? 'improving' : Math.random() > 0.3 ? 'stable' : 'declining' as 'improving' | 'stable' | 'declining'
-        },
-        financial: {
-          outstandingFees: Math.floor(Math.random() * 5000),
-          scholarshipAmount: Math.random() > 0.8 ? Math.floor(Math.random() * 10000) : 0,
-          paymentHistory: Array.from({ length: Math.floor(Math.random() * 12) + 1 }, (_, i) => ({
-            date: new Date(Date.now() - i * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            amount: Math.floor(Math.random() * 5000) + 1000,
-            type: 'Tuition Fee'
-          }))
-        },
-        behavior: {
-          disciplinaryIncidents: Math.floor(Math.random() * 3),
-          participationScore: Math.floor(Math.random() * 40) + 60, // 60-100
-          peerRating: Math.floor(Math.random() * 30) + 70 // 70-100
-        },
-        health: {
-          allergies: Math.random() > 0.8 ? ['Peanuts', 'Dust'] : [],
-          medications: Math.random() > 0.9 ? ['Vitamin D'] : [],
-          emergencyContact: {
-            name: 'Emergency Contact',
-            relation: 'Relative',
-            phone: '+1-555-0123'
-          },
-          medicalConditions: Math.random() > 0.85 ? ['Asthma'] : []
-        },
-        activities: {
-          sports: Math.random() > 0.6 ? ['Basketball', 'Soccer'] : [],
-          clubs: Math.random() > 0.5 ? ['Science Club', 'Drama Club'] : [],
-          achievements: Math.random() > 0.7 ? ['Math Olympiad Winner', 'Science Fair Participant'] : [],
-          leadershipRoles: Math.random() > 0.8 ? ['Class Representative'] : []
-        },
-        digital: {
-          portalLogins: Math.floor(Math.random() * 100) + 50,
-          lastLogin: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-          appUsage: Math.floor(Math.random() * 20) + 10, // hours per week
-          onlineAssessments: Math.floor(Math.random() * 50) + 20
-        }
-      }))
-
-      // Apply filters
-      let filteredStudents = enhancedStudents
-      if (filters?.class) {
-        filteredStudents = filteredStudents.filter(s => s.classLabel === filters.class)
-      }
-      if (filters?.section) {
-        filteredStudents = filteredStudents.filter(s => s.section === filters.section)
-      }
-      if (filters?.status) {
-        filteredStudents = filteredStudents.filter(s => s.status === filters.status)
-      }
-      if (filters?.gender) {
-        filteredStudents = filteredStudents.filter(s => s.gender === filters.gender)
-      }
-
-      return filteredStudents
+      const params: any = {}
+      if (institutionId) params.institutionId = institutionId
+      if (filters?.class) params.class = filters.class
+      if (filters?.section) params.section = filters.section
+      if (filters?.status) params.status = filters.status
+      if (filters?.gender) params.gender = filters.gender
+      const response = await apiClient.get('/students', { params })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch students:', error)
       throw new Error('Failed to load students. Please try again.')
@@ -288,100 +218,10 @@ export const studentApi = {
   },
 
   // Get student by ID with full profile
-  getStudentById: async (studentId: string, schoolId?: string): Promise<StudentProfile | null> => {
+  getStudentById: async (studentId: string, institutionId?: string): Promise<StudentProfile | null> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-      const student = students.find(s => s.admissionNo === studentId)
-      if (!student) return null
-
-      // Get guardian information
-      const guardians = await guardianApi.getAllGuardians(schoolId)
-
-      // Create comprehensive profile
-      const profile: StudentProfile = {
-        ...student,
-        personalInfo: {
-          bloodGroup: 'O +ve',
-          religion: 'Christianity',
-          caste: 'Catholic',
-          category: 'OBC',
-          motherTongue: 'English',
-          languages: ['English', 'Spanish'],
-          nationality: 'American',
-          aadharNumber: '1234-5678-9012',
-          passportNumber: 'P1234567',
-          state: 'California',
-          city: 'Los Angeles',
-          pincode: '90001',
-          country: 'USA'
-        },
-        family: {
-          father: {
-            name: 'John Doe',
-            occupation: 'Engineer',
-            phone: '+1-555-0123',
-            email: 'john.doe@example.com',
-            avatar: '/assets/img/parents/parent-01.jpg'
-          },
-          mother: {
-            name: 'Jane Doe',
-            occupation: 'Teacher',
-            phone: '+1-555-0124',
-            email: 'jane.doe@example.com',
-            avatar: '/assets/img/parents/parent-02.jpg'
-          },
-          guardians: guardians.slice(0, 2).map(g => ({
-            name: g.name,
-            relation: 'Guardian',
-            phone: g.phone,
-            email: g.email,
-            avatar: '/assets/img/parents/parent-03.jpg'
-          })),
-          siblings: [
-            { name: 'Sibling 1', classLabel: 'IV, A', avatar: '/assets/img/students/student-02.jpg' }
-          ]
-        },
-        address: {
-          current: '123 Main Street, City, State 12345',
-          permanent: '123 Main Street, City, State 12345',
-          street: '123 Main Street',
-          city: 'City',
-          state: 'State',
-          country: 'USA',
-          postalCode: '12345',
-          pincode: '12345'
-        },
-        previousSchool: {
-          name: 'Previous School',
-          address: '456 Old Street, Old City, State 67890',
-          board: 'CBSE',
-          percentage: 85
-        },
-        documents: [
-          { type: 'Birth Certificate', name: 'birth_certificate.pdf', url: '/documents/birth_cert.pdf', verified: true },
-          { type: 'Transfer Certificate', name: 'transfer_certificate.pdf', url: '/documents/transfer_cert.pdf', verified: true }
-        ],
-        transport: {
-          route: 'Route A',
-          busNumber: 'BUS-001',
-          pickupPoint: 'Main Gate',
-          fee: 500
-        },
-        hostel: {
-          name: 'Hostel Block A',
-          room: 'Room 101',
-          fee: 2000
-        },
-        bankDetails: {
-          bankName: 'Bank of America',
-          accountNumber: '1234567890',
-          ifscCode: 'BOFAUS3N',
-          branch: 'Main Branch'
-        },
-        dateOfBirth: ''
-      }
-
-      return profile
+      const response = await apiClient.get(`/students/${studentId}`, { params: { institutionId } })
+      return response.data.data || null
     } catch (error) {
       console.error('[Student API] Failed to fetch student profile:', error)
       return null
@@ -389,17 +229,10 @@ export const studentApi = {
   },
 
   // Search students with real-time data
-  searchStudents: async (searchTerm: string, schoolId?: string): Promise<StudentRecord[]> => {
+  searchStudents: async (searchTerm: string, institutionId?: string): Promise<StudentRecord[]> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-      const term = searchTerm.toLowerCase()
-
-      return students.filter(student =>
-        student.name.toLowerCase().includes(term) ||
-        student.admissionNo.toLowerCase().includes(term) ||
-        student.rollNo.toLowerCase().includes(term) ||
-        student.classLabel.toLowerCase().includes(term)
-      )
+      const response = await apiClient.get('/students', { params: { search: searchTerm, institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to search students:', error)
       throw new Error('Failed to search students. Please try again.')
@@ -407,10 +240,10 @@ export const studentApi = {
   },
 
   // Get students by academic performance
-  getStudentsByPerformance: async (minGPA: number, schoolId?: string): Promise<StudentRecord[]> => {
+  getStudentsByPerformance: async (minGPA: number, institutionId?: string): Promise<StudentRecord[]> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-      return students.filter(student => (student.academic?.gpa || 0) >= minGPA)
+      const response = await apiClient.get('/students', { params: { minGPA, institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to filter students by performance:', error)
       throw new Error('Failed to filter students by performance. Please try again.')
@@ -418,10 +251,10 @@ export const studentApi = {
   },
 
   // Get students by attendance
-  getStudentsByAttendance: async (minAttendance: number, schoolId?: string): Promise<StudentRecord[]> => {
+  getStudentsByAttendance: async (minAttendance: number, institutionId?: string): Promise<StudentRecord[]> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-      return students.filter(student => (student.academic?.attendanceRate || 0) >= minAttendance)
+      const response = await apiClient.get('/students', { params: { minAttendance, institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to filter students by attendance:', error)
       throw new Error('Failed to filter students by attendance. Please try again.')
@@ -429,10 +262,10 @@ export const studentApi = {
   },
 
   // Get students with outstanding fees
-  getStudentsWithOutstandingFees: async (schoolId?: string): Promise<StudentRecord[]> => {
+  getStudentsWithOutstandingFees: async (institutionId?: string): Promise<StudentRecord[]> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-      return students.filter(student => (student.financial?.outstandingFees || 0) > 0)
+      const response = await apiClient.get('/students', { params: { outstandingFees: true, institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch students with outstanding fees:', error)
       throw new Error('Failed to load students with outstanding fees. Please try again.')
@@ -440,17 +273,9 @@ export const studentApi = {
   },
 
   // Update student information
-  updateStudent: async (studentId: string, updates: Partial<StudentRecord>, schoolId?: string): Promise<void> => {
+  updateStudent: async (studentId: string, updates: Partial<StudentRecord>, institutionId?: string): Promise<void> => {
     try {
-      if (!schoolId) {
-        console.warn('[Student API] School ID required for updating student')
-        return
-      }
-
-      // TODO: Implement actual API call
-      console.warn('[Student API] Student update not implemented yet')
-
-      console.log(`[Student API] Updated student ${studentId}:`, updates)
+      await apiClient.put(`/students/${studentId}`, updates, { params: { institutionId } })
     } catch (error) {
       console.error('[Student API] Failed to update student:', error)
       throw new Error('Failed to update student. Please try again.')
@@ -458,10 +283,10 @@ export const studentApi = {
   },
 
   // Get student timetable
-  getStudentTimetable: async (_studentId: string, _schoolId?: string): Promise<StudentTimeTableDay[]> => {
+  getStudentTimetable: async (studentId: string, institutionId?: string): Promise<StudentTimeTableDay[]> => {
     try {
-      // Return enhanced mock data for now
-      return studentTimeTable
+      const response = await apiClient.get(`/timetable/student/${studentId}`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch student timetable:', error)
       throw new Error('Failed to load student timetable. Please try again.')
@@ -469,15 +294,13 @@ export const studentApi = {
   },
 
   // Get student attendance
-  getStudentAttendance: async (_studentId: string,_schoolId?: string): Promise<{
+  getStudentAttendance: async (studentId: string, institutionId?: string): Promise<{
     summary: StudentAttendanceSummary[]
     monthly: StudentAttendanceMatrixRow[]
   }> => {
     try {
-      return {
-        summary: studentAttendanceSummary,
-        monthly: studentAttendanceMatrix
-      }
+      const response = await apiClient.get(`/students/${studentId}/attendance`, { params: { institutionId } })
+      return response.data.data || { summary: [], monthly: [] }
     } catch (error) {
       console.error('[Student API] Failed to fetch student attendance:', error)
       throw new Error('Failed to load student attendance. Please try again.')
@@ -485,9 +308,10 @@ export const studentApi = {
   },
 
   // Get student fees
-  getStudentFees: async (_studentId: string, _schoolId?: string): Promise<StudentFeeRecord[]> => {
+  getStudentFees: async (studentId: string, institutionId?: string): Promise<StudentFeeRecord[]> => {
     try {
-      return studentFees
+      const response = await apiClient.get(`/students/${studentId}/fees`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch student fees:', error)
       throw new Error('Failed to load student fees. Please try again.')
@@ -495,9 +319,10 @@ export const studentApi = {
   },
 
   // Get student exam results
-  getStudentExamResults: async (_studentId: string, _schoolId?: string): Promise<StudentExamResult[]> => {
+  getStudentExamResults: async (studentId: string, institutionId?: string): Promise<StudentExamResult[]> => {
     try {
-      return studentExamResults
+      const response = await apiClient.get(`/students/${studentId}/results`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch student exam results:', error)
       throw new Error('Failed to load student exam results. Please try again.')
@@ -505,9 +330,10 @@ export const studentApi = {
   },
 
   // Get student library books
-  getStudentLibraryBooks: async (_studentId: string, _schoolId?: string): Promise<StudentLibraryBook[]> => {
+  getStudentLibraryBooks: async (studentId: string, institutionId?: string): Promise<StudentLibraryBook[]> => {
     try {
-      return studentLibraryBooks
+      const response = await apiClient.get(`/students/${studentId}/library`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Student API] Failed to fetch student library books:', error)
       throw new Error('Failed to load student library books. Please try again.')
@@ -515,15 +341,13 @@ export const studentApi = {
   },
 
   // Get student leave records
-  getStudentLeaveRecords: async (_studentId: string, _schoolId?: string): Promise<{
+  getStudentLeaveRecords: async (studentId: string, institutionId?: string): Promise<{
     summary: StudentLeaveSummaryItem[]
     records: StudentLeaveRecord[]
   }> => {
     try {
-      return {
-        summary: studentLeaveSummary,
-        records: studentLeaveRecords
-      }
+      const response = await apiClient.get(`/students/${studentId}/leaves`, { params: { institutionId } })
+      return response.data.data || { summary: [], records: [] }
     } catch (error) {
       console.error('[Student API] Failed to fetch student leave records:', error)
       throw new Error('Failed to load student leave records. Please try again.')
@@ -531,27 +355,10 @@ export const studentApi = {
   },
 
   // Generate student report
-  generateStudentReport: async (studentId: string, reportType: 'academic' | 'attendance' | 'financial' | 'comprehensive', schoolId?: string): Promise<any> => {
+  generateStudentReport: async (studentId: string, reportType: 'academic' | 'attendance' | 'financial' | 'comprehensive', institutionId?: string): Promise<any> => {
     try {
-      const student = await studentApi.getStudentById(studentId, schoolId)
-      if (!student) throw new Error('Student not found')
-
-      // TODO: Implement actual report generation
-      console.warn('[Student API] Report generation not implemented yet')
-
-      const report = {
-        studentId,
-        studentName: student.name,
-        reportType,
-        generatedAt: new Date().toISOString(),
-        academic: student.academic,
-        attendance: student.academic?.attendanceRate,
-        financial: student.financial,
-        behavior: student.behavior
-      }
-
-      console.log(`[Student API] Generated ${reportType} report for student ${studentId}`)
-      return report
+      const response = await apiClient.get(`/students/${studentId}/report`, { params: { reportType, institutionId } })
+      return response.data.data
     } catch (error) {
       console.error('[Student API] Failed to generate student report:', error)
       throw new Error('Failed to generate student report. Please try again.')
@@ -559,54 +366,10 @@ export const studentApi = {
   },
 
   // Get student statistics
-  getStudentStats: async (schoolId?: string): Promise<StudentStats> => {
+  getStudentStats: async (institutionId?: string): Promise<StudentStats> => {
     try {
-      const students = await studentApi.getAllStudents(schoolId)
-
-      const stats: StudentStats = {
-        totalStudents: students.length,
-        activeStudents: students.filter(s => s.status === 'Active').length,
-        inactiveStudents: students.filter(s => s.status === 'Inactive').length,
-        averageAttendance: students.length > 0
-          ? students.reduce((sum, s) => sum + (s.academic?.attendanceRate || 0), 0) / students.length
-          : 0,
-        averageGPA: students.length > 0
-          ? students.reduce((sum, s) => sum + (s.academic?.gpa || 0), 0) / students.length
-          : 0,
-        totalOutstandingFees: students.reduce((sum, s) => sum + (s.financial?.outstandingFees || 0), 0),
-        disciplinaryIncidents: students.reduce((sum, s) => sum + (s.behavior?.disciplinaryIncidents || 0), 0),
-        byClass: students.reduce((acc, s) => {
-          acc[s.classLabel] = (acc[s.classLabel] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        bySection: students.reduce((acc, s) => {
-          if (s.section) acc[s.section] = (acc[s.section] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        byGender: students.reduce((acc, s) => {
-          acc[s.gender] = (acc[s.gender] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        topPerformers: students
-          .filter(s => s.academic?.gpa)
-          .sort((a, b) => (b.academic?.gpa || 0) - (a.academic?.gpa || 0))
-          .slice(0, 10),
-        attendanceLeaders: students
-          .filter(s => s.academic?.attendanceRate)
-          .sort((a, b) => (b.academic?.attendanceRate || 0) - (a.academic?.attendanceRate || 0))
-          .slice(0, 10),
-        feeDefaulters: students
-          .filter(s => (s.financial?.outstandingFees || 0) > 0)
-          .sort((a, b) => (b.financial?.outstandingFees || 0) - (a.financial?.outstandingFees || 0))
-          .slice(0, 10),
-        performanceTrends: students.reduce((acc, s) => {
-          const trend = s.academic?.performanceTrend || 'stable'
-          acc[trend] = (acc[trend] || 0) + 1
-          return acc
-        }, { improving: 0, stable: 0, declining: 0 } as { improving: number; stable: number; declining: number })
-      }
-
-      return stats
+      const response = await apiClient.get('/students/stats', { params: { institutionId } })
+      return response.data.data
     } catch (error) {
       console.error('[Student API] Failed to fetch student stats:', error)
       throw new Error('Failed to load student statistics. Please try again.')
@@ -1221,4 +984,3 @@ export const studentLibraryBooks: StudentLibraryBook[] = [
 ]
 
 export default studentApi
-

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import agentService, { type Agent } from '../../services/agentService'
 
 const EditAgentPage: React.FC = () => {
@@ -122,11 +123,11 @@ const EditAgentPage: React.FC = () => {
       try {
         await agentService.update(id!, formData)
         
-        alert('Agent updated successfully!')
+        toast.success('Agent updated successfully!')
         navigate('/super-admin/agents')
       } catch (error: any) {
         console.error('Error updating agent:', error)
-        alert(error.message || 'Failed to update agent. Please try again.')
+        toast.error(error.message || 'Failed to update agent. Please try again.')
       } finally {
         setIsLoading(false)
       }

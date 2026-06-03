@@ -1,6 +1,7 @@
 import express from 'express';
 import transportFeeController from '../controllers/transportFeeController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { validateTenantAccess } from '../middleware/multiTenant.js';
 import { authorize } from '../middleware/authGuard.js';
 
 const {
@@ -16,8 +17,9 @@ const {
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and tenant validation
 router.use(protect);
+router.use(validateTenantAccess);
 
 // Statistics (accessible by admin, accountant, principal)
 router.get('/stats', authorize(['admin', 'accountant', 'principal', 'superadmin', 'institution_admin']), getTransportFeeStats);
@@ -28,7 +30,7 @@ router.get('/', authorize(['admin', 'accountant', 'principal', 'superadmin', 'in
 // Create transport fee (accessible by admin, accountant)
 router.post('/', authorize(['admin', 'accountant', 'superadmin', 'institution_admin']), createTransportFee);
 
-// Get student transport fees (accessible by student, parent, admin, accountant)
+// Get student transport fees (accessible by student, parent, admin, accountant, teacher)
 router.get('/student/:studentId', getStudentTransportFees);
 
 // Get transport fee by ID

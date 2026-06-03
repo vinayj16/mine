@@ -1,11 +1,3 @@
-/**
- * Authentication Validation Middleware
- * Validates input for authentication endpoints
- */
-
-/**
- * Validate registration data
- */
 export const validateRegister = (req, res, next) => {
   const { email, password, name, role } = req.body;
   const errors = [];

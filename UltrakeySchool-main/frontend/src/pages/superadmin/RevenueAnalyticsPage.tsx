@@ -234,11 +234,11 @@ const RevenueAnalyticsPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h4 className="text-white mb-1">${revenueData?.totalRevenue.toLocaleString() || 0}</h4>
+                  <h4 className="text-white mb-1">₹{revenueData?.totalRevenue.toLocaleString() || 0}</h4>
                   <p className="text-white mb-0">Total Revenue</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                  <i className="ti ti-currency-dollar text-white fs-4"></i>
+                  <i className="ti ti-currency-rupee text-white fs-4"></i>
                 </div>
               </div>
             </div>
@@ -249,7 +249,7 @@ const RevenueAnalyticsPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h4 className="text-white mb-1">${revenueData?.subscriptionRevenue.toLocaleString() || 0}</h4>
+                  <h4 className="text-white mb-1">₹{revenueData?.subscriptionRevenue.toLocaleString() || 0}</h4>
                   <p className="text-white mb-0">Subscription Revenue</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -264,7 +264,7 @@ const RevenueAnalyticsPage = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h4 className="text-white mb-1">${revenueData?.addonRevenue.toLocaleString() || 0}</h4>
+                  <h4 className="text-white mb-1">₹{revenueData?.addonRevenue.toLocaleString() || 0}</h4>
                   <p className="text-white mb-0">Addon Revenue</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -368,7 +368,7 @@ const RevenueAnalyticsPage = () => {
               <h5>Revenue Chart</h5>
               <p className="text-muted">
                 {revenueData ? 
-                  `Total Revenue: $${revenueData.totalRevenue.toLocaleString()} | Growth: ${revenueData.growth.toFixed(1)}%` :
+                  `Total Revenue: ₹${revenueData.totalRevenue.toLocaleString()} | Growth: ${revenueData.growth.toFixed(1)}%` :
                   'No data available'
                 }
               </p>
@@ -420,7 +420,7 @@ const RevenueAnalyticsPage = () => {
                         </span>
                       </td>
                       <td>
-                        <div className="fw-medium">${institution.monthlyRevenue?.toLocaleString() || 0}</div>
+                        <div className="fw-medium">₹{institution.monthlyRevenue?.toLocaleString() || 0}</div>
                       </td>
                       <td>{institution.totalTransactions || 0}</td>
                       <td>
@@ -458,7 +458,7 @@ const RevenueAnalyticsPage = () => {
                 Showing {institutionRevenue.length} institutions
               </div>
               <div>
-                Total Revenue: <strong>${totalRevenue.toLocaleString()}</strong> | 
+                Total Revenue: <strong>₹{totalRevenue.toLocaleString()}</strong> | 
                 Total Transactions: <strong>{totalTransactions}</strong>
               </div>
             </div>

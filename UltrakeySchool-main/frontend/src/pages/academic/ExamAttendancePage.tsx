@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { examService } from '../../services/examService';
+import apiClient from '../../api/client'; 
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface StudentAttendance {
   studentId: string;
@@ -93,10 +95,10 @@ const ExamAttendancePage: React.FC = () => {
     }
 
     try {
-      // Mark attendance for each student
-      await examService.getAttendance(selectedExam._id);
-      // In a real implementation, you would call a markAttendance endpoint
-      // await examService.markAttendance(selectedExam._id, record.studentId, record.status);
+      const institutionId = localStorage.getItem('institutionId');
+      await apiClient.post(`/exams/schools/${institutionId}/exams/${selectedExam._id}/attendance`, {
+        attendance: attendance
+      });
       toast.success('Attendance saved successfully');
     } catch (error) {
       console.error('Error saving attendance:', error);
@@ -105,7 +107,15 @@ const ExamAttendancePage: React.FC = () => {
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export as ${type.toUpperCase()} - Feature coming soon`);
+    if (!attendance.length) { toast.error('No data to export'); return; }
+    const exportData = attendance.map((a: StudentAttendance) => ({ ID: a.studentId, Name: a.studentName, Roll: a.rollNo, Status: a.status, Notes: a.notes || '' }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'exam-attendance', [
+        { key: 'ID', label: 'Student ID' }, { key: 'Name', label: 'Student Name' }, { key: 'Roll', label: 'Roll No' }, { key: 'Status', label: 'Attendance Status' }, { key: 'Notes', label: 'Notes' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'exam-attendance');
+    }
   };
 
   const getDisplayValue = (value: any, field: 'name'): string => {
@@ -417,7 +427,7 @@ const ExamAttendancePage: React.FC = () => {
                           <tr key={record.studentId}>
                             <td>
                               <Link to="#" className="link-primary">
-                                {record.studentId}
+                                {typeof record.studentId === 'object' ? record.studentId?.name || record.studentId?._id || '-' : record.studentId}
                               </Link>
                             </td>
                             <td>{record.studentName}</td>

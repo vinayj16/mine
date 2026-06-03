@@ -2,17 +2,34 @@ import { Book, BookIssue, BookReservation } from '../models/library.js';
 import logger from '../utils/logger.js';
 
 class LibraryService {
+  // Helper to create the institution query
+  getInstitutionQuery(tenantId) {
+    return { 
+      $or: [
+        { tenant: tenantId }, 
+        { institutionId: tenantId }, 
+        { institution: tenantId }, 
+        { schoolId: tenantId }
+      ] 
+    };
+  }
+
   // Book Management
   async createBook(bookData, tenantId) {
     try {
-      // Ensure tenant is always set
+      // Ensure tenant is always set and set defaults
       const data = {
         ...bookData,
-        tenant: tenantId || bookData.tenant || '507f1f77bcf86cd799439011'
+        tenant: tenantId || bookData.tenant,
+        category: bookData.category || 'Other',
+        totalCopies: bookData.totalCopies || 1,
+        availableCopies: bookData.availableCopies ?? (bookData.totalCopies || 1),
+        status: bookData.status || 'Active',
+        language: bookData.language || 'English'
       };
       const book = new Book(data);
       await book.save();
-      logger.info('Book created successfully', { bookId: book._id });
+      logger.info('Book created successfully', { bookId: book._id, title: book.title });
       return book;
     } catch (error) {
       logger.error('Failed to create book', { error: error.message });
@@ -25,7 +42,7 @@ class LibraryService {
       const { page = 1, limit = 20, search, category, status } = { ...filters, ...pagination };
       const skip = (page - 1) * limit;
 
-      const query = { tenant: tenantId };
+      const query = this.getInstitutionQuery(tenantId);
 
       if (search) {
         query.$text = { $search: search };
@@ -64,7 +81,9 @@ class LibraryService {
 
   async getBookById(bookId, tenantId) {
     try {
-      const book = await Book.findOne({ _id: bookId, tenant: tenantId });
+      const query = this.getInstitutionQuery(tenantId);
+      query._id = bookId;
+      const book = await Book.findOne(query);
       if (!book) {
         throw new Error('Book not found');
       }
@@ -77,8 +96,10 @@ class LibraryService {
 
   async updateBook(bookId, tenantId, updateData) {
     try {
+      const query = this.getInstitutionQuery(tenantId);
+      query._id = bookId;
       const book = await Book.findOneAndUpdate(
-        { _id: bookId, tenant: tenantId },
+        query,
         updateData,
         { new: true, runValidators: true }
       );
@@ -97,18 +118,18 @@ class LibraryService {
 
   async deleteBook(bookId, tenantId) {
     try {
+      const query = this.getInstitutionQuery(tenantId);
+      
       // Check if book has active issues
-      const activeIssues = await BookIssue.countDocuments({
-        book: bookId,
-        tenant: tenantId,
-        status: 'Issued',
-      });
+      const issueQuery = { ...query, book: bookId, status: 'Issued' };
+      const activeIssues = await BookIssue.countDocuments(issueQuery);
 
       if (activeIssues > 0) {
         throw new Error('Cannot delete book with active issues');
       }
 
-      const book = await Book.findOneAndDelete({ _id: bookId, tenant: tenantId });
+      query._id = bookId;
+      const book = await Book.findOneAndDelete(query);
 
       if (!book) {
         throw new Error('Book not found');
@@ -125,7 +146,12 @@ class LibraryService {
   // Issue Management
   async issueBook(issueData, tenantId, issuedBy) {
     try {
-      const book = await Book.findOne({ _id: issueData.bookId, tenant: tenantId });
+      const bookId = issueData.bookId || issueData._id || issueData.id;
+      const userId = issueData.userId || issueData.studentId;
+      
+      const bookQuery = this.getInstitutionQuery(tenantId);
+      bookQuery._id = bookId;
+      const book = await Book.findOne(bookQuery);
 
       if (!book) {
         throw new Error('Book not found');
@@ -135,34 +161,33 @@ class LibraryService {
         throw new Error('No copies available');
       }
 
-      // Check if user already has this book
-      const existingIssue = await BookIssue.findOne({
-        book: issueData.bookId,
-        user: issueData.userId,
-        tenant: tenantId,
-        status: 'Issued',
-      });
+      const existingIssueQuery = this.getInstitutionQuery(tenantId);
+      existingIssueQuery.book = bookId;
+      existingIssueQuery.user = userId;
+      existingIssueQuery.status = { $in: ['Issued', 'issued'] };
+      
+      const existingIssue = await BookIssue.findOne(existingIssueQuery);
 
       if (existingIssue) {
         throw new Error('User already has this book issued');
       }
 
-      // Calculate due date (default 14 days)
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + (issueData.daysAllowed || 14));
 
       const issue = new BookIssue({
-        book: issueData.bookId,
-        user: issueData.userId,
-        userType: issueData.userType,
+        book: bookId,
+        user: userId,
+        userType: issueData.userType || 'Student',
+        issueDate: new Date(),
         dueDate,
         issuedBy,
         tenant: tenantId,
+        status: 'Issued'
       });
 
       await issue.save();
 
-      // Update available copies
       book.availableCopies -= 1;
       await book.save();
 
@@ -176,21 +201,20 @@ class LibraryService {
 
   async returnBook(issueId, tenantId, returnedTo) {
     try {
-      const issue = await BookIssue.findOne({
-        _id: issueId,
-        tenant: tenantId,
-        status: 'Issued',
-      }).populate('book');
+      const query = this.getInstitutionQuery(tenantId);
+      query._id = issueId;
+      query.status = { $in: ['Issued', 'issued', 'Overdue', 'overdue'] };
+      
+      const issue = await BookIssue.findOne(query).populate('book');
 
       if (!issue) {
-        throw new Error('Issue record not found');
+        throw new Error('Issue record not found or already returned');
       }
 
       issue.returnDate = new Date();
       issue.status = 'Returned';
       issue.returnedTo = returnedTo;
 
-      // Calculate fine if overdue
       const fine = issue.calculateFine();
       if (fine > 0) {
         issue.fine = fine;
@@ -199,10 +223,13 @@ class LibraryService {
 
       await issue.save();
 
-      // Update available copies
-      const book = await Book.findById(issue.book._id);
-      book.availableCopies += 1;
-      await book.save();
+      if (issue.book && issue.book._id) {
+        const book = await Book.findById(issue.book._id);
+        if (book) {
+          book.availableCopies += 1;
+          await book.save();
+        }
+      }
 
       logger.info('Book returned successfully', { issueId });
       return await issue.populate(['user', 'returnedTo']);
@@ -217,14 +244,18 @@ class LibraryService {
       const { page = 1, limit = 20, userId, status } = { ...filters, ...pagination };
       const skip = (page - 1) * limit;
 
-      const query = { tenant: tenantId };
+      const query = this.getInstitutionQuery(tenantId);
 
       if (userId) {
         query.user = userId;
       }
 
       if (status) {
-        query.status = status;
+        if (Array.isArray(status)) {
+          query.status = { $in: status };
+        } else {
+          query.status = status;
+        }
       }
 
       const [issues, total] = await Promise.all([
@@ -236,8 +267,27 @@ class LibraryService {
         BookIssue.countDocuments(query),
       ]);
 
+      const transformedIssues = issues.map(issue => {
+        if (issue.bookId && !issue.book) {
+          return {
+            ...issue.toObject(),
+            book: {
+              _id: issue.bookId,
+              title: issue.bookTitle || 'Unknown Book'
+            },
+            user: issue.studentId ? {
+              _id: issue.studentId,
+              name: issue.studentName || 'Unknown Student',
+              email: ''
+            } : (issue.user || { _id: null, name: 'Unknown' }),
+            userType: 'Student'
+          };
+        }
+        return issue;
+      });
+
       return {
-        issues,
+        issues: transformedIssues,
         pagination: {
           page,
           limit,
@@ -253,13 +303,12 @@ class LibraryService {
 
   async getOverdueIssues(tenantId) {
     try {
-      const issues = await BookIssue.find({
-        tenant: tenantId,
-        status: 'Issued',
-        dueDate: { $lt: new Date() },
-      }).populate('book user');
+      const query = this.getInstitutionQuery(tenantId);
+      query.status = 'Issued';
+      query.dueDate = { $lt: new Date() };
+      
+      const issues = await BookIssue.find(query).populate('book user');
 
-      // Calculate fines
       issues.forEach((issue) => {
         issue.fine = issue.calculateFine();
       });
@@ -273,7 +322,9 @@ class LibraryService {
 
   async payFine(issueId, tenantId) {
     try {
-      const issue = await BookIssue.findOne({ _id: issueId, tenant: tenantId });
+      const query = this.getInstitutionQuery(tenantId);
+      query._id = issueId;
+      const issue = await BookIssue.findOne(query);
 
       if (!issue) {
         throw new Error('Issue record not found');
@@ -293,25 +344,25 @@ class LibraryService {
   // Reservation Management
   async reserveBook(bookId, userId, tenantId) {
     try {
-      const book = await Book.findOne({ _id: bookId, tenant: tenantId });
+      const bookQuery = this.getInstitutionQuery(tenantId);
+      bookQuery._id = bookId;
+      const book = await Book.findOne(bookQuery);
 
       if (!book) {
         throw new Error('Book not found');
       }
 
-      // Check if user already has a reservation
-      const existingReservation = await BookReservation.findOne({
-        book: bookId,
-        user: userId,
-        tenant: tenantId,
-        status: 'Active',
-      });
+      const existingReservationQuery = this.getInstitutionQuery(tenantId);
+      existingReservationQuery.book = bookId;
+      existingReservationQuery.user = userId;
+      existingReservationQuery.status = 'Active';
+      
+      const existingReservation = await BookReservation.findOne(existingReservationQuery);
 
       if (existingReservation) {
         throw new Error('You already have a reservation for this book');
       }
 
-      // Set expiry date (7 days from now)
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + 7);
 
@@ -334,8 +385,11 @@ class LibraryService {
 
   async cancelReservation(reservationId, tenantId) {
     try {
+      const query = this.getInstitutionQuery(tenantId);
+      query._id = reservationId;
+      
       const reservation = await BookReservation.findOneAndUpdate(
-        { _id: reservationId, tenant: tenantId },
+        query,
         { status: 'Cancelled' },
         { new: true }
       );
@@ -352,9 +406,70 @@ class LibraryService {
     }
   }
 
+  // Overview
+  async getLibraryOverview(tenantId) {
+    try {
+      const query = this.getInstitutionQuery(tenantId);
+      const activeBookQuery = { ...query, status: 'Active' };
+      const issuedIssueQuery = { ...query, status: 'Issued' };
+      
+      const [
+        totalBooks,
+        issuedBooks,
+        availableBooksCount,
+        overdueBooks,
+        recentIssues,
+        totalMembers
+      ] = await Promise.all([
+        Book.countDocuments(activeBookQuery),
+        BookIssue.countDocuments(issuedIssueQuery),
+        Book.aggregate([
+          { $match: activeBookQuery },
+          { $group: { _id: null, total: { $sum: '$availableCopies' } } },
+        ]),
+        BookIssue.countDocuments({
+          ...issuedIssueQuery,
+          dueDate: { $lt: new Date() },
+        }),
+        BookIssue.find(issuedIssueQuery)
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .populate('book', 'title')
+          .populate('user', 'firstName lastName'),
+        BookIssue.distinct('user', query)
+      ]);
+
+      const recentIssuesFormatted = recentIssues.map(issue => ({
+        id: issue._id,
+        bookName: issue.book?.title || 'Unknown',
+        borrower: issue.user ? `${issue.user.firstName || ''} ${issue.user.lastName || ''}`.trim() : 'Unknown',
+        issueDate: issue.issueDate,
+        dueDate: issue.dueDate,
+        status: issue.status.toLowerCase()
+      }));
+
+      return {
+        totalBooks,
+        issuedBooks,
+        availableBooks: availableBooksCount[0]?.total || 0,
+        overdueBooks,
+        members: totalMembers.length,
+        recentIssues: recentIssuesFormatted
+      };
+    } catch (error) {
+      logger.error('Failed to fetch library overview', { error: error.message });
+      throw error;
+    }
+  }
+
   // Statistics
   async getLibraryStats(tenantId) {
     try {
+      const query = this.getInstitutionQuery(tenantId);
+      const activeBookQuery = { ...query, status: 'Active' };
+      const issuedIssueQuery = { ...query, status: 'Issued' };
+      const activeReservationQuery = { ...query, status: 'Active' };
+
       const [
         totalBooks,
         availableBooks,
@@ -362,18 +477,17 @@ class LibraryService {
         overdueBooks,
         totalReservations,
       ] = await Promise.all([
-        Book.countDocuments({ tenant: tenantId, status: 'Active' }),
+        Book.countDocuments(activeBookQuery),
         Book.aggregate([
-          { $match: { tenant: tenantId, status: 'Active' } },
+          { $match: activeBookQuery },
           { $group: { _id: null, total: { $sum: '$availableCopies' } } },
         ]),
-        BookIssue.countDocuments({ tenant: tenantId, status: 'Issued' }),
+        BookIssue.countDocuments(issuedIssueQuery),
         BookIssue.countDocuments({
-          tenant: tenantId,
-          status: 'Issued',
+          ...issuedIssueQuery,
           dueDate: { $lt: new Date() },
         }),
-        BookReservation.countDocuments({ tenant: tenantId, status: 'Active' }),
+        BookReservation.countDocuments(activeReservationQuery),
       ]);
 
       return {

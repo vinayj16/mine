@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import institutionService, { type Institution } from '../../services/institutionService';
-import commissionService, { type CommissionSummary } from '../../services/commissionService';
 import agentService from '../../services/agentService';
 import { useAuth } from '../../store/authStore';
 
@@ -25,7 +24,7 @@ const AgentDashboard = () => {
     totalRevenue: 0,
     globalCount: 0
   });
-  const [commissionSummary, setCommissionSummary] = useState<CommissionSummary | null>(null);
+  const [commissionSummary, setCommissionSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [profileComplete, setProfileComplete] = useState(true);
 
@@ -46,13 +45,14 @@ const AgentDashboard = () => {
         const profileData = await agentService.getMyProfile();
         setProfileComplete(profileData?.profileComplete === true);
       } catch (profileError: any) {
-        console.log('Profile fetch error:', profileError?.message || 'Could not fetch profile');
         setProfileComplete(true);
       }
       
       // Fetch agent's own institutions and commissions using the new endpoint
       let institutionsData = { institutions: [], summary: { totalInstitutions: 0, totalCommission: 0, pendingCommission: 0, paidCommission: 0 } };
       let commissionData = null;
+      let globalInstitutions = [];
+      let globalCount = 0;
       
       try {
         const myData = await agentService.getMyInstitutions();
@@ -62,21 +62,32 @@ const AgentDashboard = () => {
         };
         commissionData = myData.summary;
       } catch (instError: any) {
-        console.log('Could not fetch agent institutions:', instError?.message || 'Error');
+        console.warn('Failed to fetch agent institutions, using defaults:', instError)
+      }
+
+      // Fetch global system institutions and count
+      try {
+        const globalData = await institutionService.getAgentInstitutions(agentId || 'demo-agent');
+        globalInstitutions = globalData.allInstitutions || globalData.institutions || [];
+        globalCount = globalData.globalCount || 0;
+      } catch (globalError: any) {
+        // Fallback if the call fails
+        globalCount = institutionsData.institutions.length;
+        globalInstitutions = institutionsData.institutions;
       }
 
       setInstitutions(institutionsData.institutions || []);
-      setAllInstitutions(institutionsData.institutions || []);
+      setAllInstitutions(globalInstitutions);
       setCommissionSummary(commissionData);
 
       // Calculate stats
-      const instList = institutionsData.institutions || [];
+      const instList: any[] = institutionsData.institutions || [];
       const totalInstitutions = instList.length;
       const activeInstitutions = instList.filter(
-        i => i.status === 'active'
+        (i: any) => i.status === 'active'
       ).length;
       const pendingInstitutions = instList.filter(
-        i => i.status === 'pending'
+        (i: any) => i.status === 'pending'
       ).length;
       
       // Calculate total revenue from commission summary or institutions
@@ -87,7 +98,7 @@ const AgentDashboard = () => {
         activeInstitutions,
         pendingInstitutions,
         totalRevenue,
-        globalCount: totalInstitutions
+        globalCount: globalCount
       });
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);

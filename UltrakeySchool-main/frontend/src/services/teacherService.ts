@@ -178,8 +178,8 @@ export const teacherService = {
   async search(query: string): Promise<Teacher[]> {
     try {
       const response = await apiService.get<Teacher[]>(
-        API_ENDPOINTS.TEACHERS.LIST,
-        { search: query }
+        `${API_ENDPOINTS.TEACHERS.LIST}/search`,
+        { q: query }
       );
       
       if (!response.success || !response.data) {
@@ -193,11 +193,11 @@ export const teacherService = {
     }
   },
 
-  // Get teachers by department
-  async getByDepartment(department: string): Promise<Teacher[]> {
+  // Get teachers by department ID
+  async getByDepartment(departmentId: string): Promise<Teacher[]> {
     try {
       const response = await apiService.get<Teacher[]>(
-        `${API_ENDPOINTS.TEACHERS.LIST}/department/${department}`
+        `${API_ENDPOINTS.TEACHERS.LIST}/department/${departmentId}`
       );
       
       if (!response.success || !response.data) {

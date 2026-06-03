@@ -1,10 +1,6 @@
-/**
- * Authentication & Authorization Middleware
- * Handles JWT verification and role-based access control with comprehensive validation
- */
-
 import { verifyAccessToken, extractToken } from '../services/tokenService.js';
 import { errorResponse } from '../utils/apiResponse.js';
+import { resolveAuthenticatedUser, attachUserToRequest } from '../utils/resolveAuthUser.js';
 import logger from '../utils/logger.js';
 
 // All available roles in system (matches FRONTEND documentation exactly)
@@ -21,7 +17,8 @@ export const ROLES = {
   LIBRARIAN: 'librarian',
   TRANSPORT_MANAGER: 'transport_manager',
   HOSTEL_WARDEN: 'hostel_warden',
-  STAFF_MEMBER: 'staff_member'
+  STAFF_MEMBER: 'staff_member',
+  AGENT: 'agent'
 };
 
 // Main authentication middleware
@@ -30,35 +27,27 @@ export const authenticate = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
-      return errorResponse(res, 'Authorization header is required', null, 401);
+      return errorResponse(res, 'Authorization header is required', 401);
     }
 
     const token = extractToken(authHeader);
     
     if (!token) {
-      return errorResponse(res, 'Token is required', null, 401);
+      return errorResponse(res, 'Token is required', 401);
     }
 
-    // Verify the token
     const decoded = verifyAccessToken(token);
-    
-    // Fetch user details from database to get name and other info
-    const User = (await import('../models/User.js')).default;
-    const user = await User.findById(decoded.id || decoded.sub).select('name email role avatar institutionId').lean();
-    
+    const user = await resolveAuthenticatedUser(decoded);
+
     if (!user) {
       return errorResponse(res, 'User not found', 401);
     }
-    
-    // Attach full user info to request
-    req.user = {
-      id: user._id.toString(),
-      name: user.name || decoded.name || 'Unknown',
-      email: user.email || decoded.email,
-      role: user.role || decoded.role,
-      avatar: user.avatar || decoded.avatar || null,
-      institutionId: user.institutionId || decoded.institutionId || null
-    };
+
+    if (user.status !== 'active' && user.isActive !== true) {
+      return errorResponse(res, 'User account is deactivated', 401);
+    }
+
+    attachUserToRequest(req, user, decoded);
     req.token = token;
     
     logger.info('User authenticated successfully', { 
@@ -98,7 +87,10 @@ const ROLE_NORMALIZATION = {
   'hostelwarden': 'hostel_warden',
   'hostel-warden': 'hostel_warden',
   'staffmember': 'staff_member',
-  'staff-member': 'staff_member'
+  'staff-member': 'staff_member',
+  'staff_member': 'staff_member',
+  'staff': 'staff',
+  'agent': 'agent'
 };
 
 // Normalize role name for consistent comparison

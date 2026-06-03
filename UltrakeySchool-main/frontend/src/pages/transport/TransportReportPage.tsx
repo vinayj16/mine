@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { transportReportService, type TransportReport, type TransportStatistics } from '../../services';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../store/authStore';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const TransportReportPage: React.FC = () => {
-  const [reports, setReports] = useState<TransportReport[]>([]);
+  const { user } = useAuth();
+  const institutionId = user?.institutionId || user?.institution || '';
   const [transportStats, setTransportStats] = useState<TransportStatistics>({
     totalRoutes: 0,
     totalVehicles: 0,
@@ -21,8 +25,9 @@ const TransportReportPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectAll, setSelectAll] = useState(false);
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
-
-  const institutionId = '507f1f77bcf86cd799439011';
+  const [reports, setReports] = useState<TransportReport[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; bulk?: boolean } | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -59,16 +64,12 @@ const TransportReportPage: React.FC = () => {
     try {
       setLoading(true);
       const reportData = {
-        reportType: 'Route',
-        title: 'Monthly Route Performance Report',
+        reportType: 'route_performance',
+        name: 'Monthly Route Performance Report',
         description: 'Complete analysis of all transport routes',
-        dateRange: {
-          startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          endDate: new Date().toISOString().split('T')[0]
-        },
-        data: {},
-        generatedBy: 'System',
-        status: 'pending' as const
+        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        period: 'month'
       };
       
       const response = await transportReportService.generateReport(institutionId, reportData);
@@ -77,51 +78,89 @@ const TransportReportPage: React.FC = () => {
         fetchReports();
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || error.message || 'Failed to generate report');
+      const errorMsg = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Failed to generate report';
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteReport = async (reportId: string) => {
-    if (!confirm('Are you sure you want to delete this report?')) return;
-    
+    setDeleteTarget({ id: reportId });
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const reportId = deleteTarget.id;
+
+    // Save original data for potential rollback
+    const originalData = [...reports];
+
+    // Optimistically remove from UI immediately
+    setReports(prev => prev.filter(r => r._id !== reportId));
+    setLoading(true);
+
     try {
-      setLoading(true);
       const response = await transportReportService.deleteReport(reportId, institutionId);
       if (response.success) {
         toast.success('Report deleted successfully');
-        setReports(prev => prev.filter(r => r._id !== reportId));
+        fetchReports();
+      } else {
+        throw new Error(response.message || 'Delete failed');
       }
     } catch (error: any) {
+      // Rollback optimistic removal on failure
+      setReports(originalData);
       toast.error(error.response?.data?.message || error.message || 'Failed to delete report');
     } finally {
       setLoading(false);
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const handleBulkDelete = async () => {
-    if (selectedReports.length === 0) {
+    const idsToDelete = [...selectedReports];
+    if (idsToDelete.length === 0) {
       toast.error('Please select reports to delete');
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete ${selectedReports.length} report(s)?`)) return;
+    setDeleteTarget({ id: idsToDelete[0], bulk: true });
+    setShowDeleteModal(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const idsToDelete = [...selectedReports];
+    if (!idsToDelete.length) return;
+
+    // Save original data for potential rollback
+    const originalData = [...reports];
+
+    // Optimistically remove from UI immediately
+    setReports(prev => prev.filter(r => !idsToDelete.includes(r._id)));
+    setSelectedReports([]);
+    setSelectAll(false);
+    setLoading(true);
 
     try {
-      setLoading(true);
-      const response = await transportReportService.bulkDeleteReports(selectedReports, institutionId);
+      const response = await transportReportService.bulkDeleteReports(idsToDelete, institutionId);
       if (response.success) {
         toast.success(response.message);
-        setSelectedReports([]);
-        setSelectAll(false);
-        fetchReports();
+      } else {
+        throw new Error(response.message || 'Bulk delete failed');
       }
+      fetchReports();
     } catch (error: any) {
+      // Rollback optimistic removal on failure
+      setReports(originalData);
       toast.error(error.response?.data?.message || error.message || 'Failed to delete reports');
     } finally {
       setLoading(false);
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const toggleSelectAll = () => {
@@ -138,6 +177,16 @@ const TransportReportPage: React.FC = () => {
       setSelectedReports(selectedReports.filter(reportId => reportId !== id));
     } else {
       setSelectedReports([...selectedReports, id]);
+    }
+  };
+
+  const handleExportReport = (report: TransportReport, format: 'pdf' | 'excel') => {
+    const data = report.data || {};
+    const exportData = [{ ...data }];
+    if (format === 'pdf') {
+      exportToPDF(exportData, `transport-report-${report._id}`, undefined, report.title);
+    } else {
+      exportToExcel(exportData, `transport-report-${report._id}`);
     }
   };
 
@@ -219,10 +268,10 @@ const TransportReportPage: React.FC = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/transport/routes">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">
                 Reports
@@ -441,13 +490,13 @@ const TransportReportPage: React.FC = () => {
                               </button>
                             </li>
                             <li>
-                              <button className="dropdown-item">
+                              <button className="dropdown-item" onClick={() => handleExportReport(report, 'pdf')}>
                                 <i className="ti ti-download me-2" />
                                 Download PDF
                               </button>
                             </li>
                             <li>
-                              <button className="dropdown-item">
+                              <button className="dropdown-item" onClick={() => handleExportReport(report, 'excel')}>
                                 <i className="ti ti-file-export me-2" />
                                 Export Excel
                               </button>
@@ -478,6 +527,8 @@ const TransportReportPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={deleteTarget?.bulk ? handleBulkDeleteConfirm : handleDeleteConfirm} message={deleteTarget?.bulk ? `Are you sure you want to delete ${selectedReports.length} report(s)?` : 'Are you sure you want to delete this report?'} />
 
       {/* View Report Modal */}
       {showViewModal && selectedReport && (
@@ -580,7 +631,7 @@ const TransportReportPage: React.FC = () => {
                 >
                   Close
                 </button>
-                <button type="button" className="btn btn-primary">
+                <button type="button" className="btn btn-primary" onClick={() => selectedReport && handleExportReport(selectedReport, 'pdf')}>
                   <i className="ti ti-download me-2" />
                   Download Report
                 </button>

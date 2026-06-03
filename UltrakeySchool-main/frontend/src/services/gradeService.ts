@@ -93,7 +93,8 @@ export const gradeService = {
     const response: ApiResponse<Grade> = await apiService.post('grades', gradeData);
     
     if (!response.success || !response.data) {
-      throw new Error(response.message || 'Failed to create grade');
+      const errMsg = (response as any).error?.message || response.message || 'Failed to create grade';
+      throw new Error(errMsg);
     }
     
     return response.data;
@@ -107,7 +108,8 @@ export const gradeService = {
     const response: ApiResponse<Grade> = await apiService.put(`grades/${id}`, gradeData);
     
     if (!response.success || !response.data) {
-      throw new Error(response.message || 'Failed to update grade');
+      const errMsg = (response as any).error?.message || response.message || 'Failed to update grade';
+      throw new Error(errMsg);
     }
     
     return response.data;

@@ -6,6 +6,10 @@ export interface AuthUser {
   role: string;
   tenantId: string;
   permissions: string[];
+  institutionId?: string;
+  institution?: string;
+  institutionCode?: string;
+  school?: string;
 }
 
 export const getToken = (): string | null => {
@@ -46,10 +50,24 @@ export const getUser = (): AuthUser | null => {
 
 export const setUser = (user: AuthUser): void => {
   localStorage.setItem('user', JSON.stringify(user));
+  const instId = user.institutionId || user.institution || user.school || '';
+  if (instId) localStorage.setItem('institutionId', instId);
 };
 
 export const removeUser = (): void => {
   localStorage.removeItem('user');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('userName');
+  localStorage.removeItem('userEmail');
+  localStorage.removeItem('userRole');
+  localStorage.removeItem('institutionId');
+};
+
+export const getInstitutionId = (): string => {
+  const fromStorage = localStorage.getItem('institutionId');
+  if (fromStorage) return fromStorage;
+  const user = getUser();
+  return user?.institutionId || user?.institution || user?.school || '';
 };
 
 export const isAuthenticated = (): boolean => {

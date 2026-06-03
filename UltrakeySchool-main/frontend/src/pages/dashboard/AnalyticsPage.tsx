@@ -25,6 +25,7 @@ interface InstitutionAnalytics {
 }
 
 const AnalyticsPage: React.FC = () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [institutionData, setInstitutionData] = useState<InstitutionAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -103,12 +104,6 @@ const AnalyticsPage: React.FC = () => {
       </div>
     )
   }
-
-  const formatNumber = (value: number | undefined | null): string => {
-    if (value === undefined || value === null || isNaN(value)) return '0'
-    return value.toLocaleString()
-  }
-
   return (
     <div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -143,39 +138,40 @@ const AnalyticsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Institution Stats */}
-        <div className="col-md-3">
-          <div className="card border-0 bg-warning text-white">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="flex-grow-1">
-                  <h5 className="card-title mb-0">Institution Types</h5>
-                  <h3 className="mb-0">{Object.keys(institutionData?.institutionsByType || {}).length}</h3>
+      {institutionData && (
+        <div className="row mb-4">
+          <div className="col-md-3">
+            <div className="card border-0 bg-warning text-white">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h5 className="card-title mb-0">Institution Types</h5>
+                    <h3 className="mb-0">{Object.keys(institutionData?.institutionsByType || {}).length}</h3>
+                  </div>
+                  <div className="avatar avatar-lg bg-white text-warning rounded-3">
+                    <i className="ti ti-category"></i>
+                  </div>
                 </div>
-                <div className="avatar avatar-lg bg-white text-warning rounded-3">
-                  <i className="ti ti-category"></i>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="card border-0 bg-info text-white">
+              <div className="card-body">
+                <div className="d-flex align-items-center">
+                  <div className="flex-grow-1">
+                    <h5 className="card-title mb-0">Subscription Plans</h5>
+                    <h3 className="mb-0">{Object.keys(institutionData?.institutionsByPlan || {}).length}</h3>
+                  </div>
+                  <div className="avatar avatar-lg bg-white text-info rounded-3">
+                    <i className="ti ti-credit-card"></i>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        <div className="col-md-3">
-          <div className="card border-0 bg-info text-white">
-            <div className="card-body">
-              <div className="d-flex align-items-center">
-                <div className="flex-grow-1">
-                  <h5 className="card-title mb-0">Subscription Plans</h5>
-                  <h3 className="mb-0">{Object.keys(institutionData?.institutionsByPlan || {}).length}</h3>
-                </div>
-                <div className="avatar avatar-lg bg-white text-info rounded-3">
-                  <i className="ti ti-credit-card"></i>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-  )
+      )}
       {/* Institution Type Distribution */}
       {institutionData && Object.keys(institutionData.institutionsByType).length > 0 && (
         <div className="row mb-4">
@@ -277,6 +273,7 @@ const AnalyticsPage: React.FC = () => {
         </div>
       )}
     </div>
-}
+  );
+};
 
 export default AnalyticsPage

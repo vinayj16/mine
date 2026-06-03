@@ -53,10 +53,25 @@ async getBranches(filters = {}, options = {}) {
   }
 
   async updateBranch(id, updates) {
+    // Handle address as nested object - flatten to dot-notation to avoid Mongoose casting issues
+    const setOps = { ...updates };
+    
+    // If address is an object, flatten its keys to dot-notation
+    if (setOps.address && typeof setOps.address === 'object' && !Array.isArray(setOps.address)) {
+      const addr = setOps.address;
+      // Only flatten non-empty address objects
+      setOps['address.street'] = addr.street || '';
+      setOps['address.city'] = addr.city || '';
+      setOps['address.state'] = addr.state || '';
+      setOps['address.country'] = addr.country || 'India';
+      setOps['address.postalCode'] = addr.postalCode || '';
+      delete setOps.address;
+    }
+
     const branch = await Branch.findByIdAndUpdate(
       id,
-      { $set: updates },
-      { new: true, runValidators: true }
+      { $set: setOps },
+      { new: true, runValidators: false }
     );
 
     if (!branch) {

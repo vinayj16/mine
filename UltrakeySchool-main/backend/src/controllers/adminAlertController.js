@@ -1,9 +1,3 @@
-/**
- * Admin Alert Controller
- * Manages system alerts for administrators
- * Handles expiry alerts, payment reminders, renewals, and suspensions
- */
-
 import adminAlertService from '../services/adminAlertService.js';
 import ApiResponse from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -26,7 +20,7 @@ const validateObjectId = (id) => {
  */
 const validateAlertData = (data, isUpdate = false) => {
   const errors = [];
-  
+
   if (!isUpdate) {
     if (!data.type) {
       errors.push('Alert type is required');
@@ -35,28 +29,28 @@ const validateAlertData = (data, isUpdate = false) => {
       errors.push('Institution ID is required');
     }
   }
-  
+
   const validTypes = ['EXPIRY', 'PAYMENT_OVERDUE', 'RENEWAL_REMINDER', 'SUSPENSION', 'CUSTOM'];
   if (data.type && !validTypes.includes(data.type.toUpperCase())) {
     errors.push(`Type must be one of: ${validTypes.join(', ')}`);
   }
-  
+
   const validSeverities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
   if (data.severity && !validSeverities.includes(data.severity.toUpperCase())) {
     errors.push(`Severity must be one of: ${validSeverities.join(', ')}`);
   }
-  
+
   const validStatuses = ['pending', 'sent', 'resolved', 'dismissed'];
   if (data.status && !validStatuses.includes(data.status.toLowerCase())) {
     errors.push(`Status must be one of: ${validStatuses.join(', ')}`);
   }
-  
+
   if (errors.length > 0) {
     const error = new Error('Validation failed');
     error.details = errors;
     throw error;
   }
-  
+
   return true;
 };
 
@@ -67,7 +61,7 @@ const validateAlertData = (data, isUpdate = false) => {
 const getExpiryAlerts = async (req, res, next) => {
   try {
     const { status, severity, page, limit, sortBy, sortOrder } = req.query;
-    
+
     const filters = {};
     if (status) filters.status = status.toLowerCase();
     if (severity) filters.severity = severity.toUpperCase();
@@ -80,7 +74,7 @@ const getExpiryAlerts = async (req, res, next) => {
     };
 
     const result = await adminAlertService.getExpiryAlerts(filters, options);
-    
+
     logger.info('Expiry alerts retrieved', {
       userId: req.user?.id,
       count: result.alerts?.length || result.length,
@@ -105,7 +99,7 @@ const getExpiryAlerts = async (req, res, next) => {
 const getOverduePayments = async (req, res, next) => {
   try {
     const { status, page, limit, sortBy, sortOrder } = req.query;
-    
+
     const filters = {};
     if (status) filters.status = status.toLowerCase();
 
@@ -117,7 +111,7 @@ const getOverduePayments = async (req, res, next) => {
     };
 
     const result = await adminAlertService.getOverduePayments(filters, options);
-    
+
     logger.info('Overdue payment alerts retrieved', {
       userId: req.user?.id,
       count: result.alerts?.length || result.length,
@@ -142,7 +136,7 @@ const getOverduePayments = async (req, res, next) => {
 const getRenewalReminders = async (req, res, next) => {
   try {
     const { status, daysUntilExpiry, page, limit } = req.query;
-    
+
     const filters = {};
     if (status) filters.status = status.toLowerCase();
     if (daysUntilExpiry) filters.daysUntilExpiry = parseInt(daysUntilExpiry);
@@ -153,7 +147,7 @@ const getRenewalReminders = async (req, res, next) => {
     };
 
     const result = await adminAlertService.getRenewalReminders(filters, options);
-    
+
     logger.info('Renewal reminder alerts retrieved', {
       userId: req.user?.id,
       count: result.alerts?.length || result.length,
@@ -178,14 +172,14 @@ const getRenewalReminders = async (req, res, next) => {
 const getAutoRenewSettings = async (req, res, next) => {
   try {
     const { page, limit } = req.query;
-    
+
     const options = {
       page: Math.max(1, parseInt(page) || 1),
       limit: Math.min(100, Math.max(1, parseInt(limit) || 50))
     };
 
     const result = await adminAlertService.getAutoRenewSettings(options);
-    
+
     logger.info('Auto-renew settings retrieved', {
       userId: req.user?.id,
       count: result.institutions?.length || result.length
@@ -209,7 +203,7 @@ const getAutoRenewSettings = async (req, res, next) => {
 const getSuspendedInstitutions = async (req, res, next) => {
   try {
     const { page, limit, sortBy, sortOrder } = req.query;
-    
+
     const options = {
       page: Math.max(1, parseInt(page) || 1),
       limit: Math.min(100, Math.max(1, parseInt(limit) || 20)),
@@ -218,7 +212,7 @@ const getSuspendedInstitutions = async (req, res, next) => {
     };
 
     const result = await adminAlertService.getSuspendedInstitutions(options);
-    
+
     logger.info('Suspended institutions retrieved', {
       userId: req.user?.id,
       count: result.institutions?.length || result.length
@@ -243,14 +237,14 @@ const createAlert = async (req, res, next) => {
   try {
     // Validate alert data
     validateAlertData(req.body);
-    
+
     const alertData = {
       ...req.body,
       createdBy: req.user?.id
     };
 
     const alert = await adminAlertService.createAlert(alertData);
-    
+
     logger.info('Alert created', {
       alertId: alert._id,
       type: alert.type,
@@ -279,10 +273,10 @@ const createAlert = async (req, res, next) => {
 const updateAlert = async (req, res, next) => {
   try {
     const alertId = validateObjectId(req.params.id);
-    
+
     // Validate update data
     validateAlertData(req.body, true);
-    
+
     const updateData = {
       ...req.body,
       updatedBy: req.user?.id,
@@ -290,7 +284,7 @@ const updateAlert = async (req, res, next) => {
     };
 
     const alert = await adminAlertService.updateAlert(alertId, updateData);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -322,9 +316,9 @@ const updateAlert = async (req, res, next) => {
 const deleteAlert = async (req, res, next) => {
   try {
     const alertId = validateObjectId(req.params.id);
-    
+
     const alert = await adminAlertService.deleteAlert(alertId);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -353,14 +347,14 @@ const deleteAlert = async (req, res, next) => {
 const bulkDeleteAlerts = async (req, res, next) => {
   try {
     const { alertIds } = req.body;
-    
+
     if (!alertIds || !Array.isArray(alertIds) || alertIds.length === 0) {
       return ApiResponse.badRequest(res, 'Alert IDs array is required');
     }
-    
+
     // Validate all IDs
     alertIds.forEach(id => validateObjectId(id));
-    
+
     const result = await adminAlertService.bulkDeleteAlerts(alertIds);
 
     logger.info('Bulk delete alerts', {
@@ -389,9 +383,9 @@ const bulkDeleteAlerts = async (req, res, next) => {
 const sendReminder = async (req, res, next) => {
   try {
     const alertId = validateObjectId(req.params.id);
-    
+
     const alert = await adminAlertService.sendReminder(alertId, req.user?.id);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -422,9 +416,9 @@ const resolveAlert = async (req, res, next) => {
     const alertId = validateObjectId(req.params.id);
     const { notes } = req.body;
     const resolvedBy = req.user?.id;
-    
+
     const alert = await adminAlertService.resolveAlert(alertId, resolvedBy, notes);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -454,9 +448,9 @@ const dismissAlert = async (req, res, next) => {
   try {
     const alertId = validateObjectId(req.params.id);
     const { reason } = req.body;
-    
+
     const alert = await adminAlertService.dismissAlert(alertId, req.user?.id, reason);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -486,13 +480,13 @@ const toggleAutoRenew = async (req, res, next) => {
   try {
     const institutionId = validateObjectId(req.params.institutionId);
     const { autoRenew } = req.body;
-    
+
     if (typeof autoRenew !== 'boolean') {
       return ApiResponse.badRequest(res, 'autoRenew must be a boolean value');
     }
-    
+
     const institution = await adminAlertService.toggleAutoRenew(institutionId, autoRenew, req.user?.id);
-    
+
     if (!institution) {
       return ApiResponse.notFound(res, 'Institution not found');
     }
@@ -524,14 +518,14 @@ const toggleAutoRenew = async (req, res, next) => {
 const generateAlerts = async (req, res, next) => {
   try {
     const { daysBeforeExpiry } = req.body;
-    
+
     const options = {
       daysBeforeExpiry: daysBeforeExpiry || 30,
       generatedBy: req.user?.id
     };
 
     const alerts = await adminAlertService.generateAlertsFromInstitutions(options);
-    
+
     logger.info('Alerts generated', {
       userId: req.user?.id,
       count: alerts.length,
@@ -559,13 +553,13 @@ const generateAlerts = async (req, res, next) => {
 const getAlertStatistics = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
-    
+
     const options = {};
     if (startDate) options.startDate = new Date(startDate);
     if (endDate) options.endDate = new Date(endDate);
 
     const stats = await adminAlertService.getAlertStatistics(options);
-    
+
     logger.info('Alert statistics retrieved', {
       userId: req.user?.id,
       totalAlerts: stats.total
@@ -589,9 +583,9 @@ const getAlertStatistics = async (req, res, next) => {
 const getAlertById = async (req, res, next) => {
   try {
     const alertId = validateObjectId(req.params.id);
-    
+
     const alert = await adminAlertService.getAlertById(alertId);
-    
+
     if (!alert) {
       return ApiResponse.notFound(res, 'Alert not found');
     }
@@ -618,17 +612,17 @@ const getAlertById = async (req, res, next) => {
  */
 const getAllAlerts = async (req, res, next) => {
   try {
-    const { 
-      type, 
-      status, 
-      severity, 
+    const {
+      type,
+      status,
+      severity,
       institutionId,
-      page, 
-      limit, 
-      sortBy, 
-      sortOrder 
+      page,
+      limit,
+      sortBy,
+      sortOrder
     } = req.query;
-    
+
     const filters = {};
     if (type) filters.type = type.toUpperCase();
     if (status) filters.status = status.toLowerCase();
@@ -643,7 +637,7 @@ const getAllAlerts = async (req, res, next) => {
     };
 
     const result = await adminAlertService.getAllAlerts(filters, options);
-    
+
     logger.info('All alerts retrieved', {
       userId: req.user?.id,
       count: result.alerts?.length || 0,

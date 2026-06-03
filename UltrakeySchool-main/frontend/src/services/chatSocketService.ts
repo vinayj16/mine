@@ -69,18 +69,18 @@ class ChatSocketService {
 
   connect(userId: string, userRole?: string, institutionCode?: string) {
     if (this.socket?.connected) {
-      console.log('✅ Chat socket already connected');
+      console.log('[ChatSocket] Already connected');
       return;
     }
     
     if (this.isConnecting) {
-      console.log('⏳ Chat socket connection already in progress');
+      console.log('[ChatSocket] Connection already in progress');
       return;
     }
     
     // Disconnect existing socket if any
     if (this.socket) {
-      console.log('🔌 Disconnecting existing chat socket before reconnect');
+      console.log('[ChatSocket] Disconnecting existing socket before reconnect');
       this.socket.disconnect();
       this.socket = null;
     }
@@ -96,7 +96,7 @@ class ChatSocketService {
       socketUrl = socketUrl.replace('/api/v1', '');
     }
     
-    console.log('🔌 Connecting to chat socket at:', socketUrl);
+    console.log('[ChatSocket] Connecting at:', socketUrl);
     
     // Create chat-specific socket with namespace
     this.socket = io(`${socketUrl}/chat`, {
@@ -119,8 +119,8 @@ class ChatSocketService {
     this.socket.on('connect', () => {
       this.isConnecting = false;
       this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-      console.log('✅ Chat socket connected with ID:', this.socket?.id);
-      console.log('🔌 Socket connected to chat namespace');
+      console.log('[ChatSocket] Connected with ID:', this.socket?.id);
+      console.log('[ChatSocket] Connected to chat namespace');
       
       // Join user's personal room
       this.socket?.emit('join_user', userId);
@@ -134,8 +134,8 @@ class ChatSocketService {
 
     this.socket.on('disconnect', (reason) => {
       this.isConnecting = false;
-      console.log('🔌 Chat socket disconnected:', reason);
-      console.log('🔌 Disconnect reason details:', {
+      console.log('[ChatSocket] Disconnected:', reason);
+      console.log('[ChatSocket] Disconnect details:', {
         reason,
         wasServerInitiated: reason === 'io server disconnect',
         wasClientInitiated: reason === 'io client disconnect',
@@ -145,7 +145,7 @@ class ChatSocketService {
       // Auto-reconnect with exponential backoff
       if (reason !== 'io client disconnect' && this.reconnectAttempts < this.maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000);
-        console.log(`🔄 Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
+        console.log(`[ChatSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
         
         setTimeout(() => {
           this.reconnectAttempts++;
@@ -156,8 +156,8 @@ class ChatSocketService {
 
     this.socket.on('connect_error', (error) => {
       this.isConnecting = false;
-      console.error('❌ Chat socket connection error:', error);
-      console.error('❌ Socket connection error details:', {
+      console.error('[ChatSocket] Connection error:', error);
+      console.error('[ChatSocket] Connection error details:', {
         message: error.message,
         stack: error.stack
       });

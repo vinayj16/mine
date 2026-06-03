@@ -368,8 +368,8 @@ const DEFAULT_MENUS = {
   ]
 };
 
-export const getMenuForRole = async (roleId, schoolId = null) => {
-  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const getMenuForRole = async (roleId, institutionId = null) => {
+  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
   
   if (!menuCustomization) {
     menuCustomization = await MenuCustomizationRole.findOne({ roleId, isDefault: true });
@@ -403,7 +403,7 @@ export const getMenuForUser = async (userId) => {
     throw new Error('Invalid role');
   }
 
-  let menuSections = await getMenuForRole(user.roleId, user.schoolId);
+  let menuSections = await getMenuForRole(user.roleId, user.institutionId);
 
   const effectivePermissions = await roleService.getUserEffectivePermissions(userId);
   const allowedModules = user.allowedModules || role.allowedModules;
@@ -424,8 +424,8 @@ export const getMenuForUser = async (userId) => {
   return menuSections;
 };
 
-export const createDefaultMenuForRole = async (roleId, schoolId = null) => {
-  const existingMenu = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const createDefaultMenuForRole = async (roleId, institutionId = null) => {
+  const existingMenu = await MenuCustomizationRole.findOne({ roleId, institutionId });
   if (existingMenu) {
     return existingMenu;
   }
@@ -434,25 +434,25 @@ export const createDefaultMenuForRole = async (roleId, schoolId = null) => {
 
   const menuCustomization = new MenuCustomizationRole({
     roleId,
-    schoolId,
+    institutionId,
     menuSections: defaultMenu,
     hiddenMenuItems: [],
     customMenuItems: [],
     quickActions: [],
-    isDefault: !schoolId
+    isDefault: !institutionId
   });
 
   await menuCustomization.save();
   return menuCustomization;
 };
 
-export const updateMenuForRole = async (roleId, schoolId, menuData, userId) => {
-  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const updateMenuForRole = async (roleId, institutionId, menuData, userId) => {
+  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
     menuCustomization = new MenuCustomizationRole({
       roleId,
-      schoolId,
+      institutionId,
       isDefault: false
     });
   }
@@ -479,11 +479,11 @@ export const updateMenuForRole = async (roleId, schoolId, menuData, userId) => {
   return menuCustomization;
 };
 
-export const addCustomMenuItem = async (roleId, schoolId, menuItem, userId) => {
-  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const addCustomMenuItem = async (roleId, institutionId, menuItem, userId) => {
+  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
-    menuCustomization = await createDefaultMenuForRole(roleId, schoolId);
+    menuCustomization = await createDefaultMenuForRole(roleId, institutionId);
   }
 
   menuItem.isCustom = true;
@@ -494,8 +494,8 @@ export const addCustomMenuItem = async (roleId, schoolId, menuItem, userId) => {
   return menuCustomization;
 };
 
-export const removeCustomMenuItem = async (roleId, schoolId, menuItemPath, userId) => {
-  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const removeCustomMenuItem = async (roleId, institutionId, menuItemPath, userId) => {
+  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
     throw new Error('Menu customization not found');
@@ -511,11 +511,11 @@ export const removeCustomMenuItem = async (roleId, schoolId, menuItemPath, userI
   return menuCustomization;
 };
 
-export const hideMenuItem = async (roleId, schoolId, menuItemPath, userId) => {
-  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const hideMenuItem = async (roleId, institutionId, menuItemPath, userId) => {
+  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
-    menuCustomization = await createDefaultMenuForRole(roleId, schoolId);
+    menuCustomization = await createDefaultMenuForRole(roleId, institutionId);
   }
 
   if (!menuCustomization.hiddenMenuItems.includes(menuItemPath)) {
@@ -528,8 +528,8 @@ export const hideMenuItem = async (roleId, schoolId, menuItemPath, userId) => {
   return menuCustomization;
 };
 
-export const showMenuItem = async (roleId, schoolId, menuItemPath, userId) => {
-  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const showMenuItem = async (roleId, institutionId, menuItemPath, userId) => {
+  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
     return null;
@@ -545,8 +545,8 @@ export const showMenuItem = async (roleId, schoolId, menuItemPath, userId) => {
   return menuCustomization;
 };
 
-export const reorderMenuSections = async (roleId, schoolId, sectionOrders, userId) => {
-  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const reorderMenuSections = async (roleId, institutionId, sectionOrders, userId) => {
+  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
     throw new Error('Menu customization not found');
@@ -565,11 +565,11 @@ export const reorderMenuSections = async (roleId, schoolId, sectionOrders, userI
   return menuCustomization;
 };
 
-export const addQuickAction = async (roleId, schoolId, quickAction, userId) => {
-  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const addQuickAction = async (roleId, institutionId, quickAction, userId) => {
+  let menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
-    menuCustomization = await createDefaultMenuForRole(roleId, schoolId);
+    menuCustomization = await createDefaultMenuForRole(roleId, institutionId);
   }
 
   menuCustomization.quickActions.push(quickAction);
@@ -579,8 +579,8 @@ export const addQuickAction = async (roleId, schoolId, quickAction, userId) => {
   return menuCustomization;
 };
 
-export const removeQuickAction = async (roleId, schoolId, actionId, userId) => {
-  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, schoolId });
+export const removeQuickAction = async (roleId, institutionId, actionId, userId) => {
+  const menuCustomization = await MenuCustomizationRole.findOne({ roleId, institutionId });
 
   if (!menuCustomization) {
     throw new Error('Menu customization not found');
@@ -596,7 +596,7 @@ export const removeQuickAction = async (roleId, schoolId, actionId, userId) => {
   return menuCustomization;
 };
 
-export const resetMenuToDefault = async (roleId, schoolId, userId) => {
-  await MenuCustomizationRole.deleteOne({ roleId, schoolId });
-  return await createDefaultMenuForRole(roleId, schoolId);
+export const resetMenuToDefault = async (roleId, institutionId, userId) => {
+  await MenuCustomizationRole.deleteOne({ roleId, institutionId });
+  return await createDefaultMenuForRole(roleId, institutionId);
 };

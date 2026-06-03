@@ -76,7 +76,7 @@ const getInstitutionGrowth = async (req, res, next) => {
 
 const getRevenueGrowth = async (req, res, next) => {
   try {
-    const { period = 'monthly', startDate, endDate, planType, currency = 'USD' } = req.query;
+    const { period = 'monthly', startDate, endDate, planType, currency = 'INR' } = req.query;
 
     // Validate period
     if (!validatePeriod(period)) {

@@ -1,8 +1,3 @@
-/**
- * Request Logger Middleware
- * Logs all incoming requests with details
- */
-
 import logger from '../utils/logger.js';
 
 export const requestLogger = (req, res, next) => {

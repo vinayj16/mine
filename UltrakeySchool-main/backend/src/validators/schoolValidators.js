@@ -211,7 +211,7 @@ export const updateSchoolValidator = [
 ];
 
 // Validation rules for getting school by ID
-export const schoolIdValidator = [
+export const institutionIdValidator = [
   param('id')
     .notEmpty()
     .withMessage('School ID is required')

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none">
+  <rect width="400" height="300" fill="#f8fafc" rx="12"/>
+  <circle cx="200" cy="120" r="60" fill="#e2e8f0"/>
+  <path d="M180 110l20-30 20 30z" fill="#6366f1" opacity=".3"/>
+  <rect x="175" y="140" width="50" height="40" rx="4" fill="#6366f1" opacity=".15"/>
+  <text x="200" y="210" text-anchor="middle" fill="#94a3b8" font-size="14" font-family="sans-serif">Under Maintenance</text>
+</svg>

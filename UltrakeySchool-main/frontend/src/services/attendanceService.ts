@@ -139,14 +139,16 @@ export const attendanceService = {
   async bulkMarkAttendance(payload: { date: string; classId?: string; section?: string; records: Array<{ studentId: string; status: string; notes?: string }> }): Promise<{ success: boolean; message: string }> {
     try {
       const response = await apiClient.post('/student-attendance/bulk', payload);
-      const data = response.data as { success: boolean; message?: string };
-      if (data.success) {
+      const data = response.data as any;
+      if (data?.success) {
         return { success: true, message: data.message || `Marked attendance for ${payload.records.length} students` };
       }
-      throw new Error(data.message || 'Failed to mark attendance');
+      const msg = data?.error?.message || data?.message || 'Failed to mark attendance';
+      throw new Error(msg); 
     } catch (error: any) {
       console.error('Bulk mark attendance error:', error);
-      throw new Error(error.response?.data?.message || error.message || 'Failed to mark attendance');
+      const serverMsg = error.response?.data?.error?.message || error.response?.data?.message;
+      throw new Error(serverMsg || error.message || 'Failed to mark attendance');
     }
   },
 };

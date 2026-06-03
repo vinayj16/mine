@@ -32,9 +32,9 @@ const submissionSchema = new mongoose.Schema({
 }, { _id: true });
 
 const homeWorkSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -96,9 +96,9 @@ const homeWorkSchema = new mongoose.Schema({
 });
 
 // Indexes
-homeWorkSchema.index({ schoolId: 1, classId: 1 });
-homeWorkSchema.index({ schoolId: 1, subjectId: 1 });
-homeWorkSchema.index({ schoolId: 1, teacherId: 1 });
+homeWorkSchema.index({ institutionId: 1, classId: 1 });
+homeWorkSchema.index({ institutionId: 1, subjectId: 1 });
+homeWorkSchema.index({ institutionId: 1, teacherId: 1 });
 homeWorkSchema.index({ dueDate: 1 });
 homeWorkSchema.index({ status: 1 });
 
@@ -115,4 +115,4 @@ homeWorkSchema.virtual('gradedCount').get(function() {
 homeWorkSchema.set('toJSON', { virtuals: true });
 homeWorkSchema.set('toObject', { virtuals: true });
 
-export default mongoose.model('HomeWork', homeWorkSchema);
+export default mongoose.models.HomeWork || mongoose.model('HomeWork', homeWorkSchema);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import apiClient from '../../../api/client';
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
 
 interface FeesData {
   overview: {
@@ -47,11 +48,11 @@ const AdminFeesPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? (JSON.parse(userStr)?.institutionId || JSON.parse(userStr)?.institution || '') : '';
       
-      const response = await apiClient.get('/fees', { params: { schoolId } });
+      const response = await apiClient.get('/fees', { params: { institutionId } });
       
       if (response.data?.data) {
         const fees = response.data.data;
@@ -92,7 +93,7 @@ const AdminFeesPage: React.FC = () => {
           ],
           recentTransactions: fees.slice(0, 10).map((f: any) => ({
             id: f._id,
-            studentName: f.studentId?.firstName + ' ' + f.studentId?.lastName || 'N/A',
+            studentName: (f.studentId?.firstName + ' ' + f.studentId?.lastName) || 'N/A',
             amount: f.amount || 0,
             date: f.dueDate || f.createdAt,
             status: f.status || 'pending',
@@ -155,6 +156,30 @@ const AdminFeesPage: React.FC = () => {
     { name: 'Pending', value: feesData.overview.pendingFees, color: '#f59e0b' },
     { name: 'Overdue', value: feesData.overview.overdueFees, color: '#ef4444' }
   ] : [];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = feesData?.recentTransactions || [];
+    const exportData = data.map(t => ({
+      'Transaction ID': t.id,
+      'Student Name': t.studentName,
+      'Amount ($)': t.amount,
+      Date: t.date,
+      'Payment Method': t.paymentMethod,
+      Status: t.status.charAt(0).toUpperCase() + t.status.slice(1)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'fees-transactions', [
+        { key: 'Transaction ID', label: 'Transaction ID' },
+        { key: 'Student Name', label: 'Student Name' },
+        { key: 'Amount ($)', label: 'Amount ($)' },
+        { key: 'Date', label: 'Date' },
+        { key: 'Payment Method', label: 'Payment Method' },
+        { key: 'Status', label: 'Status' }
+      ], 'Fee Transactions');
+    } else {
+      exportToExcel(exportData, 'fees-transactions');
+    }
+  };
 
   if (loading) {
     return (
@@ -480,7 +505,7 @@ const AdminFeesPage: React.FC = () => {
             <div className="card">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h5 className="card-title mb-0">Recent Transactions</h5>
-                <button className="btn btn-primary btn-sm">
+                <button className="btn btn-primary btn-sm" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-download me-1"></i>Export
                 </button>
               </div>

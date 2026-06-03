@@ -150,14 +150,22 @@ const InstitutionsSchoolsPage: React.FC = () => {
     if (!selectedInstitution) return;
     
     try {
-      await superAdminService.updateInstitution(selectedInstitution._id, selectedInstitution as any);
+      const payload: Record<string, any> = {
+        name: selectedInstitution.name,
+        plan: selectedInstitution.plan,
+        instituteCode: selectedInstitution.instituteCode || undefined,
+        contactEmail: selectedInstitution.contactEmail,
+        contactPhone: selectedInstitution.contactPhone,
+        website: selectedInstitution.website || undefined,
+      };
+      await superAdminService.updateInstitution(selectedInstitution._id, payload);
       toast.success('School updated successfully');
       setShowEditModal(false);
       setSelectedInstitution(null);
       fetchInstitutions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating school:', error);
-      toast.error('Failed to update school');
+      toast.error(error?.response?.data?.message || 'Failed to update school');
     }
   };
 
@@ -193,7 +201,7 @@ const InstitutionsSchoolsPage: React.FC = () => {
   const filteredInstitutions = institutions.filter(institution => {
     const matchesSearch = institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (institution.contactEmail?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    const matchesFilter = !filterStatus || institution.status === filterStatus;
+    const matchesFilter = !filterStatus || institution.status?.toLowerCase() === filterStatus.toLowerCase();
     const matchesPlan = !filterPlan || institution.plan === filterPlan;
     return matchesSearch && matchesFilter && matchesPlan;
   });
@@ -218,9 +226,9 @@ const InstitutionsSchoolsPage: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = institutions.length;
-    const active = institutions.filter(inst => inst.status === 'Active').length;
-    const suspended = institutions.filter(inst => inst.status === 'Suspended').length;
-    const expired = institutions.filter(inst => inst.status === 'Expired').length;
+    const active = institutions.filter(inst => inst.status?.toLowerCase() === 'active').length;
+    const suspended = institutions.filter(inst => inst.status?.toLowerCase() === 'suspended').length;
+    const expired = institutions.filter(inst => inst.status?.toLowerCase() === 'expired').length;
     const totalRevenue = institutions.reduce((sum, inst) => {
       const revenue = inst.plan === 'basic' ? 1000 : inst.plan === 'premium' ? 5000 : 10000;
       return sum + revenue;
@@ -447,7 +455,7 @@ const InstitutionsSchoolsPage: React.FC = () => {
                         <td>{institution.contactEmail}</td>
                         <td>
                           <span className={`badge ${getPlanBadge(institution.plan || 'basic')} text-white`}>
-                            {institution.plan || 'basic'}
+                            {institution.plan ? (institution.plan.charAt(0).toUpperCase() + institution.plan.slice(1)) : 'Basic'}
                           </span>
                         </td>
                         <td>
@@ -456,7 +464,7 @@ const InstitutionsSchoolsPage: React.FC = () => {
                           </span>
                         </td>
                         <td>-</td>
-                        <td>${institution.plan === 'basic' ? '1,000' : institution.plan === 'premium' ? '5,000' : '10,000'}</td>
+                        <td>₹{institution.plan?.toLowerCase() === 'basic' ? '1,000' : institution.plan?.toLowerCase() === 'premium' ? '5,000' : '10,000'}</td>
                         <td>{institution.subscriptionExpiry}</td>
                         <td>
                           <div className="d-flex align-items-center">
@@ -667,7 +675,7 @@ const InstitutionsSchoolsPage: React.FC = () => {
                     <select
                       className="form-select"
                       name="plan"
-                      value={selectedInstitution.plan}
+                      value={selectedInstitution.plan?.toLowerCase() || 'basic'}
                       onChange={(e) => setSelectedInstitution({...selectedInstitution, plan: e.target.value})}
                       required
                     >

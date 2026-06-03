@@ -165,18 +165,22 @@ const InstitutionsInterCollegesPage: React.FC = () => {
     if (!selectedInstitution) return;
     
     try {
-      setLoading(true);
-      await superAdminService.updateInstitution(selectedInstitution._id, selectedInstitution as any);
+      const payload: Record<string, any> = {
+        name: selectedInstitution.name,
+        plan: selectedInstitution.plan,
+        instituteCode: selectedInstitution.instituteCode || undefined,
+        contactEmail: selectedInstitution.contactEmail,
+        contactPhone: selectedInstitution.contactPhone,
+        website: selectedInstitution.website || undefined,
+      };
+      await superAdminService.updateInstitution(selectedInstitution._id, payload);
       toast.success('Inter College updated successfully');
       setShowEditModal(false);
       setSelectedInstitution(null);
       fetchInstitutions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating inter college:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update inter college';
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
+      toast.error(error?.response?.data?.message || 'Failed to update inter college');
     }
   };
 
@@ -216,7 +220,7 @@ const InstitutionsInterCollegesPage: React.FC = () => {
   const filteredInstitutions = institutions.filter(institution => {
     const matchesSearch = institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (institution.contactEmail?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    const matchesFilter = !filterStatus || institution.status === filterStatus;
+    const matchesFilter = !filterStatus || institution.status?.toLowerCase() === filterStatus.toLowerCase();
     const matchesPlan = !filterPlan || institution.plan === filterPlan;
     return matchesSearch && matchesFilter && matchesPlan;
   });
@@ -241,9 +245,9 @@ const InstitutionsInterCollegesPage: React.FC = () => {
 
   const calculateStats = () => {
     const total = institutions.length;
-    const active = institutions.filter(inst => inst.status === 'Active').length;
-    const suspended = institutions.filter(inst => inst.status === 'Suspended').length;
-    const expired = institutions.filter(inst => inst.status === 'Expired').length;
+    const active = institutions.filter(inst => inst.status?.toLowerCase() === 'active').length;
+    const suspended = institutions.filter(inst => inst.status?.toLowerCase() === 'suspended').length;
+    const expired = institutions.filter(inst => inst.status?.toLowerCase() === 'expired').length;
     const totalRevenue = institutions.reduce((sum, inst) => {
       const revenue = inst.plan === 'basic' ? 1000 : inst.plan === 'premium' ? 5000 : 10000;
       return sum + revenue;
@@ -482,7 +486,7 @@ const InstitutionsInterCollegesPage: React.FC = () => {
                           </span>
                         </td>
                         <td>1,234</td>
-                        <td>${institution.plan === 'basic' ? '1,000' : institution.plan === 'premium' ? '5,000' : '10,000'}</td>
+                        <td>₹{institution.plan === 'basic' ? '1,000' : institution.plan === 'premium' ? '5,000' : '10,000'}</td>
                         <td>{institution.subscriptionExpiry}</td>
                         <td>
                           <div className="d-flex align-items-center">
@@ -557,6 +561,17 @@ const InstitutionsInterCollegesPage: React.FC = () => {
                     />
                   </div>
                   <div className="mb-3">
+                    <label className="form-label">Institution Code*</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      name="instituteCode"
+                      value={newInstitution.instituteCode}
+                      onChange={(e) => setNewInstitution({...newInstitution, instituteCode: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
                     <label className="form-label">Email*</label>
                     <input
                       type="email"
@@ -576,6 +591,16 @@ const InstitutionsInterCollegesPage: React.FC = () => {
                       value={newInstitution.contactPhone}
                       onChange={(e) => setNewInstitution({...newInstitution, contactPhone: e.target.value})}
                       required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Website</label>
+                    <input
+                      type="url"
+                      className="form-control"
+                      name="website"
+                      value={newInstitution.website}
+                      onChange={(e) => setNewInstitution({...newInstitution, website: e.target.value})}
                     />
                   </div>
                   <div className="mb-3">
@@ -628,6 +653,17 @@ const InstitutionsInterCollegesPage: React.FC = () => {
                     />
                   </div>
                   <div className="mb-3">
+                    <label className="form-label">Institution Code*</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      name="instituteCode"
+                      value={selectedInstitution.instituteCode || ''}
+                      onChange={(e) => setSelectedInstitution({...selectedInstitution, instituteCode: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
                     <label className="form-label">Email*</label>
                     <input
                       type="email"
@@ -647,6 +683,16 @@ const InstitutionsInterCollegesPage: React.FC = () => {
                       value={selectedInstitution.contactPhone}
                       onChange={(e) => setSelectedInstitution({...selectedInstitution, contactPhone: e.target.value})}
                       required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Website</label>
+                    <input
+                      type="url"
+                      className="form-control"
+                      name="website"
+                      value={selectedInstitution.website || ''}
+                      onChange={(e) => setSelectedInstitution({...selectedInstitution, website: e.target.value})}
                     />
                   </div>
                   <div className="mb-3">

@@ -53,12 +53,10 @@ class AuthService {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      console.log('[AuthService] Login attempt for:', credentials.email);
       const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
 
       if (response.data.success && response.data.data) {
         const authData = response.data.data;
-        console.log('[AuthService] Login successful, storing tokens');
         
         // Store tokens with user role
         this.setTokens(authData.accessToken, authData.refreshToken, authData.user);
@@ -280,12 +278,10 @@ class AuthService {
    */
   async getProfile(): Promise<User> {
     try {
-      console.log('[AuthService] Getting user profile...');
       const response = await apiClient.get('/auth/profile');
 
       if (response.data.success && response.data.data) {
         const data = response.data.data;
-        console.log('[AuthService] Profile retrieved successfully');
         return (data.user ?? data) as User;
       } else {
         console.error('[AuthService] Profile fetch failed:', response.data.message);
@@ -365,14 +361,12 @@ class AuthService {
    * Store authentication tokens
    */
   setTokens(accessToken: string, refreshToken: string, user?: any): void {
-    console.log('[AuthService] Storing tokens for user authentication');
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     
     // Store user role for router navigation
     if (user?.role) {
       localStorage.setItem('userRole', user.role);
-      console.log('[AuthService] Stored user role:', user.role);
     }
   }
 
@@ -380,7 +374,6 @@ class AuthService {
    * Clear stored tokens
    */
   clearTokens(): void {
-    console.log('[AuthService] Clearing all authentication tokens');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');

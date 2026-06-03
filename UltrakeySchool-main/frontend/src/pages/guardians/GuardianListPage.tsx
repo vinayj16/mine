@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { useAuth } from '../../store/authStore';
 import guardianService from '../../services/guardianService';
 import { mapGuardianToDisplay, type GuardianDisplay } from './guardianHelpers';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 const GuardianListPage = () => {
   const { user } = useAuth();
@@ -13,7 +15,9 @@ const GuardianListPage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    if (!user?.schoolId) {
+    const institutionId = user?.institutionId || user?.institutionId || localStorage.getItem('institutionId') || '';
+
+    if (!institutionId) {
       setError('Unable to determine the current school. Log in again or contact your administrator.');
       setLoading(false);
 
@@ -26,7 +30,7 @@ const GuardianListPage = () => {
       setLoading(true);
 
       try {
-        const payload = await guardianService.listForSchool(user.schoolId, { limit: 50 });
+        const payload = await guardianService.listForSchool(institutionId, { limit: 50 });
         if (!isMounted) return;
         setGuardians(payload.guardians.map(mapGuardianToDisplay));
         setError(null);
@@ -46,7 +50,34 @@ const GuardianListPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [user?.schoolId]);
+  }, [user?.institutionId, user?.institutionId]);
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!guardians.length) { toast.error('No data to export'); return; }
+    const exportData = guardians.map(guardian => ({
+      'ID': guardian.id,
+      'Guardian Name': guardian.name,
+      'Child': guardian.child.name,
+      'Class': guardian.child.classLabel,
+      'Section': guardian.child.section,
+      'Phone': guardian.phone,
+      'Email': guardian.email
+    }));
+    const columns: ExportColumn[] = [
+      { key: 'ID', label: 'ID' },
+      { key: 'Guardian Name', label: 'Guardian Name' },
+      { key: 'Child', label: 'Child' },
+      { key: 'Class', label: 'Class' },
+      { key: 'Section', label: 'Section' },
+      { key: 'Phone', label: 'Phone' },
+      { key: 'Email', label: 'Email' }
+    ];
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'guardians', columns, 'Guardian List');
+    } else {
+      exportToExcel(exportData, 'guardians', columns);
+    }
+  };
 
   return (
     <>
@@ -83,13 +114,13 @@ const GuardianListPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>

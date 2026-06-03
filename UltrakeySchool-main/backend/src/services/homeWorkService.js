@@ -4,10 +4,10 @@ class HomeWorkService {
   /**
    * Create a new homework
    */
-  async createHomeWork(schoolId, homeWorkData) {
+  async createHomeWork(institutionId, homeWorkData) {
     const homeWork = await HomeWork.create({
       ...homeWorkData,
-      schoolId
+      institutionId
     });
     return homeWork;
   }
@@ -15,10 +15,10 @@ class HomeWorkService {
   /**
    * Get all homework with filters
    */
-  async getHomeWorks(schoolId, filters = {}, options = {}) {
+  async getHomeWorks(institutionId, filters = {}, options = {}) {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = options;
     
-    const query = { schoolId, ...filters };
+    const query = { institutionId, ...filters };
     const skip = (page - 1) * limit;
     
     const [homeWorks, total] = await Promise.all([
@@ -35,6 +35,7 @@ class HomeWorkService {
 
     return {
       homeWorks,
+      homeworks: homeWorks,
       pagination: {
         page,
         limit,
@@ -47,8 +48,8 @@ class HomeWorkService {
   /**
    * Get homework by ID
    */
-  async getHomeWorkById(homeWorkId, schoolId) {
-    const homeWork = await HomeWork.findOne({ _id: homeWorkId, schoolId })
+  async getHomeWorkById(homeWorkId, institutionId) {
+    const homeWork = await HomeWork.findOne({ _id: homeWorkId, institutionId })
       .populate('classId', 'name code')
       .populate('sectionId', 'name')
       .populate('subjectId', 'name code')
@@ -64,9 +65,9 @@ class HomeWorkService {
   /**
    * Update homework
    */
-  async updateHomeWork(homeWorkId, schoolId, updates) {
+  async updateHomeWork(homeWorkId, institutionId, updates) {
     const homeWork = await HomeWork.findOneAndUpdate(
-      { _id: homeWorkId, schoolId },
+      { _id: homeWorkId, institutionId },
       { $set: updates },
       { new: true, runValidators: true }
     );
@@ -79,8 +80,8 @@ class HomeWorkService {
   /**
    * Delete homework
    */
-  async deleteHomeWork(homeWorkId, schoolId) {
-    const homeWork = await HomeWork.findOneAndDelete({ _id: homeWorkId, schoolId });
+  async deleteHomeWork(homeWorkId, institutionId) {
+    const homeWork = await HomeWork.findOneAndDelete({ _id: homeWorkId, institutionId });
     if (!homeWork) {
       throw new Error('Homework not found');
     }
@@ -90,8 +91,8 @@ class HomeWorkService {
   /**
    * Get homework by class
    */
-  async getHomeWorksByClass(schoolId, classId) {
-    return await HomeWork.find({ schoolId, classId, isActive: true })
+  async getHomeWorksByClass(institutionId, classId) {
+    return await HomeWork.find({ institutionId, classId, isActive: true })
       .populate('subjectId', 'name code')
       .populate('teacherId', 'firstName lastName')
       .sort({ dueDate: 1 });
@@ -100,8 +101,8 @@ class HomeWorkService {
   /**
    * Get homework by teacher
    */
-  async getHomeWorksByTeacher(schoolId, teacherId) {
-    return await HomeWork.find({ schoolId, teacherId })
+  async getHomeWorksByTeacher(institutionId, teacherId) {
+    return await HomeWork.find({ institutionId, teacherId })
       .populate('classId', 'name code')
       .populate('subjectId', 'name code')
       .sort({ createdAt: -1 });
@@ -110,8 +111,8 @@ class HomeWorkService {
   /**
    * Get homework by subject
    */
-  async getHomeWorksBySubject(schoolId, subjectId) {
-    return await HomeWork.find({ schoolId, subjectId, isActive: true })
+  async getHomeWorksBySubject(institutionId, subjectId) {
+    return await HomeWork.find({ institutionId, subjectId, isActive: true })
       .populate('classId', 'name code')
       .populate('teacherId', 'firstName lastName')
       .sort({ dueDate: 1 });
@@ -120,9 +121,9 @@ class HomeWorkService {
   /**
    * Get pending homework (not yet due)
    */
-  async getPendingHomeWorks(schoolId) {
+  async getPendingHomeWorks(institutionId) {
     return await HomeWork.find({ 
-      schoolId, 
+      institutionId, 
       dueDate: { $gt: new Date() },
       status: 'published',
       isActive: true 
@@ -135,8 +136,8 @@ class HomeWorkService {
   /**
    * Submit homework
    */
-  async submitHomeWork(homeWorkId, schoolId, studentId, submissionData) {
-    const homeWork = await HomeWork.findOne({ _id: homeWorkId, schoolId });
+  async submitHomeWork(homeWorkId, institutionId, studentId, submissionData) {
+    const homeWork = await HomeWork.findOne({ _id: homeWorkId, institutionId });
     if (!homeWork) {
       throw new Error('Homework not found');
     }
@@ -169,8 +170,8 @@ class HomeWorkService {
   /**
    * Grade submission
    */
-  async gradeSubmission(homeWorkId, schoolId, studentId, gradeData) {
-    const homeWork = await HomeWork.findOne({ _id: homeWorkId, schoolId });
+  async gradeSubmission(homeWorkId, institutionId, studentId, gradeData) {
+    const homeWork = await HomeWork.findOne({ _id: homeWorkId, institutionId });
     if (!homeWork) {
       throw new Error('Homework not found');
     }
@@ -194,8 +195,8 @@ class HomeWorkService {
   /**
    * Get homework analytics
    */
-  async getAnalytics(schoolId, classId = null) {
-    const query = { schoolId };
+  async getAnalytics(institutionId, classId = null) {
+    const query = { institutionId };
     if (classId) query.classId = classId;
 
     const homeWorks = await HomeWork.find(query)

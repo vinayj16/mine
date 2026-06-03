@@ -18,7 +18,7 @@ const complaintSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['Academic', 'Infrastructure', 'Staff', 'Administration', 'Transport', 'Hostel', 'Library', 'Canteen', 'Other'],
+    enum: ['Academic', 'Infrastructure', 'Staff', 'Administration', 'Transport', 'Hostel', 'Library', 'Other'],
     required: true
   },
   priority: {
@@ -40,9 +40,9 @@ const complaintSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true
   },
   attachments: [{
@@ -80,13 +80,13 @@ const complaintSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-complaintSchema.index({ schoolId: 1, createdAt: -1 });
+complaintSchema.index({ institutionId: 1, createdAt: -1 });
 complaintSchema.index({ status: 1, priority: 1 });
 complaintSchema.index({ category: 1 });
 complaintSchema.index({ reportedBy: 1 });
 
 // Virtual for complaint age
-complaintSchema.virtual('age').get(function() {
+complaintSchema.virtual('age').get(function () {
   const now = new Date();
   const diff = now - this.createdAt;
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -94,7 +94,7 @@ complaintSchema.virtual('age').get(function() {
 });
 
 // Virtual for days since last update
-complaintSchema.virtual('daysSinceUpdate').get(function() {
+complaintSchema.virtual('daysSinceUpdate').get(function () {
   const now = new Date();
   const lastUpdate = this.updatedAt || this.createdAt;
   const diff = now - lastUpdate;
@@ -102,26 +102,26 @@ complaintSchema.virtual('daysSinceUpdate').get(function() {
 });
 
 // Static method to get complaints by status
-complaintSchema.statics.getByStatus = function(status, schoolId) {
-  return this.find({ status, schoolId }).populate('reportedBy assignedTo', 'name email');
+complaintSchema.statics.getByStatus = function (status, institutionId) {
+  return this.find({ status, institutionId }).populate('reportedBy assignedTo', 'name email');
 };
 
 // Static method to get complaints by category
-complaintSchema.statics.getByCategory = function(category, schoolId) {
-  return this.find({ category, schoolId }).populate('reportedBy', 'name email');
+complaintSchema.statics.getByCategory = function (category, institutionId) {
+  return this.find({ category, institutionId }).populate('reportedBy', 'name email');
 };
 
 // Static method to get high priority complaints
-complaintSchema.statics.getHighPriority = function(schoolId) {
-  return this.find({ 
+complaintSchema.statics.getHighPriority = function (institutionId) {
+  return this.find({
     priority: { $in: ['High', 'Critical'] },
     status: { $ne: 'resolved' },
-    schoolId 
+    institutionId
   }).populate('reportedBy', 'name email');
 };
 
 // Instance method to add comment
-complaintSchema.methods.addComment = function(userId, comment) {
+complaintSchema.methods.addComment = function (userId, comment) {
   this.comments.push({
     userId,
     comment,
@@ -131,7 +131,7 @@ complaintSchema.methods.addComment = function(userId, comment) {
 };
 
 // Instance method to update status
-complaintSchema.methods.updateStatus = function(status, updatedBy) {
+complaintSchema.methods.updateStatus = function (status, updatedBy) {
   this.status = status;
   this.updatedAt = new Date();
   if (status === 'resolved') {
@@ -142,7 +142,7 @@ complaintSchema.methods.updateStatus = function(status, updatedBy) {
 };
 
 // Instance method to assign to user
-complaintSchema.methods.assignTo = function(userId) {
+complaintSchema.methods.assignTo = function (userId) {
   this.assignedTo = userId;
   this.status = 'in-progress';
   this.updatedAt = new Date();

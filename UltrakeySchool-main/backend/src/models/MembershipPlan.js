@@ -28,11 +28,11 @@ const membershipPlanSchema = new mongoose.Schema({
   pricing: {
     monthly: {
       amount: { type: Number, required: true, default: 0 },
-      currency: { type: String, default: 'USD' }
+      currency: { type: String, default: 'INR' }
     },
     yearly: {
       amount: { type: Number, required: true, default: 0 },
-      currency: { type: String, default: 'USD' }
+      currency: { type: String, default: 'INR' }
     }
   },
   limits: {

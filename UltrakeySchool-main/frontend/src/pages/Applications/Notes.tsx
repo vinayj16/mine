@@ -4,6 +4,7 @@ import noteService, { type Note } from "../../services/noteService";
 import crossAppCommunicationService from '../../services/crossApplicationCommunicationService';
 import applicationPersistenceService from '../../services/applicationPersistenceService';
 import type { User } from "../../utils/permissions";
+import ConfirmModal from "../../components/common/ConfirmModal";
 
 const NoteDropdown: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [open, setOpen] = useState(false);
@@ -44,6 +45,8 @@ const NotesPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPermanentDeleteModal, setShowPermanentDeleteModal] = useState(false);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -65,26 +68,6 @@ const NotesPage: React.FC = () => {
     if (userData) {
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
-      
-            
-      // Load note messages from communication service
-      const noteMessages = crossAppCommunicationService.getMessages(parsedUser.id, 'note');
-      const enhancedNotes = noteMessages.map(msg => ({
-        _id: msg.id,
-        userId: parsedUser.id,
-        title: msg.subject || 'Shared Note',
-        description: msg.content?.text || '',
-        status: 'active' as 'active' | 'trash',
-        important: msg.priority === 'high',
-        tag: msg.content?.tag || 'personal',
-        color: msg.metadata?.color || '#fef3c7',
-        priority: (msg.priority === 'urgent' ? 'high' : msg.priority) || 'medium',
-        userName: parsedUser.name,
-        createdAt: msg.timestamp,
-        updatedAt: msg.timestamp
-      }));
-      
-      setNotes(enhancedNotes);
     }
     
     fetchNotes();
@@ -140,7 +123,9 @@ const NotesPage: React.FC = () => {
       }
 
       const response = await noteService.getAllNotes(params);
-      setNotes(response.data || []);
+      // API response: { success, data: { notes, pagination }, message }
+      const notesData = response?.data?.notes || response?.data || (Array.isArray(response) ? response : []);
+      setNotes(Array.isArray(notesData) ? notesData : []);
     } catch (error: any) {
       console.error('Error fetching notes:', error);
       setNotes([]);
@@ -211,14 +196,21 @@ const NotesPage: React.FC = () => {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    if (!window.confirm('Permanently delete this note?')) return;
+    setPermanentDeleteTarget(id);
+    setShowPermanentDeleteModal(true);
+  };
+
+  const handlePermanentDeleteConfirm = async () => {
+    if (!permanentDeleteTarget) return;
     try {
-      await noteService.permanentDelete(id);
+      await noteService.permanentDelete(permanentDeleteTarget);
       toast.success('Note permanently deleted');
       fetchNotes();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to delete note');
     }
+    setShowPermanentDeleteModal(false);
+    setPermanentDeleteTarget(null);
   };
 
   const handleRestoreAll = async () => {
@@ -642,6 +634,8 @@ const NotesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showPermanentDeleteModal} onClose={() => { setShowPermanentDeleteModal(false); setPermanentDeleteTarget(null); }} onConfirm={handlePermanentDeleteConfirm} message="Permanently delete this note?" />
 
       {showDeleteModal && selectedNote && (
         <div className="modal fade show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={(e) => e.target === e.currentTarget && setShowDeleteModal(false)}>

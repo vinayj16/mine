@@ -52,10 +52,10 @@ const FeesMasterPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.get('/finance/fees');
+      const response = await apiClient.get('/finance/fee-masters');
       
-      if (response.data.success && response.data.data) {
-        const data = response.data.data.feeStructures || response.data.data;
+      if (response.data.success) {
+        const data = response.data.data;
         setFeesMasters(Array.isArray(data) ? data : []);
       }
     } catch (err: any) {
@@ -95,21 +95,21 @@ const FeesMasterPage: React.FC = () => {
       const payload: any = {
         name: formData.name,
         description: formData.description,
-        amount: parseFloat(formData.amount),
+        amount: parseFloat(formData.amount) || 0,
         dueDate: formData.dueDate,
         fineType: formData.fineType,
         isActive: formData.isActive
       };
       
       if (formData.fineType === 'Percentage') {
-        payload.finePercentage = parseFloat(formData.percentage);
+        payload.finePercentage = parseFloat(formData.percentage) || 0;
       } else if (formData.fineType === 'Fixed') {
-        payload.fineAmount = parseFloat(formData.fineAmount);
+        payload.fineAmount = parseFloat(formData.fineAmount) || 0;
       }
       
       if (selectedMaster) {
         // Update existing fee master
-        const response = await apiClient.put(`/finance/fees/${selectedMaster._id}`, payload);
+        const response = await apiClient.put(`/finance/fee-masters/${selectedMaster._id}`, payload);
         
         if (response.data.success) {
           toast.success('Fee master updated successfully');
@@ -118,7 +118,7 @@ const FeesMasterPage: React.FC = () => {
         }
       } else {
         // Add new fee master
-        const response = await apiClient.post('/finance/fees', payload);
+        const response = await apiClient.post('/finance/fee-masters', payload);
         
         if (response.data.success) {
           toast.success('Fee master created successfully');
@@ -154,7 +154,7 @@ const FeesMasterPage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.delete(`/finance/fees/${selectedMaster._id}`);
+      const response = await apiClient.delete(`/finance/fee-masters/${selectedMaster._id}`);
       
       if (response.data.success) {
         toast.success('Fee master deleted successfully');
@@ -420,13 +420,13 @@ const FeesMasterPage: React.FC = () => {
                       <td>{master.name || 'N/A'}</td>
                       <td>{master.description || 'No description'}</td>
                       <td>{formatDate(master.dueDate)}</td>
-                      <td>${master.amount?.toLocaleString() || 0}</td>
+                      <td>₹{master.amount?.toLocaleString() || 0}</td>
                       <td>{master.fineType || 'None'}</td>
                       <td>
                         {master.fineType === 'Percentage' 
                           ? `${master.finePercentage || 0}%` 
                           : master.fineType === 'Fixed' 
-                            ? `$${master.fineAmount || 0}` 
+                            ? `₹${master.fineAmount || 0}` 
                             : '-'}
                       </td>
                       <td>
@@ -632,7 +632,7 @@ const FeesMasterPage: React.FC = () => {
                         <div className="mb-3">
                           <label className="form-label">Fine Amount</label>
                           <div className="input-group">
-                            <span className="input-group-text">$</span>
+                            <span className="input-group-text">₹</span>
                             <input 
                               type="number" 
                               className="form-control" 

@@ -81,14 +81,14 @@ const getSchoolTransactions = async (req, res) => {
   try {
     logger.info('Fetching school transactions');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { status, type, startDate, endDate, page, limit, sortBy, sortOrder } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
@@ -143,9 +143,9 @@ const getSchoolTransactions = async (req, res) => {
       sortOrder: sortOrder || 'desc'
     };
 
-    const result = await transactionService.getSchoolTransactions(schoolId, filters);
+    const result = await transactionService.getSchoolTransactions(institutionId, filters);
     
-    logger.info('School transactions fetched successfully:', { schoolId });
+    logger.info('School transactions fetched successfully:', { institutionId });
     return successResponse(res, result, 'Transactions retrieved successfully');
   } catch (error) {
     logger.error('Error fetching school transactions:', error);
@@ -332,7 +332,7 @@ const createTransaction = async (req, res) => {
   try {
     logger.info('Creating transaction');
     
-    const { amount, type, paymentMethod, description, reference, schoolId, userId } = req.body;
+    const { amount, type, paymentMethod, description, reference, institutionId, userId } = req.body;
     
     // Validation
     const errors = [];
@@ -361,9 +361,9 @@ const createTransaction = async (req, res) => {
       errors.push('Reference must not exceed ' + MAX_REFERENCE_LENGTH + ' characters');
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (userId) {
@@ -429,7 +429,7 @@ const getTransactionsByStatus = async (req, res) => {
     logger.info('Fetching transactions by status');
     
     const { status } = req.params;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -440,16 +440,16 @@ const getTransactionsByStatus = async (req, res) => {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const transactions = await transactionService.getTransactionsByStatus(status, schoolId);
+    const transactions = await transactionService.getTransactionsByStatus(status, institutionId);
     
     logger.info('Transactions fetched by status successfully:', { status, count: transactions.length });
     return successResponse(res, transactions, 'Transactions retrieved successfully');
@@ -465,7 +465,7 @@ const getTransactionsByType = async (req, res) => {
     logger.info('Fetching transactions by type');
     
     const { type } = req.params;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -476,16 +476,16 @@ const getTransactionsByType = async (req, res) => {
       errors.push('Invalid type. Must be one of: ' + VALID_TYPES.join(', '));
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const transactions = await transactionService.getTransactionsByType(type, schoolId);
+    const transactions = await transactionService.getTransactionsByType(type, institutionId);
     
     logger.info('Transactions fetched by type successfully:', { type, count: transactions.length });
     return successResponse(res, transactions, 'Transactions retrieved successfully');
@@ -552,21 +552,21 @@ const getFailedTransactions = async (req, res) => {
   try {
     logger.info('Fetching failed transactions');
     
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const transactions = await transactionService.getFailedTransactions(schoolId);
+    const transactions = await transactionService.getFailedTransactions(institutionId);
     
     logger.info('Failed transactions fetched successfully:', { count: transactions.length });
     return successResponse(res, transactions, 'Failed transactions retrieved successfully');
@@ -581,21 +581,21 @@ const getPendingTransactions = async (req, res) => {
   try {
     logger.info('Fetching pending transactions');
     
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const transactions = await transactionService.getPendingTransactions(schoolId);
+    const transactions = await transactionService.getPendingTransactions(institutionId);
     
     logger.info('Pending transactions fetched successfully:', { count: transactions.length });
     return successResponse(res, transactions, 'Pending transactions retrieved successfully');
@@ -682,7 +682,7 @@ const exportTransactions = async (req, res) => {
   try {
     logger.info('Exporting transactions');
     
-    const { format, schoolId, status, type, startDate, endDate } = req.query;
+    const { format, institutionId, status, type, startDate, endDate } = req.query;
     
     // Validation
     const errors = [];
@@ -693,9 +693,9 @@ const exportTransactions = async (req, res) => {
       errors.push('Invalid export format. Must be one of: ' + VALID_EXPORT_FORMATS.join(', '));
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (status && !VALID_STATUSES.includes(status)) {
@@ -727,7 +727,7 @@ const exportTransactions = async (req, res) => {
     
     const exportData = await transactionService.exportTransactions({
       format: format.toLowerCase(),
-      schoolId,
+      institutionId,
       status,
       type,
       startDate,
@@ -747,7 +747,7 @@ const searchTransactions = async (req, res) => {
   try {
     logger.info('Searching transactions');
     
-    const { q, schoolId } = req.query;
+    const { q, institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -758,16 +758,16 @@ const searchTransactions = async (req, res) => {
       errors.push('Search query must not exceed 200 characters');
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const transactions = await transactionService.searchTransactions(q, schoolId);
+    const transactions = await transactionService.searchTransactions(q, institutionId);
     
     logger.info('Transactions searched successfully:', { query: q, count: transactions.length });
     return successResponse(res, transactions, 'Search results retrieved successfully');
@@ -782,14 +782,14 @@ const getTransactionSummary = async (req, res) => {
   try {
     logger.info('Fetching transaction summary');
     
-    const { schoolId, startDate, endDate } = req.query;
+    const { institutionId, startDate, endDate } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (startDate) {
@@ -811,7 +811,7 @@ const getTransactionSummary = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const summary = await transactionService.getTransactionSummary({ schoolId, startDate, endDate });
+    const summary = await transactionService.getTransactionSummary({ institutionId, startDate, endDate });
     
     logger.info('Transaction summary fetched successfully');
     return successResponse(res, summary, 'Transaction summary retrieved successfully');

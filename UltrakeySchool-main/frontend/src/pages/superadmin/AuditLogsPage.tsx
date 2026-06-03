@@ -22,7 +22,7 @@ interface AuditLog {
 const AuditLogsPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState<string>('')
-  const [dateRange, setDateRange] = useState<string>('7days')
+  const [dateRange, setDateRange] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -306,6 +306,7 @@ const AuditLogsPage: React.FC = () => {
                 value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
               >
+                <option value="all">All Time</option>
                 <option value="7days">Last 7 Days</option>
                 <option value="30days">Last 30 Days</option>
                 <option value="90days">Last 90 Days</option>

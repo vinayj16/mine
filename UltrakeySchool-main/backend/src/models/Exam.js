@@ -16,9 +16,9 @@ const examAttendanceSchema = new mongoose.Schema({
 }, { _id: true });
 
 const examSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -91,7 +91,7 @@ const examSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-examSchema.index({ schoolId: 1, classId: 1, examDate: 1 });
+examSchema.index({ institutionId: 1, classId: 1, examDate: 1 });
 examSchema.index({ academicYear: 1, term: 1 });
 
 export default mongoose.model('Exam', examSchema);

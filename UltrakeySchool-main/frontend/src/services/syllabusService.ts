@@ -14,7 +14,7 @@ export interface Topic {
 
 export interface Syllabus {
   _id: string;
-  schoolId: string;
+  institutionId: string;
   classId: string;
   subjectId: string;
   academicYear: string;
@@ -59,7 +59,7 @@ export interface SyllabusFilters {
 }
 
 const syllabusService = {
-  async getAll(schoolId: string, filters?: SyllabusFilters): Promise<Syllabus[]> {
+  async getAll(institutionId: string, filters?: SyllabusFilters): Promise<Syllabus[]> {
     try {
       const queryParams = new URLSearchParams();
       if (filters?.classId) queryParams.append('classId', filters.classId);
@@ -70,7 +70,7 @@ const syllabusService = {
       if (filters?.limit) queryParams.append('limit', filters.limit.toString());
 
       const queryString = queryParams.toString();
-      const url = `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}${queryString ? `?${queryString}` : ''}`;
+      const url = `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}${queryString ? `?${queryString}` : ''}`;
       
       const response = await apiService.get<ApiResponse<{ syllabi: Syllabus[]; total: number }>>(url);
       
@@ -87,10 +87,10 @@ const syllabusService = {
     }
   },
 
-  async getById(schoolId: string, syllabusId: string): Promise<Syllabus> {
+  async getById(institutionId: string, syllabusId: string): Promise<Syllabus> {
     try {
       const response = await apiService.get<ApiResponse<Syllabus>>(
-        `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}/${syllabusId}`
+        `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}/${syllabusId}`
       );
       
       if (!response.success || !response.data) {
@@ -104,10 +104,10 @@ const syllabusService = {
     }
   },
 
-  async getByClass(schoolId: string, classId: string): Promise<Syllabus[]> {
+  async getByClass(institutionId: string, classId: string): Promise<Syllabus[]> {
     try {
       const response = await apiService.get<ApiResponse<Syllabus[]>>(
-        `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}/class/${classId}`
+        `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}/class/${classId}`
       );
       
       if (!response.success || !response.data) {
@@ -121,10 +121,10 @@ const syllabusService = {
     }
   },
 
-  async create(schoolId: string, data: CreateSyllabusInput): Promise<Syllabus> {
+  async create(institutionId: string, data: CreateSyllabusInput): Promise<Syllabus> {
     try {
       const response = await apiService.post<ApiResponse<Syllabus>>(
-        API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId),
+        API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId),
         data
       );
       
@@ -139,10 +139,10 @@ const syllabusService = {
     }
   },
 
-  async update(schoolId: string, syllabusId: string, data: UpdateSyllabusInput): Promise<Syllabus> {
+  async update(institutionId: string, syllabusId: string, data: UpdateSyllabusInput): Promise<Syllabus> {
     try {
       const response = await apiService.put<ApiResponse<Syllabus>>(
-        `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}/${syllabusId}`,
+        `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}/${syllabusId}`,
         data
       );
       
@@ -157,10 +157,10 @@ const syllabusService = {
     }
   },
 
-  async delete(schoolId: string, syllabusId: string): Promise<void> {
+  async delete(institutionId: string, syllabusId: string): Promise<void> {
     try {
       const response = await apiService.delete<ApiResponse<void>>(
-        `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}/${syllabusId}`
+        `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}/${syllabusId}`
       );
       
       if (!response.success) {
@@ -173,14 +173,14 @@ const syllabusService = {
   },
 
   async markTopicComplete(
-    schoolId: string,
+    institutionId: string,
     syllabusId: string,
     topicId: string,
     isCompleted: boolean
   ): Promise<Syllabus> {
     try {
       const response = await apiService.patch<ApiResponse<Syllabus>>(
-        `${API_ENDPOINTS.SYLLABI.replace(':schoolId', schoolId)}/${syllabusId}/topic`,
+        `${API_ENDPOINTS.SYLLABI.replace(':institutionId', institutionId)}/${syllabusId}/topic`,
         { topicId, isCompleted }
       );
       

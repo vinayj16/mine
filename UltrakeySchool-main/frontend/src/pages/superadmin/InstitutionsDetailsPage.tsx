@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, Link, useLocation } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { getInstitutionConfigFromPath } from '../../utils/institutionUtils'
 import { apiService } from '../../services/api'
+import superAdminService from '../../services/superAdminService'
+import branchService from '../../services/branchService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
-interface Branch {
+interface BranchItem {
+  _id: string
   id: string
   name: string
   code: string
@@ -11,7 +16,17 @@ interface Branch {
   city: string
   state: string
   students: number
-  status: 'Active' | 'Suspended'
+  status: string
+}
+
+interface BillingEntry {
+  _id: string
+  date: string
+  description: string
+  amount: number
+  amountFormatted: string
+  status: string
+  method: string
 }
 
 interface School {
@@ -36,116 +51,209 @@ interface School {
   lastLogin: string
 }
 
+const formatAddress = (addr: any): string => {
+  if (!addr) return ''
+  if (typeof addr === 'string') return addr
+  return [addr.street, addr.city, addr.state, addr.country, addr.postalCode].filter(Boolean).join(', ')
+}
+
+const extract = (obj: any, field: string, fallback = '') => {
+  if (!obj) return fallback
+  if (typeof obj === 'object') return obj[field] || fallback
+  return obj || fallback
+}
+
 const InstitutionsDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const institutionConfig = getInstitutionConfigFromPath(location.pathname)
-  
-  // Get institution by ID and type from the current path
-  // const institutionType = location.pathname.includes('/inter-colleges') ? 'inter-colleges' : 
-  //                         location.pathname.includes('/degree-colleges') ? 'degree-colleges' : 'schools'
-  
+
   const [school, setSchool] = useState<School | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState('overview')
 
+  // Branches state
+  const [branches, setBranches] = useState<BranchItem[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+
+  // Billing state
+  const [billingEntries, setBillingEntries] = useState<BillingEntry[]>([])
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  const [receiptEntry, setReceiptEntry] = useState<BillingEntry | null>(null)
+
+  // Fetch institution
   useEffect(() => {
-    const fetchSchool = async () => {
+    const fetchInstitution = async () => {
       try {
         setLoading(true)
         setError(null)
-        
-        // Fetch school from API based on institution type
-        const response = await apiService.get(`/schools/${id}`)
-        
-        if (response.success && response.data) {
-          setSchool(response.data as School)
-        } else {
-          setError('Failed to fetch school details')
-        }
+        const data: any = await superAdminService.getInstitutionById(id!)
+        setSchool({
+          id: data._id || data.id || '',
+          name: data.name || '',
+          type: data.type || '',
+          plan: typeof data.plan === 'string' ? data.plan : (data.plan?.name || 'Basic'),
+          status: typeof data.status === 'string' ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Active',
+          expiryDate: data.subscriptionExpiry || data.expiryDate || data.subscription?.endDate || '',
+          students: data.analytics?.totalStudents || data.currentUsers || data.students || 0,
+          monthlyRevenue: data.subscription?.monthlyCost || data._monthlyRevenue || 0,
+          totalRevenue: data.totalRevenue || 0,
+          adminName: data.adminName || data.contactPerson || data.principalName || data.contact?.name || '',
+          adminEmail: data.email || data.contactEmail || data.principalEmail || data.contact?.email || '',
+          adminPhone: data.phone || data.contactPhone || data.principalPhone || data.contact?.phone || '',
+          address: formatAddress(data.address || data.contact?.address),
+          city: extract(data.address || data.contact?.address, 'city', data.city || ''),
+          state: extract(data.address || data.contact?.address, 'state', data.state || ''),
+          country: extract(data.address || data.contact?.address, 'country', data.country || ''),
+          postalCode: extract(data.address || data.contact?.address, 'postalCode', data.postalCode || ''),
+          createdAt: data.createdAt || '',
+          lastLogin: data.lastLogin || ''
+        })
       } catch (err) {
-        console.error('Error fetching school:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch school details')
+        console.error('Error fetching institution:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch institution details')
       } finally {
         setLoading(false)
       }
     }
-
-    if (id) {
-      fetchSchool()
-    }
+    if (id) fetchInstitution()
   }, [id])
 
-  const [branches, setBranches] = useState<Branch[]>([])
+  // Fetch branches
+  const fetchBranches = useCallback(async () => {
+    if (!id) return
+    try {
+      setBranchesLoading(true)
+      const branchData: any = await branchService.getBranchesByInstitution(id)
+      const rawBranches = Array.isArray(branchData) ? branchData : (branchData?.branches || [])
+      setBranches(rawBranches.map((b: any) => ({
+        _id: b._id || b.id || '',
+        id: b.id || b._id || '',
+        name: b.name || '',
+        code: b.code || '',
+        address: formatAddress(b.address),
+        city: extract(b.address, 'city', b.city || ''),
+        state: extract(b.address, 'state', b.state || ''),
+        students: b.students || 0,
+        status: typeof b.status === 'string' ? b.status.charAt(0).toUpperCase() + b.status.slice(1) : 'Active'
+      })))
+    } catch (err) {
+      console.error('Error fetching branches:', err)
+      setBranches([])
+    } finally {
+      setBranchesLoading(false)
+    }
+  }, [id])
 
   useEffect(() => {
-    const fetchBranches = async () => {
+    fetchBranches()
+  }, [fetchBranches])
+
+  // Fetch billing history
+  useEffect(() => {
+    const fetchBilling = async () => {
+      if (!id) return
       try {
-        const response = await apiService.get(`/schools/${id}/branches`)
+        setBillingLoading(true)
+        // Try to fetch transactions from finance endpoint scoped to this institution
+        const response: any = await apiService.get(`/finance/transactions`, {
+          institutionId: id,
+          limit: 20
+        })
+
+        let transactions: any[] = []
         if (response.success && response.data) {
-          setBranches(Array.isArray(response.data) ? response.data : [])
+          if (Array.isArray(response.data)) {
+            transactions = response.data
+          } else if (response.data.transactions) {
+            transactions = response.data.transactions
+          } else if (response.data.data && Array.isArray(response.data.data)) {
+            transactions = response.data.data
+          }
         }
-      } catch (err) {
-        console.error('Error fetching branches:', err)
-        setBranches([])
-      }
-    }
 
-    if (id) {
-      fetchBranches()
-    }
-  }, [id])
-
-  const handleEditBranch = (branchId: string) => {
-    console.log('Edit branch:', branchId)
-    // Navigate to edit page or open modal
-  }
-
-  const handleViewDetails = (branchId: string) => {
-    console.log('View branch details:', branchId)
-    // Navigate to branch details page or open modal
-  }
-
-  const handleManageStudents = (branchId: string) => {
-    console.log('Manage students for branch:', branchId)
-    // Navigate to students management page for this branch
-  }
-
-  const handleDeactivateBranch = async (branchId: string) => {
-    if (window.confirm('Are you sure you want to deactivate this branch? This action cannot be undone.')) {
-      try {
-        const response = await apiService.patch(`/schools/${id}/branches/${branchId}/toggle-status`)
-        if (response.success) {
-          // Refresh branches list
-          const branchesResponse = await apiService.get(`/schools/${id}/branches`)
-          if (branchesResponse.success && branchesResponse.data) {
-            setBranches(branchesResponse.data as Branch[])
+        if (transactions.length > 0) {
+          setBillingEntries(transactions.map((t: any) => ({
+            _id: t._id || t.id || '',
+            date: t.date || t.createdAt || t.processedAt || '',
+            description: t.description || t.note || `Transaction - ${t.type || t.category || 'Payment'}`,
+            amount: t.amount || 0,
+            amountFormatted: new Intl.NumberFormat('en-IN', { style: 'currency', currency: t.currency || 'INR', minimumFractionDigits: 2 }).format(t.amount || 0),
+            status: t.status ? t.status.charAt(0).toUpperCase() + t.status.slice(1) : 'Completed',
+            method: t.method || t.paymentMethod || t.type || 'Bank Transfer'
+          })))
+        } else {
+          // Fall back to showing subscription-related billing info from the institution
+          const instData: any = await superAdminService.getInstitutionById(id)
+          const sub = instData?.subscription
+          if (sub) {
+            const entries: BillingEntry[] = []
+            if (sub.startDate) {
+              entries.push({
+                _id: 'sub-start',
+                date: sub.startDate,
+                description: `Subscription Started - ${sub.planName || sub.planId || 'Plan'}`,
+                amount: sub.monthlyCost || 0,
+                amountFormatted: new Intl.NumberFormat('en-IN', { style: 'currency', currency: sub.currency || 'INR', minimumFractionDigits: 2 }).format(sub.monthlyCost || 0),
+                status: 'Active',
+                method: 'Auto Debit'
+              })
+            }
+            if (sub.endDate) {
+              entries.push({
+                _id: 'sub-end',
+                date: sub.endDate,
+                description: `Subscription ${sub.planName || 'Plan'} - Next Billing`,
+                amount: sub.monthlyCost || 0,
+                amountFormatted: new Intl.NumberFormat('en-IN', { style: 'currency', currency: sub.currency || 'INR', minimumFractionDigits: 2 }).format(sub.monthlyCost || 0),
+                status: 'Upcoming',
+                method: 'Auto Debit'
+              })
+            }
+            setBillingEntries(entries)
           }
         }
       } catch (err) {
-        console.error('Error deactivating branch:', err)
+        console.error('Error fetching billing history:', err)
+        setBillingEntries([])
+      } finally {
+        setBillingLoading(false)
       }
     }
+    if (id && activeTab === 'billing') fetchBilling()
+  }, [id, activeTab])
+
+  const handleDeactivateBranch = (branchId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'deactivate', id: branchId })
   }
 
-  const handleDeleteBranch = async (branchId: string) => {
-    if (window.confirm('Are you sure you want to delete this branch? This action cannot be undone.')) {
-      try {
-        const response = await apiService.delete(`/schools/${id}/branches/${branchId}`)
-        if (response.success) {
-          // Refresh branches list
-          const branchesResponse = await apiService.get(`/schools/${id}/branches`)
-          if (branchesResponse.success && branchesResponse.data) {
-            setBranches(branchesResponse.data as Branch[])
-          }
-        }
-      } catch (err) {
-        console.error('Error deleting branch:', err)
+  const handleDeleteBranch = (branchId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'delete', id: branchId })
+  }
+
+  const handleConfirmAction = async () => {
+    if (!deleteTarget) return
+    try {
+      if (deleteTarget.type === 'deactivate') {
+        await branchService.suspendBranch(deleteTarget.id, 'Deactivated by super admin')
+        fetchBranches()
+      } else if (deleteTarget.type === 'delete') {
+        await branchService.deleteBranch(deleteTarget.id)
+        fetchBranches()
       }
+    } catch (err) {
+      console.error('Error performing action:', err)
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
-
-  const [activeTab, setActiveTab] = useState('overview')
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -155,15 +263,6 @@ const InstitutionsDetailsPage: React.FC = () => {
       default: return 'secondary'
     }
   }
-
-  // const getPlanColor = (plan: string) => {
-  //   switch (plan) {
-  //     case 'Premium': return 'danger'
-  //     case 'Medium': return 'warning'
-  //     case 'Basic': return 'info'
-  //     default: return 'secondary'
-  //   }
-  // }
 
   if (loading) {
     return (
@@ -180,9 +279,7 @@ const InstitutionsDetailsPage: React.FC = () => {
       <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
         <div className="text-center">
           <div className="alert alert-danger">{error}</div>
-          <button className="btn btn-primary" onClick={() => window.location.reload()}>
-            Retry
-          </button>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Retry</button>
         </div>
       </div>
     )
@@ -192,10 +289,8 @@ const InstitutionsDetailsPage: React.FC = () => {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{ height: '50vh' }}>
         <div className="text-center">
-          <div className="alert alert-warning">School not found</div>
-          <Link to={institutionConfig?.basePath || '/super-admin/institutions'} className="btn btn-primary">
-            Back to Institutions
-          </Link>
+          <div className="alert alert-warning">Institution not found</div>
+          <Link to="/super-admin/institutions" className="btn btn-primary">Back to Institutions</Link>
         </div>
       </div>
     )
@@ -209,47 +304,33 @@ const InstitutionsDetailsPage: React.FC = () => {
           <h3 className="page-title mb-1">{institutionConfig?.singularName || 'Institution'} Details</h3>
           <nav>
             <ol className="breadcrumb mb-0">
+              <li className="breadcrumb-item"><Link to="/super-admin/institutions">Institutions</Link></li>
               <li className="breadcrumb-item">
-                <Link to="/super-admin/institutions">Institutions</Link>
+                <Link to={institutionConfig?.basePath || '/super-admin/institutions'}>{institutionConfig?.name || 'Institutions'}</Link>
               </li>
-              <li className="breadcrumb-item">
-                <Link to={institutionConfig?.basePath || '#'}>{institutionConfig?.name || 'Institutions'}</Link>
-              </li>
-              <li className="breadcrumb-item">
-                <Link to={`${institutionConfig?.basePath || '#'}/${id}`}>{school.name}</Link>
-              </li>
-              <li className="breadcrumb-item active" aria-current="page">Details</li>
+              <li className="breadcrumb-item active" aria-current="page">{school.name}</li>
             </ol>
           </nav>
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <Link to={institutionConfig?.basePath || '/super-admin/institutions'} className="btn btn-outline-light bg-white btn-icon me-1">
+            <Link to="/super-admin/institutions" className="btn btn-outline-light bg-white btn-icon me-1">
               <i className="ti ti-arrow-left"></i>
             </Link>
           </div>
           <div className="dropdown me-2 mb-2">
             <button className="btn btn-light fw-medium dropdown-toggle" data-bs-toggle="dropdown">
-              <i className="ti ti-file-export me-2"></i>
-              Export
+              <i className="ti ti-file-export me-2"></i>Export
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
-              <li>
-                <button className="dropdown-item">
-                  <i className="ti ti-file-type-pdf me-2"></i>Export as PDF
-                </button>
-              </li>
-              <li>
-                <button className="dropdown-item">
-                  <i className="ti ti-file-type-xls me-2"></i>Export as Excel
-                </button>
-              </li>
+              <li><button className="dropdown-item"><i className="ti ti-file-type-pdf me-2"></i>Export as PDF</button></li>
+              <li><button className="dropdown-item"><i className="ti ti-file-type-xls me-2"></i>Export as Excel</button></li>
             </ul>
           </div>
         </div>
       </div>
 
-      {/* School Overview Card */}
+      {/* Institution Overview Card */}
       <div className="row mb-4">
         <div className="col-12">
           <div className="card">
@@ -297,7 +378,7 @@ const InstitutionsDetailsPage: React.FC = () => {
                       <i className="ti ti-calendar text-info"></i>
                     </div>
                     <div>
-                      <h4 className="mb-1">{school.expiryDate}</h4>
+                      <h4 className="mb-1">{school.expiryDate ? new Date(school.expiryDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</h4>
                       <p className="text-muted mb-0">Expiry Date</p>
                     </div>
                   </div>
@@ -314,50 +395,27 @@ const InstitutionsDetailsPage: React.FC = () => {
           <div className="card">
             <div className="card-header">
               <ul className="nav nav-tabs nav-tabs-line mb-0" role="tablist">
-                <li className="nav-item">
-                  <button 
-                    className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('overview')}
-                  >
-                    Overview
-                  </button>
-                </li>
-                <li className="nav-item">
-                  <button 
-                    className={`nav-link ${activeTab === 'branches' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('branches')}
-                  >
-                    Branches
-                  </button>
-                </li>
-                <li className="nav-item">
-                  <button 
-                    className={`nav-link ${activeTab === 'details' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('details')}
-                  >
-                    Contact Details
-                  </button>
-                </li>
-                <li className="nav-item">
-                  <button 
-                    className={`nav-link ${activeTab === 'usage' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('usage')}
-                  >
-                    Usage Analytics
-                  </button>
-                </li>
-                <li className="nav-item">
-                  <button 
-                    className={`nav-link ${activeTab === 'billing' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('billing')}
-                  >
-                    Billing History
-                  </button>
-                </li>
+                {[ 
+                  { key: 'overview', label: 'Overview' },
+                  { key: 'branches', label: 'Branches' },
+                  { key: 'details', label: 'Contact Details' },
+                  { key: 'usage', label: 'Usage Analytics' },
+                  { key: 'billing', label: 'Billing History' }
+                ].map(tab => (
+                  <li className="nav-item" key={tab.key}>
+                    <button
+                      className={`nav-link ${activeTab === tab.key ? 'active' : ''}`}
+                      onClick={() => setActiveTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="card-body">
-              {/* Overview Tab */}
+
+              {/* ========== Overview Tab ========== */}
               {activeTab === 'overview' && (
                 <div className="row">
                   <div className="col-md-3">
@@ -365,7 +423,7 @@ const InstitutionsDetailsPage: React.FC = () => {
                       <div className="card-body">
                         <div className="d-flex align-items-center justify-content-between">
                           <div>
-                            <h4 className="text-white mb-1">{school.students}</h4>
+                            <h4 className="text-white mb-1">{school.students.toLocaleString()}</h4>
                             <p className="text-white mb-0">Total Students</p>
                           </div>
                           <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -380,7 +438,7 @@ const InstitutionsDetailsPage: React.FC = () => {
                       <div className="card-body">
                         <div className="d-flex align-items-center justify-content-between">
                           <div>
-                            <h4 className="text-white mb-1">${school.monthlyRevenue}</h4>
+                            <h4 className="text-white mb-1">₹{school.monthlyRevenue.toLocaleString('en-IN')}</h4>
                             <p className="text-white mb-0">Monthly Revenue</p>
                           </div>
                           <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -395,7 +453,7 @@ const InstitutionsDetailsPage: React.FC = () => {
                       <div className="card-body">
                         <div className="d-flex align-items-center justify-content-between">
                           <div>
-                            <h4 className="text-white mb-1">${school.totalRevenue}</h4>
+                            <h4 className="text-white mb-1">₹{school.totalRevenue.toLocaleString('en-IN')}</h4>
                             <p className="text-white mb-0">Total Revenue</p>
                           </div>
                           <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -410,7 +468,9 @@ const InstitutionsDetailsPage: React.FC = () => {
                       <div className="card-body">
                         <div className="d-flex align-items-center justify-content-between">
                           <div>
-                            <h4 className="text-white mb-1">{school.createdAt}</h4>
+                            <h4 className="text-white mb-1">
+                              {school.createdAt ? new Date(school.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}
+                            </h4>
                             <p className="text-white mb-0">Member Since</p>
                           </div>
                           <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -423,7 +483,7 @@ const InstitutionsDetailsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Contact Details Tab */}
+              {/* ========== Contact Details Tab ========== */}
               {activeTab === 'details' && (
                 <div className="row">
                   <div className="col-md-6">
@@ -433,20 +493,20 @@ const InstitutionsDetailsPage: React.FC = () => {
                       </div>
                       <div className="card-body">
                         <div className="mb-3">
-                          <label className="form-label">Email Address</label>
-                          <div className="form-control">{school.adminEmail}</div>
+                          <label className="form-label text-muted small">Admin Name</label>
+                          <div className="fw-medium">{school.adminName || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">Phone Number</label>
-                          <div className="form-control">{school.adminPhone}</div>
+                          <label className="form-label text-muted small">Email Address</label>
+                          <div className="fw-medium">{school.adminEmail || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">Website</label>
-                          <div className="form-control">
-                            <a href="#" target="_blank" rel="noopener noreferrer">
-                              {school.adminEmail}
-                            </a>
-                          </div>
+                          <label className="form-label text-muted small">Phone Number</label>
+                          <div className="fw-medium">{school.adminPhone || '-'}</div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="form-label text-muted small">Institution Type</label>
+                          <div className="fw-medium">{school.type || '-'}</div>
                         </div>
                       </div>
                     </div>
@@ -458,24 +518,24 @@ const InstitutionsDetailsPage: React.FC = () => {
                       </div>
                       <div className="card-body">
                         <div className="mb-3">
-                          <label className="form-label">Address</label>
-                          <div className="form-control">{school.address}</div>
+                          <label className="form-label text-muted small">Address</label>
+                          <div className="fw-medium">{school.address || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">City</label>
-                          <div className="form-control">{school.city}</div>
+                          <label className="form-label text-muted small">City</label>
+                          <div className="fw-medium">{school.city || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">State</label>
-                          <div className="form-control">{school.state}</div>
+                          <label className="form-label text-muted small">State</label>
+                          <div className="fw-medium">{school.state || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">Country</label>
-                          <div className="form-control">{school.country}</div>
+                          <label className="form-label text-muted small">Country</label>
+                          <div className="fw-medium">{school.country || '-'}</div>
                         </div>
                         <div className="mb-3">
-                          <label className="form-label">Postal Code</label>
-                          <div className="form-control">{school.postalCode}</div>
+                          <label className="form-label text-muted small">Postal Code</label>
+                          <div className="fw-medium">{school.postalCode || '-'}</div>
                         </div>
                       </div>
                     </div>
@@ -483,76 +543,99 @@ const InstitutionsDetailsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Branches Tab */}
+              {/* ========== Branches Tab ========== */}
               {activeTab === 'branches' && (
                 <div className="row">
                   <div className="col-12">
                     <div className="card">
-                      <div className="card-header">
-                        <h5 className="card-title">Branch Management</h5>
+                      <div className="card-header d-flex justify-content-between align-items-center">
+                        <h5 className="card-title mb-0">Branch Management</h5>
+                        <span className="badge bg-primary">{branches.length} Branches</span>
                       </div>
                       <div className="card-body">
-                        <div className="table-responsive">
-                          <table className="table table-hover">
-                            <thead>
-                              <tr>
-                                <th>Branch Name</th>
-                                <th>Branch Code</th>
-                                <th>Address</th>
-                                <th>City</th>
-                                <th>State</th>
-                                <th>Students Count</th>
-                                <th>Status</th>
-                                <th className="text-center">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {branches.map((branch) => (
-                                <tr key={branch.id}>
-                                  <td>{branch.name}</td>
-                                  <td>{branch.code}</td>
-                                  <td>{branch.address}</td>
-                                  <td>{branch.city}</td>
-                                  <td>{branch.state}</td>
-                                  <td>{branch.students}</td>
-                                  <td>
-                                    <span className={`badge bg-${branch.status === 'Active' ? 'success' : branch.status === 'Suspended' ? 'warning' : 'secondary'}`}>
-                                      {branch.status}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <div className="dropdown">
-                                      <button className="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
-                                        <i className="ti ti-dots-vertical"></i>
-                                      </button>
-                                      <ul className="dropdown-menu dropdown-menu-end">
-                                        <li><button className="dropdown-item" onClick={() => handleEditBranch(branch.id)}>Edit Branch</button></li>
-                                        <li><button className="dropdown-item" onClick={() => handleViewDetails(branch.id)}>View Details</button></li>
-                                        <li><button className="dropdown-item" onClick={() => handleManageStudents(branch.id)}>Manage Students</button></li>
-                                        <li><hr className="dropdown-divider" /></li>
-                                        <li><button className="dropdown-item" onClick={() => handleDeactivateBranch(branch.id)}>Deactivate Branch</button></li>
-                                        <li><button className="dropdown-item text-danger" onClick={() => handleDeleteBranch(branch.id)}>Delete Branch</button></li>
-                                      </ul>
-                                    </div>
-                                  </td>
+                        {branchesLoading ? (
+                          <div className="text-center py-4">
+                            <div className="spinner-border spinner-border-sm text-primary" role="status">
+                              <span className="visually-hidden">Loading...</span>
+                            </div>
+                            <p className="text-muted mt-2 mb-0">Loading branches...</p>
+                          </div>
+                        ) : branches.length === 0 ? (
+                          <div className="text-center py-4">
+                            <i className="ti ti-building-warehouse text-muted" style={{ fontSize: '3rem' }}></i>
+                            <p className="text-muted mt-2">No branches found for this institution</p>
+                          </div>
+                        ) : (
+                          <div className="table-responsive">
+                            <table className="table table-hover">
+                              <thead>
+                                <tr>
+                                  <th>Branch Name</th>
+                                  <th>Code</th>
+                                  <th>Address</th>
+                                  <th>City</th>
+                                  <th>State</th>
+                                  <th>Students</th>
+                                  <th>Status</th>
+                                  <th className="text-center">Actions</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="mt-3">
-                          <button className="btn btn-primary">
-                            <i className="ti ti-plus me-2"></i>
-                            Add New Branch
-                          </button>
-                        </div>
+                              </thead>
+                              <tbody>
+                                {branches.map((branch) => (
+                                  <tr key={branch._id}>
+                                    <td className="fw-medium">{branch.name}</td>
+                                    <td><code>{branch.code}</code></td>
+                                    <td>{branch.address || '-'}</td>
+                                    <td>{branch.city || '-'}</td>
+                                    <td>{branch.state || '-'}</td>
+                                    <td>{branch.students}</td>
+                                    <td>
+                                      <span className={`badge bg-${branch.status === 'Active' ? 'success' : branch.status === 'Suspended' ? 'warning' : 'secondary'}`}>
+                                        {branch.status}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <div className="dropdown">
+                                        <button className="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                                          <i className="ti ti-dots-vertical"></i>
+                                        </button>
+                                        <ul className="dropdown-menu dropdown-menu-end">
+                                          <li><button className="dropdown-item" onClick={() => navigate(`/super-admin/branches/${branch._id}/edit`)}>Edit Branch</button></li>
+                                          <li><button className="dropdown-item" onClick={() => navigate(`/super-admin/branches/${branch._id}`)}>View Details</button></li>
+                                          <li><button className="dropdown-item" onClick={() => navigate(`/super-admin/branches/${branch._id}/students`)}>Manage Students</button></li>
+                                          <li><hr className="dropdown-divider" /></li>
+                                          <li>
+                                            <button
+                                              className="dropdown-item"
+                                              onClick={() => handleDeactivateBranch(branch._id)}
+                                            >
+                                              {branch.status === 'Active' ? 'Deactivate Branch' : 'Activate Branch'}
+                                            </button>
+                                          </li>
+                                          <li>
+                                            <button
+                                              className="dropdown-item text-danger"
+                                              onClick={() => handleDeleteBranch(branch._id)}
+                                            >
+                                              Delete Branch
+                                            </button>
+                                          </li>
+                                        </ul>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Usage Analytics Tab */}
+              {/* ========== Usage Analytics Tab ========== */}
               {activeTab === 'usage' && (
                 <div className="row">
                   <div className="col-12">
@@ -561,18 +644,18 @@ const InstitutionsDetailsPage: React.FC = () => {
                         <h5 className="card-title">Usage Analytics</h5>
                       </div>
                       <div className="card-body">
-                        {/* Storage Usage Overview */}
+                        {/* Key Metrics */}
                         <div className="row mb-4">
                           <div className="col-md-3">
                             <div className="card bg-primary">
                               <div className="card-body">
                                 <div className="d-flex align-items-center justify-content-between">
                                   <div>
-                                    <h4 className="text-white mb-1">75.2 GB</h4>
-                                    <p className="text-white mb-0">Total Storage</p>
+                                    <h4 className="text-white mb-1">{school.students.toLocaleString()}</h4>
+                                    <p className="text-white mb-0">Total Users</p>
                                   </div>
                                   <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                                    <i className="ti ti-database text-white fs-4"></i>
+                                    <i className="ti ti-users text-white fs-4"></i>
                                   </div>
                                 </div>
                               </div>
@@ -583,11 +666,11 @@ const InstitutionsDetailsPage: React.FC = () => {
                               <div className="card-body">
                                 <div className="d-flex align-items-center justify-content-between">
                                   <div>
-                                    <h4 className="text-white mb-1">56.8 GB</h4>
-                                    <p className="text-white mb-0">Used Storage</p>
+                                    <h4 className="text-white mb-1">{branches.length}</h4>
+                                    <p className="text-white mb-0">Active Branches</p>
                                   </div>
                                   <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                                    <i className="ti ti-hard-drive text-white fs-4"></i>
+                                    <i className="ti ti-building-community text-white fs-4"></i>
                                   </div>
                                 </div>
                               </div>
@@ -598,11 +681,13 @@ const InstitutionsDetailsPage: React.FC = () => {
                               <div className="card-body">
                                 <div className="d-flex align-items-center justify-content-between">
                                   <div>
-                                    <h4 className="text-white mb-1">18.4 GB</h4>
-                                    <p className="text-white mb-0">Available</p>
+                                    <h4 className="text-white mb-1">
+                                      {school.plan ? `${school.plan.charAt(0).toUpperCase() + school.plan.slice(1)}` : 'N/A'}
+                                    </h4>
+                                    <p className="text-white mb-0">Plan Tier</p>
                                   </div>
                                   <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                                    <i className="ti ti-database-export text-white fs-4"></i>
+                                    <i className="ti ti-crown text-white fs-4"></i>
                                   </div>
                                 </div>
                               </div>
@@ -613,11 +698,13 @@ const InstitutionsDetailsPage: React.FC = () => {
                               <div className="card-body">
                                 <div className="d-flex align-items-center justify-content-between">
                                   <div>
-                                    <h4 className="text-white mb-1">75.5%</h4>
-                                    <p className="text-white mb-0">Usage Rate</p>
+                                    <h4 className="text-white mb-1">
+                                      {school.createdAt ? new Date(school.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' }) : '-'}
+                                    </h4>
+                                    <p className="text-white mb-0">Member Since</p>
                                   </div>
                                   <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                                    <i className="ti ti-chart-pie text-white fs-4"></i>
+                                    <i className="ti ti-calendar-time text-white fs-4"></i>
                                   </div>
                                 </div>
                               </div>
@@ -625,81 +712,49 @@ const InstitutionsDetailsPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Storage Breakdown */}
+                        {/* Activity & Plan Details */}
                         <div className="row mb-4">
                           <div className="col-md-6">
                             <div className="card">
                               <div className="card-header">
-                                <h6 className="card-title mb-0">Storage Breakdown</h6>
+                                <h6 className="card-title mb-0">Plan Details</h6>
                               </div>
                               <div className="card-body">
-                                <div className="mb-3">
-                                  <div className="d-flex justify-content-between align-items-center mb-2">
-                                    <span>Documents</span>
-                                    <span className="fw-medium">22.4 GB</span>
-                                  </div>
-                                  <div className="progress" style={{ height: '8px' }}>
-                                    <div 
-                                      className="progress-bar bg-primary" 
-                                      style={{ width: '39.4%' }}
-                                    ></div>
-                                  </div>
-                                </div>
-                                <div className="mb-3">
-                                  <div className="d-flex justify-content-between align-items-center mb-2">
-                                    <span>Images</span>
-                                    <span className="fw-medium">18.7 GB</span>
-                                  </div>
-                                  <div className="progress" style={{ height: '8px' }}>
-                                    <div 
-                                      className="progress-bar bg-success" 
-                                      style={{ width: '32.9%' }}
-                                    ></div>
-                                  </div>
-                                </div>
-                                <div className="mb-3">
-                                  <div className="d-flex justify-content-between align-items-center mb-2">
-                                    <span>Videos</span>
-                                    <span className="fw-medium">12.1 GB</span>
-                                  </div>
-                                  <div className="progress" style={{ height: '8px' }}>
-                                    <div 
-                                      className="progress-bar bg-warning" 
-                                      style={{ width: '21.3%' }}
-                                    ></div>
-                                  </div>
-                                </div>
-                                <div className="mb-3">
-                                  <div className="d-flex justify-content-between align-items-center mb-2">
-                                    <span>Database</span>
-                                    <span className="fw-medium">3.6 GB</span>
-                                  </div>
-                                  <div className="progress" style={{ height: '8px' }}>
-                                    <div 
-                                      className="progress-bar bg-danger" 
-                                      style={{ width: '6.3%' }}
-                                    ></div>
-                                  </div>
-                                </div>
-                                <div className="mb-0">
-                                  <div className="d-flex justify-content-between align-items-center mb-2">
-                                    <span>Other Files</span>
-                                    <span className="fw-medium">0.4 GB</span>
-                                  </div>
-                                  <div className="progress" style={{ height: '8px' }}>
-                                    <div 
-                                      className="progress-bar bg-info" 
-                                      style={{ width: '0.7%' }}
-                                    ></div>
-                                  </div>
-                                </div>
+                                <table className="table table-sm">
+                                  <tbody>
+                                    <tr>
+                                      <td className="text-muted">Plan</td>
+                                      <td className="fw-medium">{school.plan}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-muted">Monthly Cost</td>
+                                      <td className="fw-medium">₹{school.monthlyRevenue.toLocaleString('en-IN')}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-muted">Status</td>
+                                      <td><span className={`badge bg-${getStatusColor(school.status)}`}>{school.status}</span></td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-muted">Expiry</td>
+                                      <td className="fw-medium">
+                                        {school.expiryDate ? new Date(school.expiryDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}
+                                      </td>
+                                    </tr>
+                                    <tr>
+                                      <td className="text-muted">Last Login</td>
+                                      <td className="fw-medium">
+                                        {school.lastLogin ? new Date(school.lastLogin).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           </div>
                           <div className="col-md-6">
                             <div className="card">
                               <div className="card-header">
-                                <h6 className="card-title mb-0">Activity Metrics</h6>
+                                <h6 className="card-title mb-0">Activity Overview</h6>
                               </div>
                               <div className="card-body">
                                 <div className="table-responsive">
@@ -707,35 +762,25 @@ const InstitutionsDetailsPage: React.FC = () => {
                                     <thead>
                                       <tr>
                                         <th>Metric</th>
-                                        <th>This Month</th>
-                                        <th>Last Month</th>
-                                        <th>Trend</th>
+                                        <th>Value</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       <tr>
-                                        <td>API Calls</td>
-                                        <td>45,231</td>
-                                        <td>38,945</td>
-                                        <td><span className="badge bg-success">+16.2%</span></td>
+                                        <td>Total Students</td>
+                                        <td className="fw-medium">{school.students.toLocaleString()}</td>
                                       </tr>
                                       <tr>
-                                        <td>File Uploads</td>
-                                        <td>1,247</td>
-                                        <td>1,089</td>
-                                        <td><span className="badge bg-success">+14.5%</span></td>
+                                        <td>Total Branches</td>
+                                        <td className="fw-medium">{branches.length}</td>
                                       </tr>
                                       <tr>
-                                        <td>User Logins</td>
-                                        <td>8,934</td>
-                                        <td>7,656</td>
-                                        <td><span className="badge bg-success">+16.7%</span></td>
+                                        <td>Admin Contact</td>
+                                        <td className="fw-medium">{school.adminEmail || '-'}</td>
                                       </tr>
                                       <tr>
-                                        <td>Data Transfer</td>
-                                        <td>124.7 GB</td>
-                                        <td>108.3 GB</td>
-                                        <td><span className="badge bg-success">+15.1%</span></td>
+                                        <td>Institution Type</td>
+                                        <td className="fw-medium">{school.type || '-'}</td>
                                       </tr>
                                     </tbody>
                                   </table>
@@ -750,61 +795,68 @@ const InstitutionsDetailsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Billing History Tab */}
+              {/* ========== Billing History Tab ========== */}
               {activeTab === 'billing' && (
                 <div className="row">
                   <div className="col-12">
                     <div className="card">
-                      <div className="card-header">
-                        <h5 className="card-title">Billing History</h5>
+                      <div className="card-header d-flex justify-content-between align-items-center">
+                        <h5 className="card-title mb-0">Billing History</h5>
+                        {!billingLoading && billingEntries.length > 0 && (
+                          <span className="badge bg-primary">{billingEntries.length} Records</span>
+                        )}
                       </div>
                       <div className="card-body">
-                        <div className="table-responsive">
-                          <table className="table table-hover">
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                <th>Description</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Method</th>
-                                <th>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td>2024-06-01</td>
-                                <td>Monthly Subscription - Premium Plan</td>
-                                <td>₹199.00</td>
-                                <td><span className="badge bg-success">Paid</span></td>
-                                <td>Credit Card</td>
-                                <td>
-                                  <button className="btn btn-sm btn-outline-primary">Receipt</button>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>2024-05-01</td>
-                                <td>Monthly Subscription - Premium Plan</td>
-                                <td>₹199.00</td>
-                                <td><span className="badge bg-success">Paid</span></td>
-                                <td>Credit Card</td>
-                                <td>
-                                  <button className="btn btn-sm btn-outline-primary">Receipt</button>
-                                </td>
-                              </tr>
-                              <tr>
-                                <td>2024-04-01</td>
-                                <td>Monthly Subscription - Premium Plan</td>
-                                <td>₹199.00</td>
-                                <td><span className="badge bg-success">Paid</span></td>
-                                <td>Credit Card</td>
-                                <td>
-                                  <button className="btn btn-sm btn-outline-primary">Receipt</button>
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
+                        {billingLoading ? (
+                          <div className="text-center py-4">
+                            <div className="spinner-border spinner-border-sm text-primary" role="status">
+                              <span className="visually-hidden">Loading...</span>
+                            </div>
+                            <p className="text-muted mt-2 mb-0">Loading billing history...</p>
+                          </div>
+                        ) : billingEntries.length === 0 ? (
+                          <div className="text-center py-4">
+                            <i className="ti ti-receipt text-muted" style={{ fontSize: '3rem' }}></i>
+                            <p className="text-muted mt-2">No billing records found</p>
+                          </div>
+                        ) : (
+                          <div className="table-responsive">
+                            <table className="table table-hover">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Description</th>
+                                  <th>Amount</th>
+                                  <th>Status</th>
+                                  <th>Method</th>
+                                  <th>Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {billingEntries.map((entry) => (
+                                  <tr key={entry._id}>
+                                    <td className="text-nowrap">
+                                      {entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                                    </td>
+                                    <td>{entry.description}</td>
+                                    <td className="fw-medium">{entry.amountFormatted}</td>
+                                    <td>
+                                      <span className={`badge bg-${entry.status === 'Paid' || entry.status === 'Completed' || entry.status === 'Active' ? 'success' : entry.status === 'Upcoming' ? 'info' : entry.status === 'Failed' ? 'danger' : 'secondary'}`}>
+                                        {entry.status}
+                                      </span>
+                                    </td>
+                                    <td>{entry.method}</td>
+                                    <td>
+                                      <button className="btn btn-sm btn-outline-primary" onClick={() => setReceiptEntry(entry)}>
+                                        <i className="ti ti-file-text me-1"></i>Receipt
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -814,6 +866,62 @@ const InstitutionsDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmAction} message={deleteTarget?.type === 'deactivate' ? 'Are you sure you want to deactivate this branch?' : 'Are you sure you want to delete this branch? This cannot be undone.'} />
+
+      {receiptEntry && (
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} tabIndex={-1} onClick={() => setReceiptEntry(null)}>
+          <div className="modal-dialog modal-dialog-centered modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title"><i className="ti ti-file-text me-2"></i>Payment Receipt</h5>
+                <button type="button" className="btn-close" onClick={() => setReceiptEntry(null)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="text-center mb-4 pb-3 border-bottom">
+                  <h4 className="mb-1">Receipt</h4>
+                  <small className="text-muted">#{receiptEntry._id.slice(-8).toUpperCase()}</small>
+                </div>
+                <div className="row mb-2">
+                  <div className="col-6 text-muted">Date</div>
+                  <div className="col-6 text-end fw-medium">{receiptEntry.date ? new Date(receiptEntry.date).toLocaleDateString('en-IN') : '-'}</div>
+                </div>
+                <div className="row mb-2">
+                  <div className="col-6 text-muted">Description</div>
+                  <div className="col-6 text-end fw-medium">{receiptEntry.description}</div>
+                </div>
+                <div className="row mb-2">
+                  <div className="col-6 text-muted">Amount</div>
+                  <div className="col-6 text-end fw-semibold fs-5">{receiptEntry.amountFormatted}</div>
+                </div>
+                <div className="row mb-2">
+                  <div className="col-6 text-muted">Payment Method</div>
+                  <div className="col-6 text-end fw-medium">{receiptEntry.method}</div>
+                </div>
+                <div className="row mb-3">
+                  <div className="col-6 text-muted">Status</div>
+                  <div className="col-6 text-end">
+                    <span className={`badge bg-${receiptEntry.status === 'Paid' || receiptEntry.status === 'Completed' || receiptEntry.status === 'Active' ? 'success' : receiptEntry.status === 'Upcoming' ? 'info' : receiptEntry.status === 'Failed' ? 'danger' : 'secondary'}`}>
+                      {receiptEntry.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-light p-3 rounded mt-3">
+                  <p className="mb-0 text-center text-muted small">
+                    <i className="ti ti-printer me-1"></i>
+                    Use browser print (Ctrl+P) to save or print this receipt.
+                  </p>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setReceiptEntry(null)}>Close</button>
+                <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+                  <i className="ti ti-printer me-1"></i>Print
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

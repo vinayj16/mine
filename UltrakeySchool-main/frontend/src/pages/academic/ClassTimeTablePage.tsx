@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { timetableService, type Timetable } from '../../services/timetableService';
 import apiClient from '../../api/client';
-
+import { getInstitutionId } from '../../utils/auth';
+ 
 interface ClassData {
   id: string;
   name: string;
@@ -19,7 +21,6 @@ interface Subject {
 interface Teacher {
   id: string;
   name: string;
-  // Assuming a 'name' property, adjust if the API returns something different
 }
 
 interface Period {
@@ -45,6 +46,11 @@ const ClassTimeTablePage: React.FC = () => {
 
   // State for Add/Edit Modals
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editTimetableId, setEditTimetableId] = useState<string | null>(null);
+  const [editPeriodIndex, setEditPeriodIndex] = useState<number>(-1);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{timetableId: string; period: any} | null>(null);
   const [addFormData, setAddFormData] = useState<Omit<Period & { day: string, classId: string }, 'id'>>({
     day: 'Monday',
     classId: '',
@@ -82,15 +88,30 @@ const ClassTimeTablePage: React.FC = () => {
 
   const fetchInitialData = async () => {
     try {
+      const instId = getInstitutionId();
       // Using Promise.all to fetch concurrently
       const [classesRes, subjectsRes, teachersRes] = await Promise.all([
-        apiClient.get('/classes'),
+        apiClient.get('/classes', { params: { institutionId: instId } }),
         apiClient.get('/subjects'),
         apiClient.get('/users?role=teacher'), // Assuming an endpoint for teachers
       ]);
-      if (classesRes.data?.data) setClasses(classesRes.data.data);
-      if (subjectsRes.data?.data) setSubjects(subjectsRes.data.data);
-      if (teachersRes.data?.data) setTeachers(teachersRes.data.data);
+      let loadedClasses: any[] = [];
+      if (Array.isArray(classesRes.data?.data)) loadedClasses = classesRes.data.data;
+      else if (Array.isArray(classesRes.data?.data?.data)) loadedClasses = classesRes.data.data.data;
+      else if (Array.isArray(classesRes.data?.data?.classes)) loadedClasses = classesRes.data.data.classes;
+      setClasses(loadedClasses.map((c: any) => ({ id: c._id || c.id, name: c.name || c.className, section: c.section || '' })));
+      
+      let loadedSubjects: any[] = [];
+      if (Array.isArray(subjectsRes.data?.data)) loadedSubjects = subjectsRes.data.data;
+      else if (Array.isArray(subjectsRes.data?.data?.data)) loadedSubjects = subjectsRes.data.data.data;
+      else if (Array.isArray(subjectsRes.data?.data?.subjects)) loadedSubjects = subjectsRes.data.data.subjects;
+      setSubjects(loadedSubjects.map((s: any) => ({ id: s._id || s.id, name: s.name || s.subjectName })));
+      
+      let loadedTeachers: any[] = [];
+      if (Array.isArray(teachersRes.data?.data)) loadedTeachers = teachersRes.data.data;
+      else if (Array.isArray(teachersRes.data?.data?.data)) loadedTeachers = teachersRes.data.data.data;
+      else if (Array.isArray(teachersRes.data?.data?.users)) loadedTeachers = teachersRes.data.data.users;
+      setTeachers(loadedTeachers.map((t: any) => ({ id: t._id || t.id, name: t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim() })));
     } catch (err) {
       console.error('Error fetching initial data:', err);
       toast.error('Failed to load necessary data. Please refresh.');
@@ -105,8 +126,26 @@ const ClassTimeTablePage: React.FC = () => {
     }
     try {
       setLoading(true);
-      const response = await timetableService.getAll({ classId: selectedClass });
-      setTimetables(response.data || []);
+      const response = await timetableService.getAll({ classId: selectedClass, institutionId: getInstitutionId() }) as any;
+      const timetablesData = Array.isArray(response) ? response : response?.timetables || [];
+      // Normalize backend format to frontend format
+      const normalized = timetablesData.map((tt: any) => ({
+        ...tt,
+        _id: tt._id,
+        day: tt.dayOfWeek || tt.day,
+        periods: (tt.periods || []).map((p: any) => ({
+          _id: p._id,
+          periodNumber: p.periodNumber,
+          startTime: p.startTime,
+          endTime: p.endTime,
+          subject: p.subjectId?.name || p.subjectId || p.subject || '',
+          subjectId: p.subjectId?._id || p.subjectId,
+          teacher: p.teacherId ? (p.teacherId.name || `${p.teacherId.firstName || ''} ${p.teacherId.lastName || ''}`.trim() || 'Teacher') : p.teacher || '',
+          teacherId: p.teacherId?._id || p.teacherId,
+          room: p.roomNumber || p.room || '',
+        })),
+      }));
+      setTimetables(normalized);
     } catch (error) {
       console.error('Error fetching timetables:', error);
       toast.error('Failed to load timetables');
@@ -124,6 +163,9 @@ const ClassTimeTablePage: React.FC = () => {
   };
 
   const handleOpenAddModal = () => {
+    setEditMode(false);
+    setEditTimetableId(null);
+    setEditPeriodIndex(-1);
     setAddFormData({
       classId: selectedClass,
       day: 'Monday',
@@ -137,6 +179,23 @@ const ClassTimeTablePage: React.FC = () => {
     setShowAddModal(true);
   };
 
+  const handleOpenEditModal = (timetableId: string, day: string, periodIdx: number, period: any) => {
+    setEditMode(true);
+    setEditTimetableId(timetableId);
+    setEditPeriodIndex(periodIdx);
+    setAddFormData({
+      classId: selectedClass,
+      day: day.charAt(0).toUpperCase() + day.slice(1),
+      periodNumber: period.periodNumber || 1,
+      subject: period.subjectId || period.subject || '',
+      teacher: period.teacherId || period.teacher || '',
+      startTime: period.startTime,
+      endTime: period.endTime,
+      room: period.room || '',
+    });
+    setShowAddModal(true);
+  };
+
   const handleAddPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addFormData.classId || !addFormData.subject || !addFormData.teacher) {
@@ -145,24 +204,93 @@ const ClassTimeTablePage: React.FC = () => {
     }
 
     try {
-      const { classId, day, ...periodData } = addFormData;
-      const selectedCls = classes.find(c => c.id === classId);
+      if (editMode && editTimetableId) {
+        const dayTimetable = timetables.find(tt => tt._id === editTimetableId);
+        if (!dayTimetable) throw new Error('Timetable not found');
+        const updatedPeriods = [...dayTimetable.periods];
+        updatedPeriods[editPeriodIndex] = {
+          ...updatedPeriods[editPeriodIndex],
+          subject: addFormData.subject,
+          teacher: addFormData.teacher,
+          startTime: addFormData.startTime,
+          endTime: addFormData.endTime,
+          room: addFormData.room || '',
+        };
+        await apiClient.put(`/class-timetables/${editTimetableId}`, {
+          periods: updatedPeriods.map((p: any) => ({
+            _id: p._id,
+            periodNumber: p.periodNumber,
+            subjectId: p.subjectId || p.subject,
+            teacherId: p.teacherId || p.teacher,
+            startTime: p.startTime,
+            endTime: p.endTime,
+            roomNumber: p.room || '',
+          }))
+        });
+        toast.success('Period updated successfully');
+      } else {
+        const { classId, day, ...periodData } = addFormData;
+        const dayLower = day.toLowerCase();
+        const existingDay = timetables.find(tt => tt.day.toLowerCase() === dayLower);
 
-      const timetableData = {
-        class: classId,
-        section: selectedCls?.section || '',
-        day: day.toLowerCase(),
-        periods: [periodData],
-        academicYear: '2024-2025', // This should likely be dynamic
-      };
-
-      await timetableService.create(timetableData);
+        if (existingDay) {
+          await apiClient.post(`/class-timetables/${existingDay._id}/periods`, {
+            subjectId: periodData.subject,
+            teacherId: periodData.teacher,
+            startTime: periodData.startTime,
+            endTime: periodData.endTime,
+            roomNumber: periodData.room || '',
+            day: dayLower,
+          });
+        } else {
+          const timetableData = {
+            classId,
+            dayOfWeek: dayLower,
+            periods: [{
+              subjectId: periodData.subject,
+              teacherId: periodData.teacher,
+              startTime: periodData.startTime,
+              endTime: periodData.endTime,
+              roomNumber: periodData.room || '',
+              periodNumber: 1,
+            }],
+            academicYear: '2024-2025',
+          };
+          await apiClient.post('/class-timetables', timetableData);
+        }
+        toast.success('Period added successfully');
+      }
       setShowAddModal(false);
-      toast.success('Period added successfully');
-      fetchTimetables(); // Refetch to show the new period
+      fetchTimetables();
     } catch (error) {
-      console.error('Error adding period:', error);
-      toast.error('Failed to add period');
+      console.error('Error saving period:', error);
+      toast.error(editMode ? 'Failed to update period' : 'Failed to add period');
+    }
+  };
+
+  const handleDeletePeriod = async (timetableId: string, period: any) => {
+    setShowDeleteModal(true);
+    setDeleteTarget({ timetableId, period });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const { timetableId, period } = deleteTarget;
+    try {
+      if (period._id) {
+        await apiClient.delete(`/class-timetables/${timetableId}/periods/${period._id}`);
+      } else {
+        const dayTimetable = timetables.find(tt => tt._id === timetableId);
+        if (!dayTimetable) return;
+        const filteredPeriods = dayTimetable.periods.filter(p => p !== period);
+        await apiClient.put(`/class-timetables/${timetableId}`, { periods: filteredPeriods });
+      }
+      toast.success('Period deleted');
+      fetchTimetables();
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error('Failed to delete period');
     }
   };
 
@@ -250,14 +378,34 @@ const ClassTimeTablePage: React.FC = () => {
                         const color = getColorForPeriod(index);
                         const teacherName = teachers.find(t => t.id === period?.teacher)?.name || period?.teacher;
                         const subjectName = subjects.find(s => s.id === period?.subject)?.name || period?.subject;
+                        const dayTimetable = timetables.find(tt => tt.day.toLowerCase() === day.toLowerCase());
+                        const periodIdx = dayTimetable?.periods?.findIndex(
+                          p => p.startTime === slot.start && p.endTime === slot.end
+                        ) ?? -1;
                         
                         return (
                           <td key={`${day}-${index}`}>
                             {period ? (
                               <div className={`p-2 bg-${color}-light rounded`}>
-                                <div className="fw-medium"><span className="text-muted small">Subject: </span>{subjectName}</div>
-                                <div className="mt-1"><span className="text-muted small"><i className="ti ti-user me-1"></i>{teacherName}</span></div>
-                                {period.room && (<div className="mt-1"><span className="text-muted small"><i className="ti ti-door me-1"></i>Room {period.room}</span></div>)}
+                                <div className="d-flex justify-content-between align-items-start">
+                                  <div>
+                                    <div className="fw-medium"><span className="text-muted small">Subject: </span>{subjectName}</div>
+                                    <div className="mt-1"><span className="text-muted small"><i className="ti ti-user me-1"></i>{teacherName}</span></div>
+                                    {period.room && (<div className="mt-1"><span className="text-muted small"><i className="ti ti-door me-1"></i>Room {period.room}</span></div>)}
+                                  </div>
+                                  <div className="d-flex gap-1">
+                                    {dayTimetable && periodIdx >= 0 && (
+                                      <button className="btn btn-sm btn-outline-primary p-0 px-1" title="Edit" onClick={() => handleOpenEditModal(dayTimetable._id, day, periodIdx, period)}>
+                                        <i className="ti ti-edit fs-6"></i>
+                                      </button>
+                                    )}
+                                    {dayTimetable && (
+                                      <button className="btn btn-sm btn-outline-danger p-0 px-1" title="Delete" onClick={() => handleDeletePeriod(dayTimetable._id, period)}>
+                                        <i className="ti ti-trash fs-6"></i>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             ) : (<div className="p-2 text-muted text-center">-</div>)}
                           </td>
@@ -287,7 +435,7 @@ const ClassTimeTablePage: React.FC = () => {
           <div className="modal-dialog modal-dialog-centered modal-lg">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Add Period</h5>
+                <h5 className="modal-title">{editMode ? 'Edit Period' : 'Add Period'}</h5>
                 <button type="button" className="btn-close" onClick={() => setShowAddModal(false)}></button>
               </div>
               <form onSubmit={handleAddPeriod}>
@@ -340,13 +488,15 @@ const ClassTimeTablePage: React.FC = () => {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-light me-2" onClick={() => setShowAddModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary">Add Period</button>
+                  <button type="submit" className="btn btn-primary">{editMode ? 'Update Period' : 'Add Period'}</button>
                 </div>
               </form>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Delete this period?" />
     </>
   );
 };

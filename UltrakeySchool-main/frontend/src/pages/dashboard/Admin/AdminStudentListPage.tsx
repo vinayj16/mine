@@ -190,7 +190,7 @@ const AdminStudentListPage: React.FC = () => {
                   <tbody>
                     {studentData?.students.slice(0, 20).map((student) => (
                       <tr key={student.id}>
-                        <td>{student.studentId}</td>
+                        <td>{typeof student.studentId === 'object' ? student.studentId?.name || '-' : student.studentId}</td>
                         <td>{student.firstName} {student.lastName}</td>
                         <td>{student.grade}</td>
                         <td>{student.section}</td>

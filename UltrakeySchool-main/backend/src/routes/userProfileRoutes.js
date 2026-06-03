@@ -28,8 +28,22 @@ const router = express.Router();
 // All routes require authentication (TESTED & VERIFIED)
 router.use(protect); // ✓✓
 
-// Specific routes must come before parameterized routes (TESTED & VERIFIED)
+// Base route for frontend compatibility
 router.get('/me', getUserProfile); // ✓✓
+router.put('/me', updateUserProfileValidation, updateUserProfile); // ✓✓
+router.put('/me/picture', updateProfilePicture); // ✓✓
+
+// Also handle root path for frontend
+router.get('/', getUserProfile);
+router.put('/', updateUserProfileValidation, updateUserProfile);
+
+// Backward-compatible aliases for /user/profile and /settings/notification-preferences
+router.get('/profile', getUserProfile);
+router.put('/profile', updateUserProfileValidation, updateUserProfile);
+router.get('/notification-preferences', getNotificationPreferences);
+router.put('/notification-preferences', updateNotificationPreferences);
+
+// Specific routes must come before parameterized routes (TESTED & VERIFIED)
 router.get('/me/permissions', getUserPermissions); // ✓✓
 router.get('/me/privacy', getPrivacySettings); // ✓✓
 router.get('/me/notifications', getNotificationPreferences); // ✓✓

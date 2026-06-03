@@ -1,8 +1,3 @@
-/**
- * Cache Service using Redis
- * Provides caching functionality for improved performance
- */
-
 import redis from 'redis';
 import logger from '../utils/logger.js';
 

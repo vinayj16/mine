@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import apiClient from '../../../api/client';
 
 interface LibraryMemberData {
   overview: {
@@ -47,6 +49,7 @@ const AdminLibraryMembersPage: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [mockMembers, setMockMembers] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     memberType: 'student',
     name: '',
@@ -59,58 +62,82 @@ const AdminLibraryMembersPage: React.FC = () => {
     fetchMemberData();
   }, [selectedType, searchTerm]);
 
-  // Mock members storage
-const [mockMembers, setMockMembers] = useState<LibraryMemberData['members']>([
-    { 
-      id: '1', 
-      memberId: 'MEM-001',
-      name: 'Test Student 1', 
-      email: 'test1@test.com', 
-      phone: '1234567890', 
-      type: 'student', 
-      status: 'active', 
-      joinDate: new Date().toISOString(),
-      expiryDate: new Date(Date.now() + 365*24*60*60*1000).toISOString(),
-      booksIssued: 0,
-      booksOverdue: 0,
-      fineAmount: 0
-    }
-  ]);
-  
   const fetchMemberData = async () => {
     try {
       setLoading(true);
-      // Use functional update pattern to get latest members
-      setMemberData(_prev => {
-        const currentMembers = mockMembers; // Get fresh ref
-        return {
-          overview: {
-            totalMembers: currentMembers.length,
-            activeMembers: currentMembers.filter(m => m.status === 'active').length,
-            inactiveMembers: currentMembers.filter(m => m.status === 'inactive').length,
-            newMembersThisMonth: 1,
-            studentMembers: currentMembers.filter(m => m.type === 'student').length,
-            teacherMembers: currentMembers.filter(m => m.type === 'teacher').length,
-            staffMembers: currentMembers.filter(m => m.type === 'staff').length
-          },
-          members: currentMembers,
-          memberTypes: [
-            { type: 'Students', count: mockMembers.filter(m => m.type === 'student').length, color: '#3b82f6' },
-            { type: 'Teachers', count: mockMembers.filter(m => m.type === 'teacher').length, color: '#10b981' },
-            { type: 'Staff', count: mockMembers.filter(m => m.type === 'staff').length, color: '#f59e0b' }
-          ],
-          monthlyTrend: [
-            { month: 'Jan', newMembers: 0, activeMembers: 0 },
-            { month: 'Feb', newMembers: 0, activeMembers: 0 },
-            { month: 'Mar', newMembers: 0, activeMembers: 0 },
-            { month: 'Apr', newMembers: mockMembers.length, activeMembers: mockMembers.filter(m => m.status === 'active').length },
-            { month: 'May', newMembers: 0, activeMembers: 0 },
-            { month: 'Jun', newMembers: 0, activeMembers: 0 }
-          ]
-        };
+      const instId = localStorage.getItem('institutionId') || '';
+      
+      // Fetch members from real API
+      const response = await apiClient.get('/library/members', {
+        params: { institutionId: instId, limit: 100 }
+      });
+      
+      const apiMembers = response.data?.data || response.data?.members || [];
+      const membersList = Array.isArray(apiMembers) ? apiMembers : [];
+      
+      const mappedMembers: LibraryMemberData['members'] = membersList.map((m: any) => ({
+        id: m._id || m.id,
+        memberId: m.memberId || m.cardNumber || `MEM-${String(m._id || m.id).slice(-5)}`,
+        name: m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Unknown',
+        type: m.type || m.role || 'student',
+        grade: m.grade || m.class,
+        department: m.department,
+        email: m.email || '',
+        phone: m.phone || '',
+        joinDate: m.joinDate || m.createdAt || m.membershipDate || new Date().toISOString(),
+        expiryDate: m.expiryDate || m.libraryMemberExpiry || new Date(Date.now() + 365*24*60*60*1000).toISOString(),
+        status: m.status === 'active' || m.status === 'inactive' || m.status === 'expired' ? m.status : 
+          (m.libraryMemberExpiry && new Date(m.libraryMemberExpiry) < new Date() ? 'expired' : 'active'),
+        booksIssued: m.booksIssued || m.issuedBooks || 0,
+        booksOverdue: m.booksOverdue || m.overdueBooks || 0,
+        fineAmount: m.fineAmount || m.totalFine || 0
+      }));
+      
+      const now = new Date();
+      const thisMonth = now.getMonth();
+      const newThisMonth = mappedMembers.filter(m => {
+        const join = new Date(m.joinDate);
+        return join.getMonth() === thisMonth && join.getFullYear() === now.getFullYear();
+      }).length;
+
+      setMemberData({
+        overview: {
+          totalMembers: mappedMembers.length,
+          activeMembers: mappedMembers.filter(m => m.status === 'active').length,
+          inactiveMembers: mappedMembers.filter(m => m.status === 'inactive' || m.status === 'expired').length,
+          newMembersThisMonth: newThisMonth,
+          studentMembers: mappedMembers.filter(m => m.type === 'student').length,
+          teacherMembers: mappedMembers.filter(m => m.type === 'teacher').length,
+          staffMembers: mappedMembers.filter(m => m.type === 'staff').length
+        },
+        members: mappedMembers,
+        memberTypes: [
+          { type: 'Students', count: mappedMembers.filter(m => m.type === 'student').length, color: '#3b82f6' },
+          { type: 'Teachers', count: mappedMembers.filter(m => m.type === 'teacher').length, color: '#10b981' },
+          { type: 'Staff', count: mappedMembers.filter(m => m.type === 'staff').length, color: '#f59e0b' }
+        ],
+        monthlyTrend: [
+          { month: 'Jan', newMembers: 0, activeMembers: 0 },
+          { month: 'Feb', newMembers: 0, activeMembers: 0 },
+          { month: 'Mar', newMembers: 0, activeMembers: 0 },
+          { month: 'Apr', newMembers: mappedMembers.length, activeMembers: mappedMembers.filter(m => m.status === 'active').length },
+          { month: 'May', newMembers: 0, activeMembers: 0 },
+          { month: 'Jun', newMembers: 0, activeMembers: 0 }
+        ]
       });
     } catch (error) {
       console.error('Error fetching library member data:', error);
+      toast.error('Failed to load library members. Using empty state.');
+      setMemberData({
+        overview: { totalMembers: 0, activeMembers: 0, inactiveMembers: 0, newMembersThisMonth: 0, studentMembers: 0, teacherMembers: 0, staffMembers: 0 },
+        members: [],
+        memberTypes: [
+          { type: 'Students', count: 0, color: '#3b82f6' },
+          { type: 'Teachers', count: 0, color: '#10b981' },
+          { type: 'Staff', count: 0, color: '#f59e0b' }
+        ],
+        monthlyTrend: []
+      });
     } finally {
       setLoading(false);
     }
@@ -135,7 +162,7 @@ const [mockMembers, setMockMembers] = useState<LibraryMemberData['members']>([
         },
         message: 'Member added successfully'
       };
-      
+
       // Add to mock members
       setMockMembers(prev => [...prev, {
         id: mockData.data.id,
@@ -163,11 +190,11 @@ const [mockMembers, setMockMembers] = useState<LibraryMemberData['members']>([
       // Force refresh after short delay
       setTimeout(() => {
         fetchMemberData();
-        alert('Member added successfully!');
+        toast.success('Member added successfully!');
       }, 100);
     } catch (error: any) {
       console.error('Error adding member:', error);
-      alert(error.message || 'Failed to add member');
+      toast.error(error.message || 'Failed to add member');
     } finally {
       setSaving(false);
     }

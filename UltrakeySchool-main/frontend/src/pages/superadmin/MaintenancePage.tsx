@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { apiService } from '../../services/api'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface MaintenanceSettings {
   enabled: boolean
@@ -38,9 +39,12 @@ const MaintenancePage: React.FC = () => {
   })
 
   const [scheduledMaintenance, setScheduledMaintenance] = useState<ScheduledMaintenance[]>([])
+  const [maintenanceHistory, setMaintenanceHistory] = useState<ScheduledMaintenance[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [, setError] = useState<string | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   // Modal states
   const [showModal, setShowModal] = useState(false)
@@ -65,9 +69,10 @@ const MaintenancePage: React.FC = () => {
       setLoading(true)
       setError(null)
       
-      const [settingsResponse, maintenanceResponse] = await Promise.all([
+      const [settingsResponse, maintenanceResponse, historyResponse] = await Promise.all([
         apiService.get<any>('/super-admin/settings/maintenance'),
-        apiService.get<any>('/super-admin/settings/maintenance/scheduled')
+        apiService.get<any>('/super-admin/settings/maintenance/scheduled'),
+        apiService.get<any>('/super-admin/settings/maintenance/history')
       ])
       
       if (settingsResponse.success && settingsResponse.data) {
@@ -82,12 +87,14 @@ const MaintenancePage: React.FC = () => {
         })
       }
       
-      if (maintenanceResponse.success && maintenanceResponse.data) {
-        const all = [
-          ...(maintenanceResponse.data.scheduled || []),
-          ...(maintenanceResponse.data.completed || [])
-        ]
-        setScheduledMaintenance(all)
+      // maintenanceResponse.data is an array of schedule objects
+      if (maintenanceResponse.success && Array.isArray(maintenanceResponse.data)) {
+        setScheduledMaintenance(maintenanceResponse.data)
+      }
+      
+      // historyResponse.data is an array of completed/cancelled schedules
+      if (historyResponse.success && Array.isArray(historyResponse.data)) {
+        setMaintenanceHistory(historyResponse.data)
       }
     } catch (err) {
       console.error('Error fetching maintenance data:', err)
@@ -100,7 +107,7 @@ const MaintenancePage: React.FC = () => {
   const handleSaveSettings = async () => {
     try {
       setSaving(true)
-      const response = await apiService.put('/settings/maintenance', settings)
+      const response = await apiService.put('/super-admin/settings/maintenance', settings)
       
       if (response.success) {
         toast.success('Maintenance settings saved successfully!')
@@ -116,8 +123,56 @@ const MaintenancePage: React.FC = () => {
     }
   }
 
-  const handleMaintenanceToggle = () => {
-    setSettings(prev => ({ ...prev, enabled: !prev.enabled }))
+  const isInMaintenanceWindow = (s: MaintenanceSettings): boolean => {
+    if (!s.enabled) return false
+    const now = Date.now()
+    if (s.startTime) {
+      const startMs = new Date(s.startTime).getTime()
+      if (!isNaN(startMs) && startMs > now) return false
+    }
+    if (s.endTime) {
+      const endMs = new Date(s.endTime).getTime()
+      if (!isNaN(endMs) && endMs <= now) return false
+    }
+    return true
+  }
+
+  const isScheduled = settings.enabled && settings.startTime && new Date(settings.startTime).getTime() > Date.now()
+  const isActive = isInMaintenanceWindow(settings)
+
+  const handleMaintenanceToggle = async () => {
+    const newEnabled = !settings.enabled
+    const updated = { ...settings, enabled: newEnabled }
+    setSettings(updated)
+    try {
+      setSaving(true)
+      const response = await apiService.put('/super-admin/settings/maintenance', updated)
+      if (response.success) {
+        toast.success(`Maintenance mode ${newEnabled ? 'enabled' : 'disabled'}!`)
+      } else {
+        toast.error('Failed to update maintenance settings')
+        setSettings(settings)
+        return
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update maintenance')
+      setSettings(settings)
+      return
+    } finally {
+      setSaving(false)
+    }
+    // Only dispatch immediate event if the window is active NOW
+    if (newEnabled) {
+      const now = Date.now()
+      const hasFutureStart = updated.startTime && new Date(updated.startTime).getTime() > now
+      if (!hasFutureStart) {
+        window.dispatchEvent(new CustomEvent('app:maintenance', {
+          detail: { message: updated.message || 'System is currently under maintenance.' }
+        }))
+      }
+    } else {
+      window.dispatchEvent(new CustomEvent('app:maintenance-end'))
+    }
   }
 
   const handleModuleToggle = (module: string) => {
@@ -181,13 +236,13 @@ const MaintenancePage: React.FC = () => {
       
       if (editingMaintenance) {
         // Update existing
-        const response = await apiService.put(`/settings/maintenance/scheduled/${editingMaintenance._id}`, modalForm)
+        const response = await apiService.put(`/super-admin/settings/maintenance/scheduled/${editingMaintenance._id}`, modalForm)
         if (response.success) {
           toast.success('Maintenance schedule updated!')
         }
       } else {
         // Create new
-        const response = await apiService.post('/settings/maintenance/scheduled', modalForm)
+        const response = await apiService.post('/super-admin/settings/maintenance/scheduled', modalForm)
         if (response.success) {
           toast.success('Maintenance scheduled successfully!')
         }
@@ -202,27 +257,52 @@ const MaintenancePage: React.FC = () => {
     }
   }
 
-  const handleDeleteMaintenance = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this scheduled maintenance?')) {
-      return
-    }
+  const handleDeleteMaintenance = (id: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget(id)
+  }
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
     try {
-      const response = await apiService.delete(`/settings/maintenance/scheduled/${id}`)
+      const response = await apiService.delete(`/super-admin/settings/maintenance/scheduled/${deleteTarget}`)
       if (response.success) {
         toast.success('Maintenance deleted!')
         fetchData()
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete maintenance')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     try {
-      const response = await apiService.put(`/settings/maintenance/scheduled/${id}`, { status: newStatus })
+      const response = await apiService.put(`/super-admin/settings/maintenance/scheduled/${id}`, { status: newStatus })
       if (response.success) {
         toast.success(`Maintenance marked as ${newStatus}!`)
+        // When manually starting, also enable the maintenance toggle
+        if (newStatus === 'in-progress') {
+          const sched = scheduledMaintenance.find(m => m._id === id)
+          await apiService.put('/super-admin/settings/maintenance', {
+            ...settings,
+            enabled: true,
+            message: sched?.description || sched?.title || settings.message
+          })
+          window.dispatchEvent(new CustomEvent('app:maintenance', {
+            detail: { message: sched?.description || sched?.title || 'Scheduled maintenance' }
+          }))
+        }
+        // When completing or cancelling, also disable the maintenance toggle
+        if (newStatus === 'completed' || newStatus === 'cancelled') {
+          await apiService.put('/super-admin/settings/maintenance', {
+            ...settings,
+            enabled: false
+          })
+          window.dispatchEvent(new CustomEvent('app:maintenance-end'))
+        }
         fetchData()
       }
     } catch (err: any) {
@@ -287,20 +367,43 @@ const MaintenancePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Active Maintenance Banner — prominent stop button */}
+      {isActive && (
+        <div className="alert alert-warning d-flex align-items-center justify-content-between mb-4" role="alert" style={{ borderRadius: 8, padding: '16px 20px' }}>
+          <div className="d-flex align-items-center gap-3">
+            <i className="ti ti-alert-triangle fs-3 text-warning"></i>
+            <div>
+              <strong className="d-block">Maintenance is currently active</strong>
+              <span className="text-muted" style={{ fontSize: 14 }}>
+                All non-superadmin users are seeing the maintenance page.
+                {settings.endTime && ` Scheduled to end at ${new Date(settings.endTime).toLocaleString()}.`}
+              </span>
+            </div>
+          </div>
+          <button
+            className="btn btn-danger"
+            onClick={handleMaintenanceToggle}
+            disabled={saving}
+          >
+            {saving ? 'Stopping...' : 'Stop Maintenance'}
+          </button>
+        </div>
+      )}
+
       {/* Current Status */}
       <div className="row mb-4">
         <div className="col-lg-3 col-md-6">
-          <div className={`card ${settings.enabled ? 'bg-warning' : 'bg-success'}`}>
+          <div className={`card ${isActive ? 'bg-warning' : isScheduled ? 'bg-info' : 'bg-success'}`}>
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
                   <h4 className="text-white mb-1">
-                    {settings.enabled ? 'ACTIVE' : 'INACTIVE'}
+                    {isActive ? 'ACTIVE' : isScheduled ? 'SCHEDULED' : 'INACTIVE'}
                   </h4>
                   <p className="text-white mb-0">Maintenance Status</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
-                  <i className={`ti ${settings.enabled ? 'ti-alert-triangle' : 'ti-check'} text-white fs-4`}></i>
+                  <i className={`ti ${isActive ? 'ti-alert-triangle' : isScheduled ? 'ti-clock' : 'ti-check'} text-white fs-4`}></i>
                 </div>
               </div>
             </div>
@@ -355,19 +458,32 @@ const MaintenancePage: React.FC = () => {
 
       {/* Maintenance Settings */}
       <div className="card mb-4">
-        <div className="card-header d-flex justify-content-between align-items-center">
+        <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
           <h5 className="mb-0">Maintenance Settings</h5>
-          <div className="form-check form-switch">
-            <input 
-              className="form-check-input" 
-              type="checkbox" 
-              id="maintenance-toggle"
-              checked={settings.enabled}
-              onChange={handleMaintenanceToggle}
-            />
-            <label className="form-check-label" htmlFor="maintenance-toggle">
-              {settings.enabled ? 'Disable' : 'Enable'} Maintenance Mode
-            </label>
+          <div className="d-flex align-items-center gap-3">
+            {isActive && (
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={handleMaintenanceToggle}
+                disabled={saving}
+                title="Immediately stop maintenance mode"
+              >
+                <i className="ti ti-stop-circle me-1"></i>
+                Stop Now
+              </button>
+            )}
+            <div className="form-check form-switch mb-0">
+              <input 
+                className="form-check-input" 
+                type="checkbox" 
+                id="maintenance-toggle"
+                checked={settings.enabled}
+                onChange={handleMaintenanceToggle}
+              />
+              <label className="form-check-label" htmlFor="maintenance-toggle">
+                {isScheduled ? 'Scheduled' : settings.enabled ? 'Active' : 'Inactive'} — {isScheduled ? 'Auto at ' + new Date(settings.startTime).toLocaleString() : settings.enabled ? 'Click to disable' : 'Click to enable'}
+              </label>
+            </div>
           </div>
         </div>
         <div className="card-body">
@@ -568,6 +684,49 @@ const MaintenancePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Maintenance History */}
+      <div className="card mt-4">
+        <div className="card-header">
+          <h5 className="mb-0">Maintenance History</h5>
+        </div>
+        <div className="card-body">
+          {maintenanceHistory.length > 0 ? (
+            <div className="table-responsive">
+              <table className="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>Description</th>
+                    <th>Completed On</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {maintenanceHistory.map((entry) => (
+                    <tr key={entry._id}>
+                      <td className="fw-semibold">{entry.title}</td>
+                      <td>{entry.startDate}</td>
+                      <td>{entry.startTime} - {entry.endTime}</td>
+                      <td>{getStatusBadge(entry.status)}</td>
+                      <td>{entry.description}</td>
+                      <td>{entry.completedAt ? new Date(entry.completedAt).toLocaleDateString() : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <i className="ti ti-history fs-48 text-muted mb-3 d-block" />
+              <h5 className="text-muted">No maintenance history</h5>
+              <p className="text-muted">Completed or cancelled maintenance will appear here</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Schedule Maintenance Modal */}
       <div className={`modal fade ${showModal ? 'show' : ''}`} style={{ display: showModal ? 'block' : 'none' }} tabIndex={-1}>
         <div className="modal-dialog">
@@ -673,6 +832,7 @@ const MaintenancePage: React.FC = () => {
       
       {/* Modal Backdrop */}
       {showModal && <div className="modal-backdrop fade show" onClick={handleCloseModal}></div>}
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this scheduled maintenance?" />
     </div>
   )
 }

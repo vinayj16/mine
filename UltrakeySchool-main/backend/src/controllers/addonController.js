@@ -1,8 +1,3 @@
-/**
- * Addon Controller
- * Manages membership addons and features
- */
-
 import MembershipAddon from '../models/MembershipAddon.js';
 import ApiResponse from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -25,50 +20,50 @@ const validateObjectId = (id) => {
  */
 const validateAddonData = (data, isUpdate = false) => {
   const errors = [];
-  
+
   if (!isUpdate) {
     if (!data.name || data.name.trim().length === 0) {
       errors.push('Name is required');
     }
-    
+
     if (!data.category) {
       errors.push('Category is required');
     }
-    
+
     if (data.price === undefined || data.price === null) {
       errors.push('Price is required');
     }
   }
-  
+
   if (data.name && data.name.length > 200) {
     errors.push('Name must not exceed 200 characters');
   }
-  
+
   if (data.price !== undefined && (isNaN(data.price) || data.price < 0)) {
     errors.push('Price must be a non-negative number');
   }
-  
+
   const validCategories = ['FEATURE', 'MODULE', 'STORAGE', 'USERS', 'SUPPORT', 'INTEGRATION', 'OTHER'];
   if (data.category && !validCategories.includes(data.category.toUpperCase())) {
     errors.push(`Category must be one of: ${validCategories.join(', ')}`);
   }
-  
+
   const validBillingCycles = ['MONTHLY', 'YEARLY', 'ONE_TIME'];
   if (data.billingCycle && !validBillingCycles.includes(data.billingCycle.toUpperCase())) {
     errors.push(`Billing cycle must be one of: ${validBillingCycles.join(', ')}`);
   }
-  
+
   const validStatuses = ['active', 'inactive', 'archived'];
   if (data.status && !validStatuses.includes(data.status.toLowerCase())) {
     errors.push(`Status must be one of: ${validStatuses.join(', ')}`);
   }
-  
+
   if (errors.length > 0) {
     const error = new Error('Validation failed');
     error.details = errors;
     throw error;
   }
-  
+
   return true;
 };
 
@@ -79,14 +74,14 @@ const generateAddonId = async () => {
   try {
     const count = await MembershipAddon.countDocuments();
     const addonId = `ADDON-${String(count + 1).padStart(6, '0')}`;
-    
+
     // Check if ID already exists (race condition protection)
     const existing = await MembershipAddon.findOne({ addonId });
     if (existing) {
       // Recursively generate new ID
       return generateAddonId();
     }
-    
+
     return addonId;
   } catch (error) {
     logger.error('Error generating addon ID:', error);
@@ -100,15 +95,15 @@ const generateAddonId = async () => {
  */
 const getAllAddons = async (req, res, next) => {
   try {
-    const { 
-      status, 
-      category, 
+    const {
+      status,
+      category,
       billingCycle,
       search,
-      page, 
-      limit, 
-      sortBy, 
-      sortOrder 
+      page,
+      limit,
+      sortBy,
+      sortOrder
     } = req.query;
 
     // Build filter
@@ -116,7 +111,7 @@ const getAllAddons = async (req, res, next) => {
     if (status) filter.status = status.toLowerCase();
     if (category) filter.category = category.toUpperCase();
     if (billingCycle) filter.billingCycle = billingCycle.toUpperCase();
-    
+
     // Search functionality
     if (search) {
       filter.$or = [
@@ -186,7 +181,7 @@ const getAllAddons = async (req, res, next) => {
 const getAddonById = async (req, res, next) => {
   try {
     const addonId = validateObjectId(req.params.id);
-    
+
     const addon = await MembershipAddon.findById(addonId).lean();
 
     if (!addon) {
@@ -216,11 +211,11 @@ const getAddonById = async (req, res, next) => {
 const getAddonByAddonId = async (req, res, next) => {
   try {
     const { addonId } = req.params;
-    
+
     if (!addonId) {
       return ApiResponse.badRequest(res, 'Addon ID is required');
     }
-    
+
     const addon = await MembershipAddon.findOne({ addonId }).lean();
 
     if (!addon) {
@@ -251,10 +246,10 @@ const createAddon = async (req, res, next) => {
   try {
     // Validate data
     validateAddonData(req.body);
-    
+
     // Generate unique addon ID
     const addonId = await generateAddonId();
-    
+
     const addonData = {
       ...req.body,
       addonId,
@@ -295,16 +290,16 @@ const createAddon = async (req, res, next) => {
 const updateAddon = async (req, res, next) => {
   try {
     const addonId = validateObjectId(req.params.id);
-    
+
     // Validate update data
     validateAddonData(req.body, true);
-    
+
     // Don't allow updating addonId
     delete req.body.addonId;
-    
+
     const addon = await MembershipAddon.findByIdAndUpdate(
       addonId,
-      { 
+      {
         $set: {
           ...req.body,
           updatedBy: req.user?.id,
@@ -348,9 +343,9 @@ const updateAddon = async (req, res, next) => {
 const deleteAddon = async (req, res, next) => {
   try {
     const addonId = validateObjectId(req.params.id);
-    
+
     const { permanent } = req.query;
-    
+
     let addon;
     if (permanent === 'true') {
       // Hard delete
@@ -359,8 +354,8 @@ const deleteAddon = async (req, res, next) => {
       // Soft delete (archive)
       addon = await MembershipAddon.findByIdAndUpdate(
         addonId,
-        { 
-          $set: { 
+        {
+          $set: {
             status: 'archived',
             archivedAt: new Date(),
             archivedBy: req.user?.id
@@ -384,7 +379,7 @@ const deleteAddon = async (req, res, next) => {
     return ApiResponse.success(
       res,
       permanent === 'true' ? 'Addon permanently deleted' : 'Addon archived successfully',
-      { 
+      {
         id: addon._id,
         name: addon.name,
         status: addon.status
@@ -403,14 +398,14 @@ const deleteAddon = async (req, res, next) => {
 const bulkDeleteAddons = async (req, res, next) => {
   try {
     const { addonIds, permanent } = req.body;
-    
+
     if (!addonIds || !Array.isArray(addonIds) || addonIds.length === 0) {
       return ApiResponse.badRequest(res, 'Addon IDs array is required');
     }
-    
+
     // Validate all IDs
     addonIds.forEach(id => validateObjectId(id));
-    
+
     let result;
     if (permanent === true) {
       // Hard delete
@@ -419,8 +414,8 @@ const bulkDeleteAddons = async (req, res, next) => {
       // Soft delete (archive)
       result = await MembershipAddon.updateMany(
         { _id: { $in: addonIds } },
-        { 
-          $set: { 
+        {
+          $set: {
             status: 'archived',
             archivedAt: new Date(),
             archivedBy: req.user?.id
@@ -456,13 +451,13 @@ const bulkDeleteAddons = async (req, res, next) => {
 const toggleStatus = async (req, res, next) => {
   try {
     const addonId = validateObjectId(req.params.id);
-    
+
     const addon = await MembershipAddon.findById(addonId);
-    
+
     if (!addon) {
       return ApiResponse.notFound(res, 'Addon not found');
     }
-    
+
     addon.status = addon.status === 'active' ? 'inactive' : 'active';
     addon.updatedBy = req.user?.id;
     await addon.save();
@@ -495,17 +490,17 @@ const toggleStatus = async (req, res, next) => {
 const getAddonsByCategory = async (req, res, next) => {
   try {
     const { category } = req.params;
-    
+
     if (!category) {
       return ApiResponse.badRequest(res, 'Category is required');
     }
-    
-    const addons = await MembershipAddon.find({ 
+
+    const addons = await MembershipAddon.find({
       category: category.toUpperCase(),
       status: 'active'
     })
-    .sort({ sortOrder: 1, createdAt: -1 })
-    .lean();
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .lean();
 
     logger.info('Addons retrieved by category', {
       category,
@@ -596,11 +591,11 @@ const getStatistics = async (req, res, next) => {
 const reorderAddons = async (req, res, next) => {
   try {
     const { addonIds } = req.body;
-    
+
     if (!addonIds || !Array.isArray(addonIds) || addonIds.length === 0) {
       return ApiResponse.badRequest(res, 'Addon IDs array is required');
     }
-    
+
     // Update sort order for each addon
     const updates = addonIds.map((id, index) => ({
       updateOne: {
@@ -608,7 +603,7 @@ const reorderAddons = async (req, res, next) => {
         update: { $set: { sortOrder: index + 1 } }
       }
     }));
-    
+
     const result = await MembershipAddon.bulkWrite(updates);
 
     logger.info('Addons reordered', {

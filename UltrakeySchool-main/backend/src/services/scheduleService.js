@@ -2,7 +2,7 @@ import Schedule from '../models/Schedule.js';
 import User from '../models/User.js';
 
 class ScheduleService {
-  async getSchedules(schoolId, options = {}) {
+  async getSchedules(institutionId, options = {}) {
     const {
       type,
       priority,
@@ -16,7 +16,7 @@ class ScheduleService {
     } = options;
 
     const query = {
-      schoolId,
+      institutionId,
       isActive: true
     };
 
@@ -56,10 +56,10 @@ class ScheduleService {
     return schedules.map(this.formatSchedule);
   }
 
-  async getScheduleById(schoolId, scheduleId) {
+  async getScheduleById(institutionId, scheduleId) {
     const schedule = await Schedule.findOne({
       _id: scheduleId,
-      schoolId,
+      institutionId,
       isActive: true
     }).lean();
 
@@ -70,11 +70,11 @@ class ScheduleService {
     return this.formatSchedule(schedule);
   }
 
-  async getUserSchedules(schoolId, userId, options = {}) {
+  async getUserSchedules(institutionId, userId, options = {}) {
     const { status, limit = 20, dateRange } = options;
 
     const query = {
-      schoolId,
+      institutionId,
       isActive: true,
       'participants.userId': userId
     };
@@ -98,7 +98,7 @@ class ScheduleService {
     return schedules.map(this.formatSchedule);
   }
 
-  async createSchedule(schoolId, scheduleData) {
+  async createSchedule(institutionId, scheduleData) {
     const {
       title,
       description,
@@ -122,7 +122,7 @@ class ScheduleService {
     const organizer = organizerId ? await this.buildParticipant(organizerId) : null;
 
     const schedule = new Schedule({
-      schoolId,
+      institutionId,
       title,
       description,
       type,
@@ -146,10 +146,10 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async updateSchedule(schoolId, scheduleId, updateData) {
+  async updateSchedule(institutionId, scheduleId, updateData) {
     const schedule = await Schedule.findOne({
       _id: scheduleId,
-      schoolId,
+      institutionId,
       isActive: true
     });
 
@@ -181,9 +181,9 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async deleteSchedule(schoolId, scheduleId) {
+  async deleteSchedule(institutionId, scheduleId) {
     const schedule = await Schedule.findOneAndUpdate(
-      { _id: scheduleId, schoolId },
+      { _id: scheduleId, institutionId },
       { $set: { isActive: false, status: 'cancelled' } },
       { new: true }
     );
@@ -195,10 +195,10 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async setReminder(schoolId, scheduleId, userId, reminderTime) {
+  async setReminder(institutionId, scheduleId, userId, reminderTime) {
     const schedule = await Schedule.findOne({
       _id: scheduleId,
-      schoolId,
+      institutionId,
       isActive: true
     });
 
@@ -225,10 +225,10 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async addParticipant(schoolId, scheduleId, userId) {
+  async addParticipant(institutionId, scheduleId, userId) {
     const schedule = await Schedule.findOne({
       _id: scheduleId,
-      schoolId,
+      institutionId,
       isActive: true
     });
 
@@ -251,10 +251,10 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async removeParticipant(schoolId, scheduleId, userId) {
+  async removeParticipant(institutionId, scheduleId, userId) {
     const schedule = await Schedule.findOne({
       _id: scheduleId,
-      schoolId,
+      institutionId,
       isActive: true
     });
 
@@ -270,11 +270,11 @@ class ScheduleService {
     return this.formatSchedule(schedule.toObject());
   }
 
-  async getUpcomingSchedules(schoolId, limit = 10) {
+  async getUpcomingSchedules(institutionId, limit = 10) {
     const now = new Date();
     
     const schedules = await Schedule.find({
-      schoolId,
+      institutionId,
       isActive: true,
       status: 'upcoming',
       date: { $gte: now }

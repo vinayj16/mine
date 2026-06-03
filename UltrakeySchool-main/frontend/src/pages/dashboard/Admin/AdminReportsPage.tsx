@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import apiClient from '../../../api/client';
 
 interface ReportData {
   attendanceReport: {
@@ -43,37 +45,54 @@ const AdminReportsPage: React.FC = () => {
   const fetchReportData = async () => {
     try {
       setLoading(true);
-      // Set empty data for now
+      // Fetch from dashboard overview — most reliable source of aggregated stats
+      const [dashRes, feesRes] = await Promise.allSettled([
+        apiClient.get('/dashboard/admin'),
+        apiClient.get('/fees', { params: { limit: 500 } }),
+      ]);
+
+      const dash = dashRes.status === 'fulfilled' ? dashRes.value.data?.data : null;
+      const ov = dash?.overview || dash || {};
+      const fees: any[] = feesRes.status === 'fulfilled'
+        ? (Array.isArray(feesRes.value.data?.data) ? feesRes.value.data.data : [])
+        : [];
+
+      const totalFees = fees.reduce((s: number, f: any) => s + (f.amount || 0), 0);
+      const collectedFees = fees.filter((f: any) => f.status === 'paid').reduce((s: number, f: any) => s + (f.amount || 0), 0);
+      const pendingFees = fees.filter((f: any) => f.status === 'pending').reduce((s: number, f: any) => s + (f.amount || 0), 0);
+      const overdueFees = fees.filter((f: any) => f.status === 'overdue').reduce((s: number, f: any) => s + (f.amount || 0), 0);
+
       setReportData({
         attendanceReport: {
-          present: 0,
-          absent: 0,
-          late: 0,
-          leave: 0,
-          totalStudents: 0
+          present: ov.attendanceToday?.present || 0,
+          absent: ov.attendanceToday?.absent || 0,
+          late: ov.attendanceToday?.late || 0,
+          leave: ov.attendanceToday?.leave || 0,
+          totalStudents: ov.totalStudents || 0,
         },
         studentReport: {
-          totalStudents: 0,
-          activeStudents: 0,
-          newAdmissions: 0,
-          graduatedStudents: 0
+          totalStudents: ov.totalStudents || 0,
+          activeStudents: ov.activeStudents || ov.totalStudents || 0,
+          newAdmissions: ov.recentAdmissions || 0,
+          graduatedStudents: ov.graduatedStudents || 0,
         },
         gradeReport: {
-          gradeA: 0,
-          gradeB: 0,
-          gradeC: 0,
-          gradeD: 0,
-          gradeF: 0
+          gradeA: ov.gradeA || 0,
+          gradeB: ov.gradeB || 0,
+          gradeC: ov.gradeC || 0,
+          gradeD: ov.gradeD || 0,
+          gradeF: ov.gradeF || 0,
         },
-        feesReport: {
-          totalFees: 0,
-          collectedFees: 0,
-          pendingFees: 0,
-          overdueFees: 0
-        }
+        feesReport: { totalFees, collectedFees, pendingFees, overdueFees },
       });
     } catch (error) {
       console.error('Error fetching report data:', error);
+      setReportData({
+        attendanceReport: { present: 0, absent: 0, late: 0, leave: 0, totalStudents: 0 },
+        studentReport: { totalStudents: 0, activeStudents: 0, newAdmissions: 0, graduatedStudents: 0 },
+        gradeReport: { gradeA: 0, gradeB: 0, gradeC: 0, gradeD: 0, gradeF: 0 },
+        feesReport: { totalFees: 0, collectedFees: 0, pendingFees: 0, overdueFees: 0 },
+      });
     } finally {
       setLoading(false);
     }
@@ -100,6 +119,23 @@ const AdminReportsPage: React.FC = () => {
       currency: 'INR',
       minimumFractionDigits: 0
     }).format(amount);
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!reportData) return;
+    const exportData = [
+      { Section: 'Attendance', 'Present': reportData.attendanceReport.present, 'Absent': reportData.attendanceReport.absent, 'Late': reportData.attendanceReport.late, 'Leave': reportData.attendanceReport.leave },
+      { Section: 'Students', 'Total': reportData.studentReport.totalStudents, 'Active': reportData.studentReport.activeStudents, 'New Admissions': reportData.studentReport.newAdmissions, 'Graduated': reportData.studentReport.graduatedStudents },
+      { Section: 'Grades', 'Grade A': reportData.gradeReport.gradeA, 'Grade B': reportData.gradeReport.gradeB, 'Grade C': reportData.gradeReport.gradeC, 'Grade D': reportData.gradeReport.gradeD, 'Grade F': reportData.gradeReport.gradeF },
+      { Section: 'Fees', 'Total ($)': reportData.feesReport.totalFees, 'Collected ($)': reportData.feesReport.collectedFees, 'Pending ($)': reportData.feesReport.pendingFees, 'Overdue ($)': reportData.feesReport.overdueFees }
+    ];
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'reports', [
+        { key: 'Section', label: 'Section' }
+      ], 'Reports Summary');
+    } else {
+      exportToExcel(exportData, 'reports');
+    }
   };
 
   if (loading) {
@@ -129,7 +165,7 @@ const AdminReportsPage: React.FC = () => {
           <button className="btn btn-outline-light bg-white btn-icon me-2" onClick={fetchReportData}>
             <i className="ti ti-refresh"></i>
           </button>
-          <button className="btn btn-primary">
+          <button className="btn btn-primary" onClick={() => handleExport('pdf')}>
             <i className="ti ti-download me-2"></i>Export Report
           </button>
         </div>

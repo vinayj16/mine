@@ -1,9 +1,4 @@
-/**
- * Real-time Teacher Data with API Integration
- * Transforms mock data into dynamic, real-time teacher performance and management
- */
-
-// Note: hrmService import removed as it's not exported from hrmData
+import apiClient from '../api/client'
 
 // Enhanced teacher interfaces
 export interface TeacherRecord extends TeacherSummary {
@@ -130,65 +125,19 @@ export interface TeacherStats {
 // Real-time API functions for teacher management
 export const teacherApi = {
   // Get all teachers with real-time data
-  getAllTeachers: async (schoolId?: string, filters?: {
+  getAllTeachers: async (institutionId?: string, filters?: {
     subject?: string
     status?: 'Active' | 'Inactive'
     department?: string
   }): Promise<TeacherRecord[]> => {
     try {
-      if (!schoolId) {
-        console.warn('[Teacher API] School ID required for fetching teachers')
-        return []
-      }
-
-      // TODO: Replace with actual API call
-      console.warn('[Teacher API] Real-time teacher fetch not implemented yet, using enhanced mock data')
-
-      // Enhance existing mock data
-      const enhancedTeachers = teacherRecords.map(teacher => ({
-        ...teacher,
-        performance: {
-          studentSatisfaction: Math.floor(Math.random() * 20 + 80), // 80-100
-          classAverage: Math.floor(Math.random() * 15 + 75), // 75-90
-          attendanceRate: Math.floor(Math.random() * 10 + 90), // 90-100
-          punctualityRate: Math.floor(Math.random() * 5 + 95), // 95-100
-          teachingEfficiency: Math.floor(Math.random() * 20 + 80), // 80-100
-          parentFeedback: Math.floor(Math.random() * 25 + 75) // 75-100
-        },
-        academics: {
-          qualifications: ['B.Ed', 'M.Ed'],
-          certifications: ['Teaching Excellence'],
-          specializations: [teacher.subject],
-          publications: Math.floor(Math.random() * 5),
-          research: ['Educational Psychology', 'Pedagogy']
-        },
-        workload: {
-          totalClasses: Math.floor(Math.random() * 8) + 4, // 4-12 classes
-          totalStudents: Math.floor(Math.random() * 150) + 50, // 50-200 students
-          weeklyHours: Math.floor(Math.random() * 20) + 30, // 30-50 hours
-          extracurricularActivities: Math.random() > 0.5 ? ['Sports Coach', 'Drama Club'] : []
-        },
-        financial: {
-          currentSalary: Math.floor(Math.random() * 20000) + 30000, // 30k-50k
-          lastIncrement: new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          bonus: Math.floor(Math.random() * 5000),
-          deductions: Math.floor(Math.random() * 2000)
-        }
-      }))
-
-      // Apply filters
-      let filteredTeachers = enhancedTeachers
-      if (filters?.subject) {
-        filteredTeachers = filteredTeachers.filter(t => t.subject === filters.subject)
-      }
-      if (filters?.status) {
-        filteredTeachers = filteredTeachers.filter(t => t.status === filters.status)
-      }
-      if (filters?.department) {
-        filteredTeachers = filteredTeachers.filter(t => t.classLabel.includes(filters.department!))
-      }
-
-      return filteredTeachers
+      const params: any = {}
+      if (institutionId) params.institutionId = institutionId
+      if (filters?.subject) params.subject = filters.subject
+      if (filters?.status) params.status = filters.status
+      if (filters?.department) params.department = filters.department
+      const response = await apiClient.get('/teachers', { params })
+      return response.data.data || []
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teachers:', error)
       throw new Error('Failed to load teachers. Please try again.')
@@ -196,71 +145,10 @@ export const teacherApi = {
   },
 
   // Get teacher by ID with full profile
-  getTeacherById: async (teacherId: string, schoolId?: string): Promise<TeacherProfile | null> => {
+  getTeacherById: async (teacherId: string, institutionId?: string): Promise<TeacherProfile | null> => {
     try {
-      const teachers = await teacherApi.getAllTeachers(schoolId)
-      const teacher = teachers.find(t => t.id === teacherId)
-      if (!teacher) return null
-
-      // Create comprehensive profile
-      const profile: TeacherProfileData = {
-        ...teacher,
-        personalInfo: {
-          gender: 'Female',
-          bloodGroup: 'O +ve',
-          dateOfBirth: '25 Jan 1992',
-          maritalStatus: 'Single',
-          nationality: 'American',
-          languages: ['English', 'Spanish'],
-          emergencyContact: {
-            name: 'Emergency Contact',
-            relation: 'Sibling',
-            phone: '+1-555-0123'
-          }
-        },
-        professional: {
-          employeeId: teacher.id,
-          department: 'Academic',
-          designation: 'Senior Teacher',
-          experience: Math.floor(Math.random() * 10) + 2, // 2-12 years
-          previousEmployers: [
-            { name: 'Previous School', period: '2018-2020', role: 'Teacher' }
-          ]
-        },
-        documents: [
-          { type: 'Resume', name: 'resume.pdf', url: '/documents/resume.pdf', verified: true },
-          { type: 'Teaching Certificate', name: 'certificate.pdf', url: '/documents/cert.pdf', verified: true }
-        ],
-        payroll: {
-          bankName: 'Bank of America',
-          accountNumber: '1234567890',
-          ifscCode: 'BOFAUS3N',
-          panNumber: 'PAN123456',
-          aadharNumber: '1234-5678-9012'
-        },
-        contact: {
-          phone: teacher.phone,
-          email: teacher.email,
-          address: {
-            current: '123 Main Street, City, State 12345',
-            permanent: '123 Main Street, City, State 12345'
-          }
-        },
-        logistics: {
-          transport: {
-            route: 'Route A',
-            busNumber: 'BUS-001',
-            pickupPoint: 'Main Gate'
-          },
-          hostel: {
-            name: 'Teacher Hostel',
-            room: 'Room 101',
-            fee: 1000
-          }
-        }
-      }
-
-      return profile as unknown as TeacherProfile
+      const response = await apiClient.get(`/teachers/${teacherId}`, { params: { institutionId } })
+      return response.data.data || null
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher profile:', error)
       return null
@@ -268,54 +156,10 @@ export const teacherApi = {
   },
 
   // Get teacher statistics
-  getTeacherStats: async (schoolId?: string): Promise<TeacherStats> => {
+  getTeacherStats: async (institutionId?: string): Promise<TeacherStats> => {
     try {
-      const teachers = await teacherApi.getAllTeachers(schoolId)
-
-      const stats: TeacherStats = {
-        totalTeachers: teachers.length,
-        activeTeachers: teachers.filter(t => t.status === 'Active').length,
-        inactiveTeachers: teachers.filter(t => t.status === 'Inactive').length,
-        averageExperience: teachers.length > 0
-          ? teachers.reduce((sum, t) => sum + (t.academics?.specializations.length || 0), 0) / teachers.length
-          : 0,
-        averageSatisfaction: teachers.length > 0
-          ? teachers.reduce((sum, t) => sum + (t.performance?.studentSatisfaction || 0), 0) / teachers.length
-          : 0,
-        averageSalary: teachers.length > 0
-          ? teachers.reduce((sum, t) => sum + (t.financial?.currentSalary || 0), 0) / teachers.length
-          : 0,
-        bySubject: teachers.reduce((acc, t) => {
-          acc[t.subject] = (acc[t.subject] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        byDepartment: teachers.reduce((acc, t) => {
-          const dept = t.classLabel.split(' ')[0]
-          acc[dept] = (acc[dept] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        byExperience: teachers.reduce((acc, t) => {
-          const exp = t.academics?.specializations.length || 0
-          const range = exp < 3 ? '0-2' : exp < 5 ? '3-5' : exp < 10 ? '6-10' : '10+'
-          acc[range] = (acc[range] || 0) + 1
-          return acc
-        }, {} as Record<string, number>),
-        topPerformers: teachers
-          .filter(t => t.performance?.studentSatisfaction)
-          .sort((a, b) => (b.performance?.studentSatisfaction || 0) - (a.performance?.studentSatisfaction || 0))
-          .slice(0, 10),
-        attendanceLeaders: teachers
-          .filter(t => t.performance?.attendanceRate)
-          .sort((a, b) => (b.performance?.attendanceRate || 0) - (a.performance?.attendanceRate || 0))
-          .slice(0, 10),
-        salaryDistribution: teachers.length > 0 ? {
-          min: Math.min(...teachers.map(t => t.financial?.currentSalary || 0)),
-          max: Math.max(...teachers.map(t => t.financial?.currentSalary || 0)),
-          average: teachers.reduce((sum, t) => sum + (t.financial?.currentSalary || 0), 0) / teachers.length
-        } : { min: 0, max: 0, average: 0 }
-      }
-
-      return stats
+      const response = await apiClient.get('/teachers/stats', { params: { institutionId } })
+      return response.data.data
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher stats:', error)
       throw new Error('Failed to load teacher statistics. Please try again.')
@@ -323,9 +167,10 @@ export const teacherApi = {
   },
 
   // Get teacher routine
-  getTeacherRoutine: async (_teacherId: string, _schoolId?: string): Promise<TeacherRoutineDay[]> => {
+  getTeacherRoutine: async (teacherId: string, institutionId?: string): Promise<TeacherRoutineDay[]> => {
     try {
-      return teacherRoutine
+      const response = await apiClient.get(`/teachers/${teacherId}/routine`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher routine:', error)
       throw new Error('Failed to load teacher routine. Please try again.')
@@ -333,15 +178,13 @@ export const teacherApi = {
   },
 
   // Get teacher attendance
-  getTeacherAttendance: async (_teacherId: string, _schoolId?: string): Promise<{
+  getTeacherAttendance: async (teacherId: string, institutionId?: string): Promise<{
     summary: AttendanceSummaryStat[]
     monthly: AttendanceMatrixRow[]
   }> => {
     try {
-      return {
-        summary: teacherAttendanceSummary,
-        monthly: teacherAttendanceMatrix
-      }
+      const response = await apiClient.get(`/teachers/${teacherId}/attendance`, { params: { institutionId } })
+      return response.data.data || { summary: [], monthly: [] }
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher attendance:', error)
       throw new Error('Failed to load teacher attendance. Please try again.')
@@ -349,15 +192,13 @@ export const teacherApi = {
   },
 
   // Get teacher salary history
-  getTeacherSalaryHistory: async (_teacherId: string, _schoolId?: string): Promise<{
+  getTeacherSalaryHistory: async (teacherId: string, institutionId?: string): Promise<{
     summary: TeacherSalarySummaryItem[]
     history: TeacherSalaryRecord[]
   }> => {
     try {
-      return {
-        summary: teacherSalarySummary,
-        history: teacherSalaryHistory
-      }
+      const response = await apiClient.get(`/teachers/${teacherId}/salary`, { params: { institutionId } })
+      return response.data.data || { summary: [], history: [] }
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher salary history:', error)
       throw new Error('Failed to load teacher salary history. Please try again.')
@@ -365,9 +206,10 @@ export const teacherApi = {
   },
 
   // Get teacher library books
-  getTeacherLibraryBooks: async (_teacherId: string, _schoolId?: string): Promise<TeacherLibraryBook[]> => {
+  getTeacherLibraryBooks: async (teacherId: string, institutionId?: string): Promise<TeacherLibraryBook[]> => {
     try {
-      return teacherLibraryBooks
+      const response = await apiClient.get(`/teachers/${teacherId}/library`, { params: { institutionId } })
+      return response.data.data || []
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher library books:', error)
       throw new Error('Failed to load teacher library books. Please try again.')
@@ -375,15 +217,13 @@ export const teacherApi = {
   },
 
   // Get teacher leave records
-  getTeacherLeaveRecords: async (_teacherId: string, _schoolId?: string): Promise<{
+  getTeacherLeaveRecords: async (teacherId: string, institutionId?: string): Promise<{
     summary: TeacherLeaveSummaryItem[]
     records: TeacherLeaveRecord[]
   }> => {
     try {
-      return {
-        summary: teacherLeaveSummary,
-        records: teacherLeaveRecords
-      }
+      const response = await apiClient.get(`/teachers/${teacherId}/leaves`, { params: { institutionId } })
+      return response.data.data || { summary: [], records: [] }
     } catch (error) {
       console.error('[Teacher API] Failed to fetch teacher leave records:', error)
       throw new Error('Failed to load teacher leave records. Please try again.')
@@ -391,17 +231,9 @@ export const teacherApi = {
   },
 
   // Update teacher information
-  updateTeacher: async (teacherId: string, updates: Partial<TeacherRecord>, schoolId?: string): Promise<void> => {
+  updateTeacher: async (teacherId: string, updates: Partial<TeacherRecord>, institutionId?: string): Promise<void> => {
     try {
-      if (!schoolId) {
-        console.warn('[Teacher API] School ID required for updating teacher')
-        return
-      }
-
-      // TODO: Implement actual API call
-      console.warn('[Teacher API] Teacher update not implemented yet')
-
-      console.log(`[Teacher API] Updated teacher ${teacherId}:`, updates)
+      await apiClient.put(`/teachers/${teacherId}`, updates, { params: { institutionId } })
     } catch (error) {
       console.error('[Teacher API] Failed to update teacher:', error)
       throw new Error('Failed to update teacher. Please try again.')
@@ -432,7 +264,7 @@ export const teacherRecords: TeacherSummary[] = [
     phone: '+1 82392 37359',
     status: 'Active',
     joinedOn: '25 Mar 2024',
-    avatar: '/assets/img/teachers/teacher-01.jpg',
+    avatar: '/assets/img/teachers/teacher-01.webp',
   },
   {
     id: 'T849126',
@@ -443,7 +275,7 @@ export const teacherRecords: TeacherSummary[] = [
     phone: '+1 56752 86742',
     status: 'Active',
     joinedOn: '28 Mar 2024',
-    avatar: '/assets/img/teachers/teacher-02.jpg',
+    avatar: '/assets/img/teachers/teacher-02.webp',
   },
   {
     id: 'T849125',
@@ -454,7 +286,7 @@ export const teacherRecords: TeacherSummary[] = [
     phone: '+1 23566 52683',
     status: 'Inactive',
     joinedOn: '11 Apr 2024',
-    avatar: '/assets/img/teachers/teacher-03.jpg',
+    avatar: '/assets/img/teachers/teacher-03.webp',
   },
   {
     id: 'T849124',
@@ -719,9 +551,9 @@ export type TeacherSalarySummaryItem = {
 }
 
 export const teacherSalarySummary: TeacherSalarySummaryItem[] = [
-  { label: 'Total Net Salary', value: '$5,55,410', icon: 'ti ti-user-dollar', color: 'secondary' },
-  { label: 'Total Gross Salary', value: '$5,58,380', icon: 'ti ti-moneybag', color: 'success' },
-  { label: 'Total Deduction', value: '$2,500', icon: 'ti ti-arrow-big-down-lines', color: 'warning' },
+  { label: 'Total Net Salary', value: '₹5,55,410', icon: 'ti ti-user-dollar', color: 'secondary' },
+  { label: 'Total Gross Salary', value: '₹5,58,380', icon: 'ti ti-moneybag', color: 'success' },
+  { label: 'Total Deduction', value: '₹2,500', icon: 'ti ti-arrow-big-down-lines', color: 'warning' },
 ]
 
 export type TeacherSalaryRecord = {
@@ -733,15 +565,15 @@ export type TeacherSalaryRecord = {
 }
 
 export const teacherSalaryHistory: TeacherSalaryRecord[] = [
-  { id: '8198', period: 'Apr - 2024', paymentDate: '04 May 2024', method: 'Cash', netSalary: '$20,000' },
-  { id: '8197', period: 'Mar - 2024', paymentDate: '05 Apr 2024', method: 'Cheque', netSalary: '$19,000' },
-  { id: '8196', period: 'Feb - 2024', paymentDate: '05 Mar 2024', method: 'Cash', netSalary: '$19,500' },
-  { id: '8195', period: 'Jan - 2024', paymentDate: '06 Feb 2024', method: 'Cash', netSalary: '$20,000' },
-  { id: '8194', period: 'Dec - 2023', paymentDate: '03 Jan 2024', method: 'Cheque', netSalary: '$19,480' },
-  { id: '8193', period: 'Nov - 2023', paymentDate: '05 Dec 2023', method: 'Cheque', netSalary: '$19,480' },
-  { id: '8192', period: 'Oct - 2023', paymentDate: '03 Nov 2023', method: 'Cheque', netSalary: '$19,480' },
-  { id: '8191', period: 'Sep - 2023', paymentDate: '04 Oct 2023', method: 'Cheque', netSalary: '$18,000' },
-  { id: '8190', period: 'Aug - 2023', paymentDate: '06 Sep 2023', method: 'Cheque', netSalary: '$20,000' },
+  { id: '8198', period: 'Apr - 2024', paymentDate: '04 May 2024', method: 'Cash', netSalary: '₹20,000' },
+  { id: '8197', period: 'Mar - 2024', paymentDate: '05 Apr 2024', method: 'Cheque', netSalary: '₹19,000' },
+  { id: '8196', period: 'Feb - 2024', paymentDate: '05 Mar 2024', method: 'Cash', netSalary: '₹19,500' },
+  { id: '8195', period: 'Jan - 2024', paymentDate: '06 Feb 2024', method: 'Cash', netSalary: '₹20,000' },
+  { id: '8194', period: 'Dec - 2023', paymentDate: '03 Jan 2024', method: 'Cheque', netSalary: '₹19,480' },
+  { id: '8193', period: 'Nov - 2023', paymentDate: '05 Dec 2023', method: 'Cheque', netSalary: '₹19,480' },
+  { id: '8192', period: 'Oct - 2023', paymentDate: '03 Nov 2023', method: 'Cheque', netSalary: '₹19,480' },
+  { id: '8191', period: 'Sep - 2023', paymentDate: '04 Oct 2023', method: 'Cheque', netSalary: '₹18,000' },
+  { id: '8190', period: 'Aug - 2023', paymentDate: '06 Sep 2023', method: 'Cheque', netSalary: '₹20,000' },
 ]
 
 export type TeacherLibraryBook = {

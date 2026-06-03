@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { getInstitutionConfigFromPath } from '../../utils/institutionUtils'
-import { apiService } from '../../services/api'
+import superAdminService from '../../services/superAdminService'
+import apiService from '../../services'
 
 interface School {
   id: string
@@ -57,21 +59,17 @@ const InstitutionsUpgradePage: React.FC = () => {
         setLoading(true)
         setError(null)
 
-        // Fetch school from API based on institution type
-        const response = await apiService.get(`/schools/${id}`)
-
-        if (response.success && response.data) {
-          const data = response.data as any
-          setSchool({
-            ...data,
-            plan: extractPlanName(data.plan),
-            status: data.status ? (data.status.charAt(0).toUpperCase() + data.status.slice(1)) : 'Active',
-            expiryDate: data.subscriptionExpiry || data.expiryDate || '',
-            students: data.currentUsers || data.students || 0,
-          } as School)
-        } else {
-          setError('Failed to fetch school details')
-        }
+        const data: any = await superAdminService.getInstitutionById(id!)
+        setSchool({
+          id: data._id || data.id || '',
+          name: data.name || '',
+          plan: extractPlanName(data.plan),
+          status: data.status ? (data.status.charAt(0).toUpperCase() + data.status.slice(1)) : 'Active',
+          expiryDate: data.subscriptionExpiry || data.expiryDate || '',
+          students: data.currentUsers || data.students || 0,
+          monthlyRevenue: data.monthlyRevenue || data._monthlyRevenue || 0,
+          totalRevenue: data.totalRevenue || 0,
+        } as School)
       } catch (err) {
         console.error('Error fetching school:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch school details')
@@ -166,7 +164,7 @@ const InstitutionsUpgradePage: React.FC = () => {
           plan: selectedPlanData.name as 'Basic' | 'Medium' | 'Premium'
         } : null)
 
-        alert(`School ${school.name} upgraded to ${selectedPlanData.name} plan successfully!`)
+        toast.success(`School ${school.name} upgraded to ${selectedPlanData.name} plan successfully!`)
 
         // Optionally redirect back to details page
         // window.location.href = `/super-admin/institutions/${institutionConfig?.basePath?.split('/').pop()}/${id}`
@@ -300,7 +298,7 @@ const InstitutionsUpgradePage: React.FC = () => {
                 <div className="text-center mb-3">
                   <h4>{plan.name}</h4>
                   <div className="display-6">
-                    <sup>$</sup>
+                    <sup>₹</sup>
                     <span className="text-primary">{plan.price}</span>
                     <span className="text-muted"> / month</span>
                   </div>
@@ -359,12 +357,12 @@ const InstitutionsUpgradePage: React.FC = () => {
 
                 <div className="text-end">
                   <div>
-                    Old: ${getCurrentPlan()?.price}/month <br />
+                    Old: ₹{getCurrentPlan()?.price}/month <br />
                     New:{' '}
-                    ${plans.find((p) => p.id === selectedPlan)?.price}/month
+                    ₹{plans.find((p) => p.id === selectedPlan)?.price}/month
                   </div>
                   <div className="display-6">
-                    +$
+                    +₹
                     {(plans.find((p) => p.id === selectedPlan)?.price || 0) -
                       (getCurrentPlan()?.price || 0)}
                     /month

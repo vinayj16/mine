@@ -1,12 +1,13 @@
 import Transaction from '../models/Transaction.js';
-import Subscription from '../models/Subscription.js';
+import Institution from '../models/Institution.js';
 
 export const getTransactionById = async (transactionId) => {
-  const transaction = await Transaction.findOne({ transactionId })
-    .populate('schoolId', 'name code contact')
+  const transaction = await Transaction.findById(transactionId)
+    .populate('institutionId', 'name code contact')
+    .populate('institutionId', 'name code type')
     .populate('subscriptionId')
     .populate('createdBy', 'name email');
-  
+
   if (!transaction) {
     throw new Error('Transaction not found');
   }
@@ -14,10 +15,10 @@ export const getTransactionById = async (transactionId) => {
   return transaction;
 };
 
-export const getSchoolTransactions = async (schoolId, filters = {}) => {
+export const getSchoolTransactions = async (institutionId, filters = {}) => {
   const { status, type, startDate, endDate, page = 1, limit = 20 } = filters;
 
-  const query = { schoolId };
+  const query = { institutionId };
 
   if (status) {
     query.status = status;
@@ -79,7 +80,8 @@ export const getAllTransactions = async (filters = {}) => {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .populate('schoolId', 'name code')
+    .populate('institutionId', 'name code')
+    .populate('institutionId', 'name code type')
     .populate('subscriptionId', 'planName')
     .populate('createdBy', 'name email');
 
@@ -96,11 +98,122 @@ export const getAllTransactions = async (filters = {}) => {
   };
 };
 
+export const getAllTransactionsForSuperAdmin = async (filters = {}) => {
+  const { status, type, startDate, endDate, search, page = 1, limit = 50 } = filters;
+
+  const query = {};
+
+  if (status && status !== 'all') {
+    query.status = status.toLowerCase();
+  }
+
+  if (type && type !== 'all') {
+    query.type = type;
+  }
+
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) query.createdAt.$lte = new Date(endDate);
+  }
+
+  const skip = (page - 1) * limit;
+
+  const transactions = await Transaction.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate('institutionId', 'name code type')
+    .populate('institutionId', 'name code')
+    .populate('subscriptionId', 'planName billingCycle')
+    .populate('createdBy', 'name email');
+
+  const total = await Transaction.countDocuments(query);
+
+  const enriched = await Promise.all(transactions.map(async (txn) => {
+    let schoolName = 'Unknown';
+    let instId = '';
+    if (txn.institutionId && typeof txn.institutionId === 'object' && txn.institutionId.name) {
+      schoolName = txn.institutionId.name;
+      instId = txn.institutionId._id?.toString() || txn.institutionId.toString();
+    } else if (txn.institutionId && typeof txn.institutionId === 'object' && txn.institutionId.name) {
+      schoolName = txn.institutionId.name;
+    } else if (txn.institutionId) {
+      const rawId = txn.institutionId?.toString?.() || txn.institutionId;
+      instId = rawId;
+      try {
+        const inst = await Institution.findById(rawId).select('name').lean();
+        if (inst) schoolName = inst.name;
+      } catch {} 
+    }
+
+    const planName = txn.plan || txn.metadata?.planName || 'N/A';
+    const gstAmount = Math.round(txn.amount * 0.18);
+    const transactionId = txn.transactionId || txn._id.toString();
+
+    return {
+      id: txn._id.toString(),
+      institutionId: instId,
+      schoolName,
+      plan: planName,
+      amount: txn.amount,
+      currency: txn.currency || 'INR',
+      date: txn.createdAt?.toISOString()?.split('T')[0] || '',
+      status: txn.status.charAt(0).toUpperCase() + txn.status.slice(1),
+      paymentMethod: txn.paymentMethod || 'N/A',
+      transactionId,
+      invoiceId: txn.invoiceId || `INV-${transactionId.slice(-6)}`,
+      description: txn.description || `${planName} ${txn.type} payment`,
+      createdBy: txn.createdBy?.name || 'System',
+      createdAt: txn.createdAt?.toISOString() || '',
+      gstAmount,
+      totalAmount: txn.amount + gstAmount,
+      type: txn.type
+    }
+  }));
+
+  return {
+    transactions: enriched,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  };
+};
+
+export const getTransactionStatsForSuperAdmin = async () => {
+  const allTxns = await Transaction.find({}).lean();
+
+  const completed = allTxns.filter(t => t.status === 'completed');
+  const failed = allTxns.filter(t => t.status === 'failed');
+  const pending = allTxns.filter(t => t.status === 'pending');
+  const refunded = allTxns.filter(t => t.status === 'refunded');
+
+  const totalRevenue = completed.reduce((sum, t) => sum + t.amount, 0);
+  const totalGST = Math.round(totalRevenue * 0.18);
+  const totalAmount = totalRevenue + totalGST;
+  const pendingAmount = pending.reduce((sum, t) => sum + t.amount, 0);
+
+  return {
+    totalRevenue,
+    totalGST,
+    totalAmount,
+    pendingAmount,
+    failedCount: failed.length,
+    completedCount: completed.length,
+    pendingCount: pending.length,
+    refundedCount: refunded.length,
+    totalTransactions: allTxns.length
+  };
+};
+
 export const createRefund = async (transactionId, refundData, userId) => {
   const { amount, reason } = refundData;
 
-  const transaction = await Transaction.findOne({ transactionId });
-  
+  const transaction = await Transaction.findById(transactionId);
+
   if (!transaction) {
     throw new Error('Transaction not found');
   }
@@ -132,7 +245,8 @@ export const createRefund = async (transactionId, refundData, userId) => {
 
   const refundTransaction = new Transaction({
     transactionId: refundTransactionId,
-    schoolId: transaction.schoolId,
+    institutionId: transaction.institutionId,
+    institutionId: transaction.institutionId,
     subscriptionId: transaction.subscriptionId,
     invoiceId: refundInvoiceId,
     type: 'refund',
@@ -140,7 +254,7 @@ export const createRefund = async (transactionId, refundData, userId) => {
     amount: -amount,
     currency: transaction.currency,
     status: 'completed',
-    paymentMethod: transaction.paymentMethod,
+    paymentMethod: 'other',
     metadata: {
       originalTransactionId: transactionId,
       refundReason: reason
@@ -159,7 +273,7 @@ export const getRevenueAnalytics = async (filters = {}) => {
 
   const matchStage = {
     status: 'completed',
-    type: { $in: ['subscription', 'upgrade', 'addon'] }
+    type: { $in: ['subscription', 'upgrade', 'addon', 'payment'] }
   };
 
   if (startDate || endDate) {
@@ -208,7 +322,7 @@ export const getRevenueAnalytics = async (filters = {}) => {
     { $match: matchStage },
     {
       $group: {
-        _id: '$metadata.planId',
+        _id: { $ifNull: ['$plan', { $ifNull: ['$metadata.planName', 'Unknown'] }] },
         revenue: { $sum: '$amount' },
         count: { $sum: 1 }
       }
@@ -236,7 +350,7 @@ export const getTransactionStats = async () => {
   const totalRefunded = await Transaction.countDocuments({ status: 'refunded' });
 
   const revenueStats = await Transaction.aggregate([
-    { $match: { status: 'completed', type: { $in: ['subscription', 'upgrade', 'addon'] } } },
+    { $match: { status: 'completed', type: { $in: ['subscription', 'upgrade', 'addon', 'payment'] } } },
     {
       $group: {
         _id: null,
@@ -251,7 +365,7 @@ export const getTransactionStats = async () => {
     {
       $group: {
         _id: null,
-        totalRefunded: { $sum: '$refundInfo.refundAmount' }
+        totalRefunded: { $sum: { $ifNull: ['$refundInfo.refundAmount', 0] } }
       }
     }
   ]);

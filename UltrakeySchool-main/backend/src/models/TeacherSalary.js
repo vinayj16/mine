@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const teacherSalarySchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -98,8 +98,8 @@ const teacherSalarySchema = new mongoose.Schema({
   timestamps: true
 });
 
-teacherSalarySchema.index({ schoolId: 1, teacherId: 1, year: -1, month: -1 });
-teacherSalarySchema.index({ schoolId: 1, paymentStatus: 1 });
+teacherSalarySchema.index({ institutionId: 1, teacherId: 1, year: -1, month: -1 });
+teacherSalarySchema.index({ institutionId: 1, paymentStatus: 1 });
 
 teacherSalarySchema.pre('save', function(next) {
   this.totalAllowances = Object.values(this.allowances).reduce((sum, val) => sum + val, 0);

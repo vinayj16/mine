@@ -78,12 +78,12 @@ const AdminLibraryPage: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || '' : '';
       
-      const studentRes = await apiClient.get('/students', { params: { schoolId, limit: 100 } });
-      const teacherRes = await apiClient.get('/teachers', { params: { schoolId, limit: 100 } });
+      const studentRes = await apiClient.get('/students', { params: { institutionId, limit: 100 } });
+      const teacherRes = await apiClient.get('/teachers', { params: { institutionId, limit: 100 } });
       
       const studentsArray = studentRes.data?.data?.students || studentRes.data?.data || [];
       const teachersArray = teacherRes.data?.data?.teachers || teacherRes.data?.data || [];
@@ -635,7 +635,7 @@ const AdminLibraryPage: React.FC = () => {
                             <td>{book.author}</td>
                             <td>{book.isbn}</td>
                             <td>
-                              <span className="badge bg-primary">{book.category}</span>
+                              <span className="badge bg-primary">{typeof book.category === 'object' ? book.category?.name || '-' : book.category}</span>
                             </td>
                             <td>
                               <span className={`badge ${

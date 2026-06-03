@@ -239,7 +239,6 @@ const budgetSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['education', 'infrastructure', 'staff', 'utilities', 'maintenance', 'transport', 'library', 'sports', 'other'],
     required: true
   },
   academicYear: {
@@ -258,13 +257,12 @@ const budgetSchema = new mongoose.Schema({
   },
   remainingAmount: {
     type: Number,
-    default: function() {
+    default: function () {
       return this.plannedAmount - this.spentAmount;
     }
   },
   status: {
     type: String,
-    enum: ['draft', 'approved', 'active', 'completed', 'cancelled'],
     default: 'draft'
   },
   approvalDate: {
@@ -310,8 +308,7 @@ const salarySchema = new mongoose.Schema({
   allowances: [{
     type: {
       type: String,
-      enum: ['house-rent', 'conveyance', 'medical', 'special', 'other'],
-      required: true
+      default: 'other'
     },
     amount: {
       type: Number,
@@ -323,8 +320,7 @@ const salarySchema = new mongoose.Schema({
   deductions: [{
     type: {
       type: String,
-      enum: ['tax', 'insurance', 'loan', 'provident-fund', 'other'],
-      required: true
+      default: 'other'
     },
     amount: {
       type: Number,
@@ -335,21 +331,21 @@ const salarySchema = new mongoose.Schema({
   }],
   grossSalary: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   netSalary: {
     type: Number,
-    required: true,
+    default: 0,
     min: 0
   },
   paymentDate: {
     type: Date,
-    required: true
+    default: Date.now
   },
   month: {
     type: String,
-    required: true // e.g., '2024-01'
+    required: true // e.g., '2024-01' or 'January'
   },
   year: {
     type: Number,
@@ -362,12 +358,12 @@ const salarySchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['bank-transfer', 'cash', 'cheque', 'online']
+    enum: ['bank-transfer', 'cash', 'cheque', 'online'],
+    default: 'bank-transfer'
   },
   processedBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
   notes: {
     type: String,

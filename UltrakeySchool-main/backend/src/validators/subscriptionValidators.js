@@ -1,7 +1,7 @@
 import { body, param, query } from 'express-validator';
 
 export const createSubscriptionValidator = [
-  body('schoolId')
+  body('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   body('planId')
@@ -32,7 +32,7 @@ export const createSubscriptionValidator = [
 ];
 
 export const upgradeSubscriptionValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   body('targetPlanId')
@@ -41,7 +41,7 @@ export const upgradeSubscriptionValidator = [
 ];
 
 export const cancelSubscriptionValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   body('reason')
@@ -50,8 +50,8 @@ export const cancelSubscriptionValidator = [
     .isLength({ max: 500 }).withMessage('Reason must not exceed 500 characters')
 ];
 
-export const schoolIdValidator = [
-  param('schoolId')
+export const institutionIdValidator = [
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID')
 ];

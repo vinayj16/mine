@@ -8,6 +8,9 @@ import {
   AreaChart, Area,
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
+import { useAuth } from '../../../store/authStore'
+import InstitutionDetailsCard from '../../../components/dashboard/InstitutionDetailsCard'
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type StudentQuery = {
@@ -40,6 +43,7 @@ type Student = {
 }
 
 const FacultyDashboardComplete = () => {
+  const { user, institutionData } = useAuth();
   const [activeSection, setActiveSection] = useState('overview')
   const [selectedQuery, setSelectedQuery] = useState<StudentQuery | null>(null)
   const [queryResponseModal, setQueryResponseModal] = useState(false)
@@ -51,6 +55,40 @@ const FacultyDashboardComplete = () => {
   const [markAttendanceModal, setMarkAttendanceModal] = useState(false)
   const [selectedDay, setSelectedDay] = useState('Monday')
   const [leaveApplyModal, setLeaveApplyModal] = useState(false)
+
+  const handleExportStudents = () => {
+    const exportData = allStudents.map((s: any) => ({
+      'Roll No': s.rollNo,
+      Name: s.name,
+      Class: s.class,
+      Gender: s.gender,
+      Email: s.email,
+      Phone: s.phone,
+      'Avg Score': s.avgScore,
+      Attendance: s.attendance,
+      Status: s.status
+    }));
+    exportToExcel(exportData, 'faculty-students');
+  };
+
+  const handleDownloadTimetable = () => {
+    const exportData = weeklyTimetable.flatMap((day: any) =>
+      (day.periods || []).map((p: any) => ({
+        Day: day.day,
+        Period: p.period,
+        Subject: p.subject,
+        Class: p.class,
+        Time: p.time
+      }))
+    );
+    exportToPDF(exportData, 'weekly-timetable', [
+      { key: 'Day', label: 'Day' },
+      { key: 'Period', label: 'Period' },
+      { key: 'Subject', label: 'Subject' },
+      { key: 'Class', label: 'Class' },
+      { key: 'Time', label: 'Time' }
+    ], 'Weekly Timetable');
+  };
   
   // Backend integration state
   const [loading, setLoading] = useState(true)
@@ -173,6 +211,10 @@ const FacultyDashboardComplete = () => {
 
   return (
     <>
+      <InstitutionDetailsCard 
+        institution={institutionData || user?.institutionData}
+        userRole={user?.role}
+      />
       {/* ── PAGE HEADER ── */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
         <div className="my-auto mb-2">
@@ -227,7 +269,7 @@ const FacultyDashboardComplete = () => {
                     <span className="badge bg-success-transparent text-white">{facultyProfile.experience}</span>
                     <span className="badge bg-info-transparent text-white">{facultyProfile.qualification}</span>
                   </div>
-                  <Link to="/profile/edit" className="btn btn-light btn-sm">
+                  <Link to="profile" className="btn btn-light btn-sm">
                     <i className="ti ti-edit me-1" />Edit Profile
                   </Link>
                 </div>
@@ -1133,7 +1175,7 @@ const FacultyDashboardComplete = () => {
                 </select>
               </div>
               <div className="d-flex gap-2">
-                <button className="btn btn-sm btn-primary"><i className="ti ti-download me-1" />Export List</button>
+                <button className="btn btn-sm btn-primary" onClick={handleExportStudents}><i className="ti ti-download me-1" />Export List</button>
                 <Link to="/students/all" className="btn btn-sm btn-light">View All Students</Link>
               </div>
             </div>
@@ -1177,7 +1219,7 @@ const FacultyDashboardComplete = () => {
                           </span>
                           <div>
                             <h6 className="mb-0" style={{ fontSize: 13 }}>{s.name}</h6>
-                            <small className="text-muted">{s.gender === 'M' ? 'Male' : 'Female'}</small>
+                            <small className="text-muted">{s.gender?.toLowerCase() === 'male' ? 'Male' : s.gender?.toLowerCase() === 'female' ? 'Female' : 'Other'}</small>
                           </div>
                         </div>
                       </td>
@@ -1570,7 +1612,7 @@ const FacultyDashboardComplete = () => {
           <div className="card-header d-flex align-items-center justify-content-between">
             <h4 className="card-title">Weekly Timetable</h4>
             <div className="d-flex gap-2">
-              <button className="btn btn-sm btn-primary"><i className="ti ti-download me-1" />Download PDF</button>
+              <button className="btn btn-sm btn-primary" onClick={handleDownloadTimetable}><i className="ti ti-download me-1" />Download PDF</button>
               <button className="btn btn-sm btn-success"><i className="ti ti-printer me-1" />Print</button>
             </div>
           </div>
@@ -2124,7 +2166,7 @@ const FacultyDashboardComplete = () => {
               </div>
             </div>
             <div className="border-top pt-3 mt-3">
-              <Link to="/profile/edit" className="btn btn-primary w-100 mb-2"><i className="ti ti-edit me-1" />Edit Profile</Link>
+              <Link to="profile" className="btn btn-primary w-100 mb-2"><i className="ti ti-edit me-1" />Edit Profile</Link>
               <button className="btn btn-light w-100"><i className="ti ti-key me-1" />Change Password</button>
             </div>
           </div>
@@ -2455,7 +2497,7 @@ const FacultyDashboardComplete = () => {
                 </div>
                 <div className="mb-2">
                   <small className="text-muted d-block">Gender</small>
-                  <span>{selectedStudent.gender === 'M' ? 'Male' : 'Female'}</span>
+                  <span>{selectedStudent.gender?.toLowerCase() === 'male' ? 'Male' : selectedStudent.gender?.toLowerCase() === 'female' ? 'Female' : 'Other'}</span>
                 </div>
                 <div className="mb-2">
                   <small className="text-muted d-block">Phone</small>

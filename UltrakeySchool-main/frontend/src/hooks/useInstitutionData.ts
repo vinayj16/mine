@@ -60,8 +60,23 @@ interface StaffData {
   updatedAt: string;
 }
 
+const mapApiInstitution = (raw: Record<string, unknown>): InstitutionData => ({
+  _id: String(raw._id || raw.id || ''),
+  name: String(raw.name || 'Your Institution'),
+  code: String(raw.code || raw.instituteCode || raw.schoolCode || 'N/A'),
+  schoolCode: String(raw.schoolCode || raw.instituteCode || raw.code || 'N/A'),
+  type: (raw.type as InstitutionData['type']) || 'School',
+  email: raw.contact && typeof raw.contact === 'object' && 'email' in raw.contact
+    ? String((raw.contact as { email?: string }).email || '')
+    : undefined,
+  phone: raw.contact && typeof raw.contact === 'object' && 'phone' in raw.contact
+    ? String((raw.contact as { phone?: string }).phone || '')
+    : undefined,
+  logo: raw.logo ? String(raw.logo) : undefined
+});
+
 export const useInstitutionData = () => {
-  const { user } = useAuth();
+  const { user, institutionData: authInstitution } = useAuth();
   const [institutionData, setInstitutionData] = useState<InstitutionData | null>(null);
   const [staffData, setStaffData] = useState<StaffData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,200 +93,169 @@ export const useInstitutionData = () => {
       console.log('fetchInstitutionData: Already fetching, skipping...');
       return;
     }
-    
+
     try {
       setIsFetching(true);
       setLoading(true);
       setError(null);
-      
-      // Add a small delay to prevent rapid successive calls
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
+
+      // Use institution from login response immediately
+      const loginInstitution = authInstitution || user?.institutionData;
+      if (loginInstitution?.name || loginInstitution?.id) {
+        setInstitutionData(mapApiInstitution(loginInstitution as Record<string, unknown>));
+      }
+
       // Try to get institution data from multiple possible endpoints
       let apiResponse;
-      
-      // First try the dedicated institution endpoint
+
+      // 1. Try dedicated institution endpoint
       try {
         apiResponse = await apiClient.get('/institutions/my');
-        if (apiResponse.data.success) {
-          setInstitutionData(apiResponse.data.data);
-          console.log('Institution data from /institutions/my:', apiResponse.data.data);
+        if (apiResponse.data.success && apiResponse.data.data) {
+          setInstitutionData(mapApiInstitution(apiResponse.data.data));
           return;
         }
       } catch (err) {
         console.error('Error fetching from /institutions/my:', err);
-        // Continue to next endpoint if this fails
       }
-      
-      // Fallback to user profile data
-      apiResponse = await apiClient.get('/auth/profile');
-      if (apiResponse.data.success) {
-        const profileData = apiResponse.data.data;
-        
-        // Create institution data from profile
-        const institutionFromProfile: InstitutionData = {
-          _id: profileData.institutionId || '',
-          name: profileData.institutionName || 'Your Institution',
-          code: profileData.institutionCode || profileData.schoolCode || 'N/A',
-          schoolCode: profileData.institutionCode || profileData.schoolCode || 'N/A',
-          type: profileData.institutionType || 'Educational Institution',
-          address: profileData.institutionAddress || 'Address not available',
-          phone: profileData.institutionPhone || 'Phone not available',
-          email: profileData.institutionEmail || 'Email not available',
-          logo: profileData.institutionLogo || '/assets/img/logo.png',
-          website: profileData.institutionWebsite || '',
-          established: profileData.institutionEstablished || '',
-          principal: profileData.principal ? {
-            name: profileData.principal.name || '',
-            email: profileData.principal.email || '',
-            phone: profileData.principal.phone || ''
-          } : undefined,
-          admin: profileData.admin ? {
-            name: profileData.admin.name || '',
-            email: profileData.admin.email || '',
-            phone: profileData.admin.phone || ''
-          } : undefined,
-          settings: {
-            timezone: profileData.timezone || 'UTC',
-            currency: profileData.currency || 'INR',
-            language: profileData.language || 'en',
-            academicYear: profileData.academicYear || new Date().getFullYear().toString(),
-            currentSemester: profileData.currentSemester || ''
-          },
-        };
-        
-        setInstitutionData(institutionFromProfile);
-        console.log('Institution data from profile fallback:', institutionFromProfile);
-        
-        // Extract staff data from profile
-        if (profileData) {
-          const staffFromProfile: StaffData = {
-            _id: profileData.id || user?.id || '',
-            name: profileData.name || user?.name || 'Staff Member',
-            email: profileData.email || user?.email || '',
-            role: profileData.role || user?.role || 'staff',
-            department: profileData.department || 'General',
-            designation: profileData.designation || 'Staff',
-            employeeId: profileData.employeeId || user?.id?.slice(-6) || 'N/A',
-            avatar: profileData.avatar || user?.avatar || '',
-            phone: profileData.phone || '',
-            address: profileData.address || '',
-            dateOfBirth: profileData.dateOfBirth || '',
-            gender: profileData.gender || '',
-            bloodGroup: profileData.bloodGroup || '',
-            qualification: profileData.qualification || '',
-            experience: profileData.experience || '',
-            salary: profileData.salary || 0,
-            joiningDate: profileData.joiningDate || '',
-            skills: profileData.skills || [],
-            linkedinProfile: profileData.linkedinProfile || '',
-            status: profileData.status || 'active',
-            permissions: profileData.permissions || [],
-            createdAt: profileData.createdAt || new Date().toISOString(),
-            updatedAt: profileData.updatedAt || new Date().toISOString()
+
+      // 2. Fallback to user profile data
+      try {
+        apiResponse = await apiClient.get('/auth/profile');
+        if (apiResponse.data.success) {
+          const profileData = apiResponse.data.data;
+
+          const institutionFromProfile: InstitutionData = {
+            _id: profileData.institutionId || '',
+            name: profileData.institutionName || 'Your Institution',
+            code: profileData.institutionCode || profileData.schoolCode || 'N/A',
+            schoolCode: profileData.institutionCode || profileData.schoolCode || 'N/A',
+            type: profileData.institutionType || 'Educational Institution',
+            address: profileData.institutionAddress || 'Address not available',
+            phone: profileData.institutionPhone || 'Phone not available',
+            email: profileData.institutionEmail || 'Email not available',
+            logo: profileData.institutionLogo || '/assets/img/logo.png',
+            website: profileData.institutionWebsite || '',
+            established: profileData.institutionEstablished || '',
+            principal: profileData.principal ? {
+              name: profileData.principal.name || '',
+              email: profileData.principal.email || '',
+              phone: profileData.principal.phone || ''
+            } : undefined,
+            admin: profileData.admin ? {
+              name: profileData.admin.name || '',
+              email: profileData.admin.email || '',
+              phone: profileData.admin.phone || ''
+            } : undefined,
+            settings: {
+              timezone: profileData.timezone || 'UTC',
+              currency: profileData.currency || 'INR',
+              language: profileData.language || 'en',
+              academicYear: profileData.academicYear || new Date().getFullYear().toString(),
+              currentSemester: profileData.currentSemester || ''
+            },
           };
-          
-          setStaffData(staffFromProfile);
-          console.log('Staff data from profile:', staffFromProfile);
+
+          setInstitutionData(institutionFromProfile);
+
+          if (profileData) {
+            const staffFromProfile: StaffData = {
+              _id: profileData.id || user?.id || '',
+              name: profileData.name || user?.name || 'Staff Member',
+              email: profileData.email || user?.email || '',
+              role: profileData.role || user?.role || 'staff',
+              department: profileData.department || 'General',
+              designation: profileData.designation || 'Staff',
+              employeeId: profileData.employeeId || user?.id?.slice(-6) || 'N/A',
+              avatar: profileData.avatar || user?.avatar || '',
+              phone: profileData.phone || '',
+              address: profileData.address || '',
+              dateOfBirth: profileData.dateOfBirth || '',
+              gender: profileData.gender || '',
+              bloodGroup: profileData.bloodGroup || '',
+              qualification: profileData.qualification || '',
+              experience: profileData.experience || '',
+              salary: profileData.salary || 0,
+              joiningDate: profileData.joiningDate || '',
+              skills: profileData.skills || [],
+              linkedinProfile: profileData.linkedinProfile || '',
+              status: profileData.status || 'active',
+              permissions: profileData.permissions || [],
+              createdAt: profileData.createdAt || new Date().toISOString(),
+              updatedAt: profileData.updatedAt || new Date().toISOString()
+            };
+            setStaffData(staffFromProfile);
+          }
         }
+      } catch (err) {
+        console.error('Error fetching from profile:', err);
       }
-    } catch (profileErr) {
-      console.error('Error fetching from profile:', profileErr);
-    }
-    
-    // Final fallback to dashboard data
-    try {
-      const Response = await apiClient.get('/dashboard');
-      if (Response.data.success) {
-        const dashboardData = Response.data.data;
-        
-        // Extract institution data from dashboard
-        if (dashboardData.institution) {
-          setInstitutionData(dashboardData.institution);
-          console.log('Institution data from dashboard:', dashboardData.institution);
+
+      // 3. Fallback to dashboard data
+      try {
+        const Response = await apiClient.get('/dashboard');
+        if (Response.data.success) {
+          const dashboardData = Response.data.data;
+          if (dashboardData.institution) setInstitutionData(dashboardData.institution);
+          if (dashboardData.staff) setStaffData(dashboardData.staff);
         }
-        
-        // Extract staff data from dashboard
-        if (dashboardData.staff) {
-          setStaffData(dashboardData.staff);
-          console.log('Staff data from dashboard:', dashboardData.staff);
-        }
+      } catch (err) {
+        console.error('Error fetching from dashboard:', err);
       }
-    } catch (dashboardErr) {
-      console.error('Error fetching from dashboard:', dashboardErr);
+
+      // 4. Default data if all failed
+      if (!institutionData) {
+        setInstitutionData({
+          _id: 'default',
+          name: 'Your Institution',
+          code: 'INST001',
+          schoolCode: 'INST001',
+          type: 'Educational Institution',
+          address: 'Address not available',
+          phone: 'Phone not available',
+          email: 'Email not available',
+          logo: '/assets/img/logo.png',
+          website: '',
+          established: '',
+          settings: {
+            timezone: 'UTC',
+            currency: 'INR',
+            language: 'en',
+            academicYear: new Date().getFullYear().toString(),
+            currentSemester: ''
+          },
+        });
+      }
+
+      if (!staffData) {
+        setStaffData({
+          _id: user?.id || '',
+          name: user?.name || 'Staff Member',
+          email: user?.email || '',
+          role: user?.role || 'staff',
+          department: 'General',
+          designation: 'Staff',
+          employeeId: user?.id?.slice(-6) || 'N/A',
+          avatar: user?.avatar || '',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as StaffData);
+      }
+
+    } catch (err) {
+      console.error('Critical error in fetchInstitutionData:', err);
+      setError('Failed to load institution data');
+    } finally {
+      setIsFetching(false);
+      setLoading(false);
     }
-    
-    // If all else fails, create default data
-    if (!institutionData) {
-      const defaultInstitution: InstitutionData = {
-        _id: 'default',
-        name: 'Your Institution',
-        code: 'INST001',
-        schoolCode: 'INST001',
-        type: 'Educational Institution',
-        address: 'Address not available',
-        phone: 'Phone not available',
-        email: 'Email not available',
-        logo: '/assets/img/logo.png',
-        website: '',
-        established: '',
-        principal: {
-          name: 'Principal Name',
-          email: 'principal@institution.edu',
-          phone: ''
-        },
-        admin: {
-          name: 'Admin Name',
-          email: 'admin@institution.edu',
-          phone: ''
-        },
-        settings: {
-          timezone: 'UTC',
-          currency: 'INR',
-          language: 'en',
-          academicYear: new Date().getFullYear().toString(),
-          currentSemester: ''
-        },
-      };
-      
-      setInstitutionData(defaultInstitution);
-    }
-    
-    if (!staffData) {
-      const defaultStaffData: StaffData = {
-        _id: user?.id || '',
-        name: user?.name || 'Staff Member',
-        email: user?.email || '',
-        role: user?.role || 'staff',
-        department: 'General',
-        designation: 'Staff',
-        employeeId: user?.id?.slice(-6) || 'N/A',
-        avatar: user?.avatar || '',
-        phone: '',
-        address: '',
-        dateOfBirth: '',
-        gender: '',
-        bloodGroup: '',
-        qualification: '',
-        experience: '',
-        salary: 0,
-        joiningDate: '',
-        skills: [],
-        linkedinProfile: '',
-        status: 'active',
-        permissions: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      setStaffData(defaultStaffData);
-      console.log('Default staff data created:', defaultStaffData);
   };
 
   const updateStaffProfile = async (profileData: Partial<StaffData>) => {
     try {
       const response = await apiClient.put('/auth/profile', profileData);
-      
+
       if (response.data.success) {
         setStaffData(response.data.data);
         toast.success('Profile updated successfully');
@@ -288,16 +272,16 @@ export const useInstitutionData = () => {
     if (institutionData && staffData) {
       const institutionName = institutionData.name || 'Your Institution';
       const staffName = staffData.name || 'Staff Member';
-      
-      return `Welcome back, ${staffName}! 👋 You are part of ${institutionName}`;
+
+      return `Welcome back, ${staffName}! You are part of ${institutionName}`;
     }
-    
-    return 'Welcome back! 👋';
+
+    return 'Welcome back!';
   };
 
   const getInstitutionStats = () => {
     if (!institutionData) return null;
-    
+
     return {
       totalStudents: 0,
       activeStudents: 0,
@@ -324,4 +308,3 @@ export const useInstitutionData = () => {
     getInstitutionStats
   };
 };
-}

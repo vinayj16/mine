@@ -1,4 +1,8 @@
 import { FeeStructure, Invoice, FinanceTransaction, Budget, Salary } from '../models/finance.js';
+import { FeeGroup, FeeType, FeeMaster, FeeAssignment } from '../models/feeCatalog.js';
+import Payment from '../models/Payment.js';
+import Payroll from '../models/Payroll.js';
+import { getInstitutionFilter, matchInstitutionField } from '../utils/tenantContext.js';
 import ExpenseCategory from '../models/expenseCategory.js';
 import TaxRate from '../models/taxRate.js';
 import stripeService from '../services/stripeService.js';
@@ -30,9 +34,7 @@ const feeStructureController = {
         user: req.user.id
       });
 
-      return createdResponse(res, 'Fee structure created successfully', {
-        feeStructure
-      });
+      return createdResponse(res, { feeStructure }, 'Fee structure created successfully');
     } catch (error) {
       logger.error('Create fee structure error:', error);
       return errorResponse(res, 'Failed to create fee structure', 500);
@@ -51,7 +53,8 @@ const feeStructureController = {
         isActive = true
       } = req.query;
 
-      const query = { institution: req.tenantId };
+      const instFilter = getInstitutionFilter(req.tenantId);
+      const query = instFilter ? { ...instFilter } : { institution: req.tenantId };
 
       if (grade && grade !== 'all') query.grade = grade;
       if (category) query.category = category;
@@ -68,7 +71,7 @@ const feeStructureController = {
         FeeStructure.countDocuments(query)
       ]);
 
-      return successResponse(res, 'Fee structures retrieved successfully', {
+      return successResponse(res, {
         feeStructures,
         pagination: {
           page: parseInt(page),
@@ -76,7 +79,7 @@ const feeStructureController = {
           total,
           totalPages: Math.ceil(total / limit)
         }
-      });
+      }, 'Fee structures retrieved successfully');
     } catch (error) {
       logger.error('Get fee structures error:', error);
       return errorResponse(res, 'Failed to retrieve fee structures', 500);
@@ -95,9 +98,7 @@ const feeStructureController = {
         return notFoundResponse(res, 'Fee structure not found');
       }
 
-      return successResponse(res, 'Fee structure retrieved successfully', {
-        feeStructure
-      });
+      return successResponse(res, { feeStructure }, 'Fee structure retrieved successfully');
     } catch (error) {
       logger.error('Get fee structure by ID error:', error);
       return errorResponse(res, 'Failed to retrieve fee structure', 500);
@@ -122,9 +123,7 @@ const feeStructureController = {
         user: req.user.id
       });
 
-      return successResponse(res, 'Fee structure updated successfully', {
-        feeStructure
-      });
+      return successResponse(res, { feeStructure }, 'Fee structure updated successfully');
     } catch (error) {
       logger.error('Update fee structure error:', error);
       return errorResponse(res, 'Failed to update fee structure', 500);
@@ -212,9 +211,7 @@ const invoiceController = {
         amount: totalAmount
       });
 
-      return createdResponse(res, 'Invoice created successfully', {
-        invoice
-      });
+      return createdResponse(res, { invoice }, 'Invoice created successfully');
     } catch (error) {
       logger.error('Create invoice error:', error);
       return errorResponse(res, 'Failed to create invoice', 500);
@@ -255,7 +252,7 @@ const invoiceController = {
         Invoice.countDocuments(query)
       ]);
 
-      return successResponse(res, 'Invoices retrieved successfully', {
+      return successResponse(res, {
         invoices,
         pagination: {
           page: parseInt(page),
@@ -263,7 +260,7 @@ const invoiceController = {
           total,
           totalPages: Math.ceil(total / limit)
         }
-      });
+      }, 'Invoices retrieved successfully');
     } catch (error) {
       logger.error('Get invoices error:', error);
       return errorResponse(res, 'Failed to retrieve invoices', 500);
@@ -282,9 +279,7 @@ const invoiceController = {
         return notFoundResponse(res, 'Invoice not found');
       }
 
-      return successResponse(res, 'Invoice retrieved successfully', {
-        invoice
-      });
+      return successResponse(res, { invoice }, 'Invoice retrieved successfully');
     } catch (error) {
       logger.error('Get invoice by ID error:', error);
       return errorResponse(res, 'Failed to retrieve invoice', 500);
@@ -309,9 +304,7 @@ const invoiceController = {
         user: req.user.id
       });
 
-      return successResponse(res, 'Invoice updated successfully', {
-        invoice
-      });
+      return successResponse(res, { invoice }, 'Invoice updated successfully');
     } catch (error) {
       logger.error('Update invoice error:', error);
       return errorResponse(res, 'Failed to update invoice', 500);
@@ -367,10 +360,7 @@ const invoiceController = {
         amount: invoice.totalAmount
       });
 
-      return successResponse(res, 'Invoice marked as paid successfully', {
-        invoice,
-        transaction
-      });
+      return successResponse(res, { invoice, transaction }, 'Invoice marked as paid successfully');
     } catch (error) {
       logger.error('Mark invoice as paid error:', error);
       return errorResponse(res, 'Failed to mark invoice as paid', 500);
@@ -415,7 +405,7 @@ const transactionController = {
         FinanceTransaction.countDocuments(query)
       ]);
 
-      return successResponse(res, 'FinanceTransactions retrieved successfully', {
+      return successResponse(res, {
         transactions,
         pagination: {
           page: parseInt(page),
@@ -423,10 +413,76 @@ const transactionController = {
           total,
           totalPages: Math.ceil(total / limit)
         }
-      });
+      }, 'FinanceTransactions retrieved successfully');
     } catch (error) {
       logger.error('Get transactions error:', error);
       return errorResponse(res, 'Failed to retrieve transactions', 500);
+    }
+  },
+
+  // Create transaction
+  create: async (req, res) => {
+    try {
+      const { description, category, date, amount, invoiceNo, paymentMethod, type, name, source } = req.body;
+      const transaction = new FinanceTransaction({
+        institution: req.tenantId,
+        description: description || name || '',
+        category: category || source || '',
+        processedAt: date || new Date(),
+        amount: parseFloat(amount) || 0,
+        reference: invoiceNo || '',
+        paymentMethod: paymentMethod || '',
+        type: type || 'income',
+        status: 'completed',
+        processedBy: req.user.id,
+        transactionId: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
+      });
+      await transaction.save();
+      logger.info(`Transaction created: ${transaction.transactionId}`, { institution: req.tenantId, user: req.user.id });
+      return createdResponse(res, { transaction }, 'Transaction created successfully');
+    } catch (error) {
+      logger.error('Create transaction error:', error);
+      return errorResponse(res, error.message || 'Failed to create transaction', 500);
+    }
+  },
+
+  // Update transaction
+  update: async (req, res) => {
+    try {
+      const { description, category, date, amount, invoiceNo, paymentMethod, name, source } = req.body;
+      const updateData = {};
+      if (description || name) updateData.description = description || name;
+      if (category || source) updateData.category = category || source;
+      if (date) updateData.processedAt = date;
+      if (amount) updateData.amount = parseFloat(amount);
+      if (invoiceNo) updateData.reference = invoiceNo;
+      if (paymentMethod) updateData.paymentMethod = paymentMethod;
+
+      const transaction = await FinanceTransaction.findOneAndUpdate(
+        { _id: req.params.id, institution: req.tenantId },
+        updateData,
+        { new: true, runValidators: true }
+      );
+      if (!transaction) return notFoundResponse(res, 'Transaction not found');
+      return updatedResponse(res, { transaction }, 'Transaction updated successfully');
+    } catch (error) {
+      logger.error('Update transaction error:', error);
+      return errorResponse(res, error.message || 'Failed to update transaction', 500);
+    }
+  },
+
+  // Delete transaction
+  delete: async (req, res) => {
+    try {
+      const transaction = await FinanceTransaction.findOneAndDelete({
+        _id: req.params.id,
+        institution: req.tenantId
+      });
+      if (!transaction) return notFoundResponse(res, 'Transaction not found');
+      return deletedResponse(res, 'Transaction deleted successfully');
+    } catch (error) {
+      logger.error('Delete transaction error:', error);
+      return errorResponse(res, error.message || 'Failed to delete transaction', 500);
     }
   }
 };
@@ -436,24 +492,26 @@ const budgetController = {
   // Create budget
   create: async (req, res) => {
     try {
+      const instId = req.tenantId || req.body.institutionId || req.user?.institutionId;
       const budget = new Budget({
         ...req.body,
-        institution: req.tenantId,
+        institution: instId,
         createdBy: req.user.id
       });
 
       await budget.save();
 
       logger.info(`Budget created: ${budget.title}`, {
-        institution: req.tenantId,
+        institution: instId,
         user: req.user.id
       });
 
-      return createdResponse(res, 'Budget created successfully', {
-        budget
-      });
+      return createdResponse(res, { budget }, 'Budget created successfully');
     } catch (error) {
       logger.error('Create budget error:', error);
+      if (error.name === 'ValidationError') {
+        return errorResponse(res, error.message, 400);
+      }
       return errorResponse(res, 'Failed to create budget', 500);
     }
   },
@@ -471,12 +529,49 @@ const budgetController = {
 
       const budgets = await Budget.find(query).sort({ createdAt: -1 });
 
-      return successResponse(res, 'Budgets retrieved successfully', {
-        budgets
-      });
+      return successResponse(res, { budgets }, 'Budgets retrieved successfully');
     } catch (error) {
       logger.error('Get budgets error:', error);
       return errorResponse(res, 'Failed to retrieve budgets', 500);
+    }
+  },
+
+  // Update budget
+  update: async (req, res) => {
+    try {
+      const budget = await Budget.findOneAndUpdate(
+        { _id: req.params.id, institution: req.tenantId },
+        req.body,
+        { new: true, runValidators: true }
+      );
+
+      if (!budget) {
+        return notFoundResponse(res, 'Budget not found');
+      }
+
+      return successResponse(res, { budget }, 'Budget updated successfully');
+    } catch (error) {
+      logger.error('Update budget error:', error);
+      return errorResponse(res, 'Failed to update budget', 500);
+    }
+  },
+
+  // Delete budget
+  delete: async (req, res) => {
+    try {
+      const budget = await Budget.findOneAndDelete({
+        _id: req.params.id,
+        institution: req.tenantId
+      });
+
+      if (!budget) {
+        return notFoundResponse(res, 'Budget not found');
+      }
+
+      return successResponse(res, 'Budget deleted successfully');
+    } catch (error) {
+      logger.error('Delete budget error:', error);
+      return errorResponse(res, 'Failed to delete budget', 500);
     }
   }
 };
@@ -486,42 +581,56 @@ const salaryController = {
   // Process salary
   processSalary: async (req, res) => {
     try {
-      const { employee, month, year, allowances, deductions, paymentMethod } = req.body;
+      const { employee, month, year, basicSalary, allowances, deductions, paymentMethod } = req.body;
 
-      // Calculate salary
-      const employeeDoc = await require('../models/User').findById(employee);
-      const basicSalary = employeeDoc?.salary || 0;
+      const basic = basicSalary || 0;
 
       let totalAllowances = 0;
       let totalDeductions = 0;
 
-      if (allowances) {
-        totalAllowances = allowances.reduce((sum, allowance) => sum + allowance.amount, 0);
+      if (Array.isArray(allowances)) {
+        totalAllowances = allowances.reduce((sum, a) => sum + (a.amount || 0), 0);
       }
 
-      if (deductions) {
-        totalDeductions = deductions.reduce((sum, deduction) => sum + deduction.amount, 0);
+      if (Array.isArray(deductions)) {
+        totalDeductions = deductions.reduce((sum, d) => sum + (d.amount || 0), 0);
       }
 
-      const grossSalary = basicSalary + totalAllowances;
+      const grossSalary = basic + totalAllowances;
       const netSalary = grossSalary - totalDeductions;
+
+      // Map allowances/deductions to schema-compatible shapes
+      const mappedAllowances = (allowances || []).map(a => ({
+        type: a.title?.toLowerCase().replace(/\s+/g, '-') || 'other',
+        amount: a.amount || 0,
+        description: a.title || ''
+      }));
+      const mappedDeductions = (deductions || []).map(d => ({
+        type: d.title?.toLowerCase().replace(/\s+/g, '-') || 'other',
+        amount: d.amount || 0,
+        description: d.title || ''
+      }));
 
       const salary = new Salary({
         employee,
         institution: req.tenantId,
-        basicSalary,
-        allowances: allowances || [],
-        deductions: deductions || [],
+        basicSalary: basic,
+        allowances: mappedAllowances,
+        deductions: mappedDeductions,
         grossSalary,
         netSalary,
         paymentDate: new Date(),
-        month: `${year}-${month.toString().padStart(2, '0')}`,
-        year,
-        paymentMethod,
+        month: typeof month === 'string' ? month : `${year}-${String(month).padStart(2, '0')}`,
+        year: parseInt(year),
+        paymentMethod: paymentMethod || 'bank-transfer',
+        status: 'pending',
         processedBy: req.user.id
       });
 
       await salary.save();
+
+      // Re-fetch with populated employee
+      const populated = await Salary.findById(salary._id).populate('employee', 'name email');
 
       logger.info(`Salary processed for employee: ${employee}`, {
         institution: req.tenantId,
@@ -529,9 +638,7 @@ const salaryController = {
         amount: netSalary
       });
 
-      return createdResponse(res, 'Salary processed successfully', {
-        salary
-      });
+      return createdResponse(res, { salary: populated }, 'Salary processed successfully');
     } catch (error) {
       logger.error('Process salary error:', error);
       return errorResponse(res, 'Failed to process salary', 500);
@@ -553,12 +660,68 @@ const salaryController = {
         .populate('employee', 'name email')
         .sort({ paymentDate: -1 });
 
-      return successResponse(res, 'Salaries retrieved successfully', {
-        salaries
-      });
+      return successResponse(res, { salaries }, 'Salaries retrieved successfully');
     } catch (error) {
       logger.error('Get salaries error:', error);
       return errorResponse(res, 'Failed to retrieve salaries', 500);
+    }
+  },
+
+  // Get salary by ID
+  getById: async (req, res) => {
+    try {
+      const salary = await Salary.findOne({
+        _id: req.params.id,
+        institution: req.tenantId
+      }).populate('employee', 'name email');
+
+      if (!salary) {
+        return notFoundResponse(res, 'Salary record not found');
+      }
+
+      return successResponse(res, { salary }, 'Salary retrieved successfully');
+    } catch (error) {
+      logger.error('Get salary by ID error:', error);
+      return errorResponse(res, 'Failed to retrieve salary', 500);
+    }
+  },
+
+  // Update salary
+  update: async (req, res) => {
+    try {
+      const salary = await Salary.findOneAndUpdate(
+        { _id: req.params.id, institution: req.tenantId },
+        req.body,
+        { new: true, runValidators: true }
+      ).populate('employee', 'name email');
+
+      if (!salary) {
+        return notFoundResponse(res, 'Salary record not found');
+      }
+
+      return successResponse(res, { salary }, 'Salary updated successfully');
+    } catch (error) {
+      logger.error('Update salary error:', error);
+      return errorResponse(res, 'Failed to update salary', 500);
+    }
+  },
+
+  // Delete salary
+  delete: async (req, res) => {
+    try {
+      const salary = await Salary.findOneAndDelete({
+        _id: req.params.id,
+        institution: req.tenantId
+      });
+
+      if (!salary) {
+        return notFoundResponse(res, 'Salary record not found');
+      }
+
+      return successResponse(res, 'Salary deleted successfully');
+    } catch (error) {
+      logger.error('Delete salary error:', error);
+      return errorResponse(res, 'Failed to delete salary', 500);
     }
   }
 };
@@ -576,7 +739,7 @@ const paymentController = {
         return errorResponse(res, result.error, 400);
       }
 
-      return successResponse(res, 'Payment intent created successfully', result);
+      return successResponse(res, result, 'Payment intent created successfully');
     } catch (error) {
       logger.error('Create payment intent error:', error);
       return errorResponse(res, 'Failed to create payment intent', 500);
@@ -594,7 +757,7 @@ const paymentController = {
         return errorResponse(res, result.error, 400);
       }
 
-      return successResponse(res, 'Checkout session created successfully', result);
+      return successResponse(res, result, 'Checkout session created successfully');
     } catch (error) {
       logger.error('Create checkout session error:', error);
       return errorResponse(res, 'Failed to create checkout session', 500);
@@ -627,7 +790,7 @@ const paymentController = {
         return errorResponse(res, result.error, 400);
       }
 
-      return successResponse(res, 'Refund processed successfully', result);
+      return successResponse(res, result, 'Refund processed successfully');
     } catch (error) {
       logger.error('Process refund error:', error);
       return errorResponse(res, 'Failed to process refund', 500);
@@ -643,7 +806,14 @@ const paymentController = {
 
       // Filter by user role
       if (req.user.role === 'student') {
-        query.student = req.user.id;
+        // Find the student record associated with this user
+        const Student = (await import('../models/Student.js')).default;
+        const student = await Student.findOne({ userId: req.user.id || req.user._id });
+        if (student) {
+          query.student = student._id;
+        } else {
+          query.student = req.user.id;
+        }
       } else if (req.user.role === 'parent') {
         // For parents, get transactions for their children
         const children = await require('../models/User').find({
@@ -666,7 +836,7 @@ const paymentController = {
         FinanceTransaction.countDocuments(query)
       ]);
 
-      return successResponse(res, 'Payment history retrieved successfully', {
+      return successResponse(res, {
         transactions,
         pagination: {
           page: parseInt(page),
@@ -674,7 +844,7 @@ const paymentController = {
           total,
           totalPages: Math.ceil(total / limit)
         }
-      });
+      }, 'Payment history retrieved successfully');
     } catch (error) {
       logger.error('Get payment history error:', error);
       return errorResponse(res, 'Failed to retrieve payment history', 500);
@@ -686,9 +856,7 @@ const paymentController = {
     try {
       // This would require storing customer IDs in user profiles
       // For now, return empty array
-      return successResponse(res, 'Payment methods retrieved successfully', {
-        paymentMethods: []
-      });
+      return successResponse(res, { paymentMethods: [] }, 'Payment methods retrieved successfully');
     } catch (error) {
       logger.error('Get payment methods error:', error);
       return errorResponse(res, 'Failed to retrieve payment methods', 500);
@@ -703,9 +871,7 @@ const expenseCategoryController = {
         .select('name description status')
         .sort({ createdAt: -1 });
 
-      return successResponse(res, 'Expense categories retrieved successfully', {
-        categories
-      });
+      return successResponse(res, { categories }, 'Expense categories retrieved successfully');
     } catch (error) {
       logger.error('Get expense categories error:', error);
       return errorResponse(res, 'Failed to retrieve expense categories', 500);
@@ -720,9 +886,7 @@ const taxRateController = {
         .select('name rate description status type')
         .sort({ createdAt: -1 });
 
-      return successResponse(res, 'Tax rates retrieved successfully', {
-        rates
-      });
+      return successResponse(res, { rates }, 'Tax rates retrieved successfully');
     } catch (error) {
       logger.error('Get tax rates error:', error);
       return errorResponse(res, 'Failed to retrieve tax rates', 500);
@@ -735,6 +899,12 @@ const dashboardController = {
   getDashboardData: async (req, res) => {
     try {
       const institutionId = req.tenantId;
+      const invoiceInstMatch = matchInstitutionField(institutionId, 'institution');
+      const payrollInstMatch = matchInstitutionField(institutionId, 'institution');
+
+
+      const paidInvoiceMatch = { ...invoiceInstMatch, status: 'paid' };
+      const unpaidInvoiceMatch = { ...invoiceInstMatch, status: { $in: ['sent', 'overdue'] } };
 
       // 1. Top Stats & KPIs
       const [
@@ -746,54 +916,39 @@ const dashboardController = {
         currentMonthRevenueResult,
         lastMonthRevenueResult
       ] = await Promise.all([
-        // Total Revenue (Paid Invoices)
         Invoice.aggregate([
-          { $match: { institution: institutionId, status: 'paid' } },
+          { $match: paidInvoiceMatch },
           { $group: { _id: null, total: { $sum: '$totalAmount' } } }
         ]),
-        // Total Expenses (Paid Salaries + spent amount in budgets)
         Promise.all([
           Salary.aggregate([
-            { $match: { institution: institutionId, status: 'paid' } },
+            { $match: { ...invoiceInstMatch, status: { $in: ['paid', 'processed', 'pending'] } } },
             { $group: { _id: null, total: { $sum: '$netSalary' } } }
           ]),
           Budget.aggregate([
-            { $match: { institution: institutionId } },
+            { $match: invoiceInstMatch },
             { $group: { _id: null, total: { $sum: '$spentAmount' } } }
           ])
-        ]).then(([salaries, budgets]) => {
-          const s = salaries[0]?.total || 0;
-          const b = budgets[0]?.total || 0;
-          return s + b;
-        }),
-        // Outstanding Fees (Sent or Overdue Invoices)
+        ]).then(([salaries, budgets]) => (salaries[0]?.total || 0) + (budgets[0]?.total || 0)),
         Invoice.aggregate([
-          { $match: { institution: institutionId, status: { $in: ['sent', 'overdue'] } } },
+          { $match: unpaidInvoiceMatch },
           { $group: { _id: null, total: { $sum: '$totalAmount' } } }
         ]),
-        // Paid Invoices Count
-        Invoice.countDocuments({ institution: institutionId, status: 'paid' }),
-        // Unpaid Invoices Count
-        Invoice.countDocuments({ institution: institutionId, status: { $in: ['sent', 'overdue'] } }),
-        // Current Month Revenue
+        Invoice.countDocuments(paidInvoiceMatch),
+        Invoice.countDocuments(unpaidInvoiceMatch),
         Invoice.aggregate([
           {
             $match: {
-              institution: institutionId,
-              status: 'paid',
-              paidDate: {
-                $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-              }
+              ...paidInvoiceMatch,
+              paidDate: { $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }
             }
           },
           { $group: { _id: null, total: { $sum: '$totalAmount' } } }
         ]),
-        // Last Month Revenue
         Invoice.aggregate([
           {
             $match: {
-              institution: institutionId,
-              status: 'paid',
+              ...paidInvoiceMatch,
               paidDate: {
                 $gte: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
                 $lt: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
@@ -804,9 +959,26 @@ const dashboardController = {
         ])
       ]);
 
-      const totalRevenue = totalRevenueResult[0]?.total || 0;
+      const instFilter = getInstitutionFilter(institutionId) || { institution: institutionId };
+
+      const [feePaymentsTotalResult, pendingFeePaymentsResult] = await Promise.all([
+        Payment.aggregate([
+          { $match: { ...instFilter, status: 'completed' } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]),
+        Payment.aggregate([
+          { $match: { ...instFilter, status: { $in: ['pending', 'processing'] } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+        ])
+      ]);
+
+      const feePaymentsRevenue = feePaymentsTotalResult[0]?.total || 0;
+      const pendingFeePayments = pendingFeePaymentsResult[0]?.total || 0;
+
+      const invoiceRevenue = totalRevenueResult[0]?.total || 0;
+      const totalRevenue = invoiceRevenue + feePaymentsRevenue;
       const totalExpenses = totalExpensesResult || 0;
-      const outstandingFees = outstandingFeesResult[0]?.total || 0;
+      const outstandingFees = (outstandingFeesResult[0]?.total || 0) + pendingFeePayments;
       const currentMonthRevenue = currentMonthRevenueResult[0]?.total || 0;
       const lastMonthRevenue = lastMonthRevenueResult[0]?.total || 0;
 
@@ -822,8 +994,7 @@ const dashboardController = {
       const revenueTrend = await Invoice.aggregate([
         {
           $match: {
-            institution: institutionId,
-            status: 'paid',
+            ...paidInvoiceMatch,
             paidDate: { $gte: eightMonthsAgo }
           }
         },
@@ -851,11 +1022,11 @@ const dashboardController = {
       // 3. Expense Distribution
       const [salaryExp, budgetExp] = await Promise.all([
         Salary.aggregate([
-          { $match: { institution: institutionId, status: 'paid' } },
+          { $match: { ...invoiceInstMatch, status: 'paid' } },
           { $group: { _id: null, total: { $sum: '$netSalary' } } }
         ]),
         Budget.aggregate([
-          { $match: { institution: institutionId } },
+          { $match: invoiceInstMatch },
           { $group: { _id: '$category', total: { $sum: '$spentAmount' } } }
         ])
       ]);
@@ -869,21 +1040,116 @@ const dashboardController = {
       ];
 
       // 4. Recent Invoices
-      const recentInvoices = await Invoice.find({ institution: institutionId })
-        .populate('student', 'user.name')
+      const recentInvoices = await Invoice.find(invoiceInstMatch)
+        .populate('student', 'firstName lastName name')
         .sort({ createdAt: -1 })
-        .limit(5);
+        .limit(10);
 
       const formattedInvoices = recentInvoices.map(inv => ({
         id: inv.invoiceNumber,
-        student: inv.student?.user?.name || 'Unknown',
-        amount: `$${inv.totalAmount.toLocaleString()}`,
+        invoiceNumber: inv.invoiceNumber,
+        student: inv.student?.name || [inv.student?.firstName, inv.student?.lastName].filter(Boolean).join(' ') || 'Unknown',
+        amount: inv.totalAmount,
         status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+        date: inv.createdAt,
+        dueDate: inv.dueDate,
         cls: inv.status === 'paid' ? 'badge-soft-success' : (inv.status === 'overdue' ? 'badge-soft-danger' : 'badge-soft-warning')
       }));
 
+      const [recentTransactionsRaw, recentFeePayments, recentSalaries, recentBudgets, recentPayrolls] = await Promise.all([
+        FinanceTransaction.find(invoiceInstMatch)
+          .sort({ processedAt: -1 })
+          .limit(10)
+          .lean(),
+        Payment.find({ ...instFilter, status: 'completed' })
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean(),
+        Salary.find(invoiceInstMatch)
+          .populate('employee', 'name email')
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean(),
+        Budget.find(invoiceInstMatch)
+          .sort({ updatedAt: -1 })
+          .limit(5)
+          .lean(),
+        Payroll.find(payrollInstMatch)
+          .populate('employee', 'name email')
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean()
+      ]);
+
+      const financeTransactions = recentTransactionsRaw.map(tx => ({
+        transactionId: tx.transactionId,
+        type: tx.type === 'payment' ? 'income' : tx.type,
+        amount: tx.amount,
+        status: tx.status,
+        paymentMethod: tx.paymentMethod,
+        date: tx.processedAt || tx.createdAt,
+        description: tx.description || tx.reference || 'Finance transaction',
+        source: 'finance'
+      }));
+
+      const paymentTransactions = recentFeePayments.map(p => ({
+        transactionId: p.paymentId || p._id?.toString(),
+        type: 'income',
+        amount: p.amount,
+        status: p.status || 'completed',
+        paymentMethod: p.paymentMethod || 'online',
+        date: p.createdAt,
+        description: `Fee payment${p.paymentId ? ` (${p.paymentId})` : ''}`,
+        source: 'fees'
+      }));
+
+      const recentTransactions = [...financeTransactions, ...paymentTransactions]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 15);
+
+      const salariesSummary = {
+        total: await Salary.countDocuments(invoiceInstMatch),
+        totalPaid: recentSalaries.filter(s => s.status === 'paid').reduce((sum, s) => sum + (s.netSalary || 0), 0),
+        recent: recentSalaries.map(s => ({
+          id: s._id,
+          employee: s.employee?.name || 'Staff',
+          month: s.month,
+          year: s.year,
+          netSalary: s.netSalary,
+          status: s.status
+        }))
+      };
+
+      const budgetsSummary = {
+        total: await Budget.countDocuments(invoiceInstMatch),
+        totalPlanned: recentBudgets.reduce((sum, b) => sum + (b.plannedAmount || 0), 0),
+        totalSpent: recentBudgets.reduce((sum, b) => sum + (b.spentAmount || 0), 0),
+        recent: recentBudgets.map(b => ({
+          id: b._id,
+          title: b.title,
+          category: b.category,
+          plannedAmount: b.plannedAmount,
+          spentAmount: b.spentAmount,
+          status: b.status
+        }))
+      };
+
+      const payrollSummary = {
+        total: await Payroll.countDocuments(payrollInstMatch),
+        totalNet: recentPayrolls.reduce((sum, p) => sum + (p.netSalary || 0), 0),
+        recent: recentPayrolls.map(p => ({
+          id: p._id,
+          payrollId: p.payrollId,
+          employee: p.employee?.name || 'Staff',
+          month: p.month,
+          year: p.year,
+          netSalary: p.netSalary,
+          status: p.status
+        }))
+      };
+
       // 5. Budget vs Actual
-      const budgets = await Budget.find({ institution: institutionId }).limit(5);
+      const budgets = await Budget.find(invoiceInstMatch).limit(5);
       const budgetVsActual = budgets.map(b => ({
         dept: b.title,
         budget: b.plannedAmount,
@@ -891,11 +1157,15 @@ const dashboardController = {
         variance: b.plannedAmount - b.spentAmount
       }));
 
+      const totalBudgetPlanned = budgets.reduce((sum, budget) => sum + (budget.plannedAmount || 0), 0);
+      const totalBudgetSpent = budgets.reduce((sum, budget) => sum + (budget.spentAmount || 0), 0);
+      const budgetUtilization = totalBudgetPlanned > 0 ? Math.round((totalBudgetSpent / totalBudgetPlanned) * 100) : 0;
+
       // 6. Fee Collection by Term (Quarterly)
       const feeByTerm = await Invoice.aggregate([
         {
           $match: {
-            institution: institutionId,
+            ...invoiceInstMatch,
             status: { $in: ['paid', 'sent', 'overdue'] }
           }
         },
@@ -925,18 +1195,43 @@ const dashboardController = {
         profit: item.revenue - (item.expenses || 0)
       }));
 
-      return successResponse(res, 'Finance dashboard data retrieved successfully', {
+      const overview = {
+        totalIncome: totalRevenue,
+        totalExpense: totalExpenses,
+        pendingFees: outstandingFees,
+        collectedFees: totalRevenue,
+        totalFees: paidInvoicesCount + unpaidInvoicesCount,
+        currentMonthRevenue,
+        budgetUtilization,
+        feePaymentsRevenue,
+        invoiceRevenue
+      };
+
+      const infraStats = [];
+      const maintenanceRequests = [];
+      const busData = [];
+      const safetyReports = [];
+      const inventoryItems = [];
+
+      return successResponse(res, {
+        overview,
+        totalRevenue: overview.totalIncome,
+        totalExpenses: overview.totalExpense,
+        netIncome: overview.totalIncome - overview.totalExpense,
+        pendingPayments: overview.pendingFees,
+        recentTransactions,
+        monthlyRevenue: enhancedRevenueData.map((item) => ({ month: item.m, revenue: item.revenue, expenses: item.expenses })),
         topStats: [
-          { label: 'Total Revenue', value: `$${(totalRevenue / 1000).toFixed(1)}K`, delta: `${revenueGrowth >= 0 ? '+' : ''}${revenueGrowth.toFixed(1)}%`, deltaTone: revenueGrowth >= 0 ? 'bg-success' : 'bg-danger', icon: '/assets/img/icons/technology-07.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' },
-          { label: 'Expenses', value: `$${(totalExpenses / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-danger', icon: '/assets/img/icons/technology-08.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-danger-transparent' },
-          { label: 'Outstanding Fees', value: `$${(outstandingFees / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-warning', icon: '/assets/img/icons/technology-09.svg', active: 'Current', inactive: 'Overdue', avatarTone: 'bg-warning-transparent' },
+          { label: 'Total Revenue', value: `₹${(totalRevenue / 1000).toFixed(1)}K`, delta: `${revenueGrowth >= 0 ? '+' : ''}${revenueGrowth.toFixed(1)}%`, deltaTone: revenueGrowth >= 0 ? 'bg-success' : 'bg-danger', icon: '/assets/img/icons/technology-07.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' },
+          { label: 'Expenses', value: `₹${(totalExpenses / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-danger', icon: '/assets/img/icons/technology-08.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-danger-transparent' },
+          { label: 'Outstanding Fees', value: `₹${(outstandingFees / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-warning', icon: '/assets/img/icons/technology-09.svg', active: 'Current', inactive: 'Overdue', avatarTone: 'bg-warning-transparent' },
           { label: 'Invoices', value: (paidInvoicesCount + unpaidInvoicesCount).toString(), delta: 'This Year', deltaTone: 'bg-primary', icon: '/assets/img/icons/technology-10.svg', active: paidInvoicesCount.toString() + ' Paid', inactive: unpaidInvoicesCount.toString() + ' Unpaid', avatarTone: 'bg-primary-transparent' }
         ],
         financeKPIs: [
-          { label: 'Net Profit / Surplus', value: `$${((totalRevenue - totalExpenses) / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-success', icon: '/assets/img/icons/technology-07.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' },
+          { label: 'Net Profit / Surplus', value: `₹${((totalRevenue - totalExpenses) / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-success', icon: '/assets/img/icons/technology-07.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-success-transparent' },
           { label: 'Profit Margin', value: `${totalRevenue > 0 ? (((totalRevenue - totalExpenses) / totalRevenue) * 100).toFixed(1) : 0}%`, delta: '', deltaTone: 'bg-primary', icon: '/assets/img/icons/technology-08.svg', active: 'This Year', inactive: 'Last Year', avatarTone: 'bg-primary-transparent' },
-          { label: 'Fee Collection (Month)', value: `$${(currentMonthRevenue / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-info', icon: '/assets/img/icons/technology-09.svg', active: 'Collected', inactive: 'Pending', avatarTone: 'bg-info-transparent' },
-          { label: 'Pending Fees', value: `$${(outstandingFees / 1000).toFixed(1)}K`, delta: unpaidInvoicesCount.toString() + ' Students', deltaTone: 'bg-warning', icon: '/assets/img/icons/technology-10.svg', active: '>60 Days', inactive: '<30 Days', avatarTone: 'bg-warning-transparent' }
+          { label: 'Fee Collection (Month)', value: `₹${(currentMonthRevenue / 1000).toFixed(1)}K`, delta: '', deltaTone: 'bg-info', icon: '/assets/img/icons/technology-09.svg', active: 'Collected', inactive: 'Pending', avatarTone: 'bg-info-transparent' },
+          { label: 'Pending Fees', value: `₹${(outstandingFees / 1000).toFixed(1)}K`, delta: unpaidInvoicesCount.toString() + ' Students', deltaTone: 'bg-warning', icon: '/assets/img/icons/technology-10.svg', active: '>60 Days', inactive: '<30 Days', avatarTone: 'bg-warning-transparent' }
         ],
         revenueData: enhancedRevenueData,
         expensePie,
@@ -944,15 +1239,236 @@ const dashboardController = {
         plData: enhancedRevenueData, // Use revenue data as P&L data
         feeByTerm: formattedFeeByTerm,
         invoices: formattedInvoices,
+        salariesSummary,
+        budgetsSummary,
+        payrollSummary,
+        counts: {
+          invoices: {
+            total: paidInvoicesCount + unpaidInvoicesCount,
+            paid: paidInvoicesCount,
+            pending: unpaidInvoicesCount
+          },
+          transactions: recentTransactions.length,
+          salaries: salariesSummary?.total || 0,
+          payroll: payrollSummary?.total || 0,
+          budgets: budgetsSummary?.total || 0
+        },
         infraStats,
         maintenanceRequests,
         busData,
         safetyReports,
         inventoryItems
-      });
+      }, 'Finance dashboard data retrieved successfully');
     } catch (error) {
       logger.error('Get finance dashboard data error:', error);
       return errorResponse(res, 'Failed to retrieve finance dashboard data', 500);
+    }
+  }
+};
+
+// Fee Group Controller
+const feeGroupController = {
+  create: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.body.institutionId || req.user?.institutionId;
+      const group = new FeeGroup({
+        ...req.body,
+        institutionId: instId
+      });
+      await group.save();
+      return createdResponse(res, group, 'Fee group created successfully');
+    } catch (error) {
+      logger.error('Create fee group error:', error);
+      if (error.name === 'ValidationError') {
+        return errorResponse(res, error.message, 400);
+      }
+      return errorResponse(res, error.message, 500);
+    }
+  },
+
+  getAll: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.query.institutionId || req.user?.institutionId;
+      const query = instId ? { institutionId: instId } : {};
+      const groups = await FeeGroup.find(query).sort({ createdAt: -1 });
+      return successResponse(res, groups, 'Fee groups retrieved successfully');
+    } catch (error) {
+      logger.error('Get fee groups error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+
+  update: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.body.institutionId || req.user?.institutionId;
+      const group = await FeeGroup.findOneAndUpdate(
+        { _id: req.params.id, ...(instId ? { institutionId: instId } : {}) },
+        req.body,
+        { new: true, runValidators: true }
+      );
+      if (!group) return notFoundResponse(res, 'Fee group not found');
+      return updatedResponse(res, group, 'Fee group updated successfully');
+    } catch (error) {
+      logger.error('Update fee group error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+
+  delete: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.query.institutionId || req.user?.institutionId;
+      const group = await FeeGroup.findOneAndDelete({ _id: req.params.id, ...(instId ? { institutionId: instId } : {}) });
+      if (!group) return notFoundResponse(res, 'Fee group not found');
+      return deletedResponse(res, 'Fee group deleted successfully');
+    } catch (error) {
+      logger.error('Delete fee group error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  }
+};
+
+const feeTypeController = {
+  create: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.body.institutionId || req.user?.institutionId;
+      const doc = new FeeType({ ...req.body, institutionId: instId });
+      await doc.save();
+      return createdResponse(res, doc, 'Fee type created successfully');
+    } catch (error) {
+      logger.error('Create fee type error:', error);
+      if (error.name === 'ValidationError') {
+        return errorResponse(res, error.message, 400);
+      }
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  getAll: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.query.institutionId || req.user?.institutionId;
+      const query = instId ? { institutionId: instId } : {};
+      const docs = await FeeType.find(query).sort({ createdAt: -1 });
+      return successResponse(res, docs, 'Fee types retrieved successfully');
+    } catch (error) {
+      logger.error('Get fee types error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  update: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.body.institutionId || req.user?.institutionId;
+      const doc = await FeeType.findOneAndUpdate(
+        { _id: req.params.id, ...(instId ? { institutionId: instId } : {}) },
+        req.body,
+        { new: true, runValidators: true }
+      );
+      if (!doc) return notFoundResponse(res, 'Fee type not found');
+      return updatedResponse(res, doc, 'Fee type updated successfully');
+    } catch (error) {
+      logger.error('Update fee type error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  delete: async (req, res) => {
+    try {
+      const instId = req.tenantId || req.query.institutionId || req.user?.institutionId;
+      const doc = await FeeType.findOneAndDelete({ _id: req.params.id, ...(instId ? { institutionId: instId } : {}) });
+      if (!doc) return notFoundResponse(res, 'Fee type not found');
+      return deletedResponse(res, 'Fee type deleted successfully');
+    } catch (error) {
+      logger.error('Delete fee type error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  }
+};
+
+const feeMasterController = {
+  create: async (req, res) => {
+    try {
+      const doc = new FeeMaster({ ...req.body, institutionId: req.tenantId });
+      await doc.save();
+      return createdResponse(res, doc, 'Fee master created successfully');
+    } catch (error) {
+      logger.error('Create fee master error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  getAll: async (req, res) => {
+    try {
+      const docs = await FeeMaster.find({ institutionId: req.tenantId }).sort({ createdAt: -1 });
+      return successResponse(res, docs, 'Fee masters retrieved successfully');
+    } catch (error) {
+      logger.error('Get fee masters error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  update: async (req, res) => {
+    try {
+      const doc = await FeeMaster.findOneAndUpdate(
+        { _id: req.params.id, institutionId: req.tenantId },
+        req.body,
+        { new: true, runValidators: true }
+      );
+      if (!doc) return notFoundResponse(res, 'Fee master not found');
+      return updatedResponse(res, doc, 'Fee master updated successfully');
+    } catch (error) {
+      logger.error('Update fee master error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  delete: async (req, res) => {
+    try {
+      const doc = await FeeMaster.findOneAndDelete({ _id: req.params.id, institutionId: req.tenantId });
+      if (!doc) return notFoundResponse(res, 'Fee master not found');
+      return deletedResponse(res, 'Fee master deleted successfully');
+    } catch (error) {
+      logger.error('Delete fee master error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  }
+};
+
+const feeAssignmentController = {
+  create: async (req, res) => {
+    try {
+      const doc = new FeeAssignment({ ...req.body, institutionId: req.tenantId });
+      await doc.save();
+      return createdResponse(res, doc, 'Fee assignment created successfully');
+    } catch (error) {
+      logger.error('Create fee assignment error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  getAll: async (req, res) => {
+    try {
+      const docs = await FeeAssignment.find({ institutionId: req.tenantId }).sort({ createdAt: -1 });
+      return successResponse(res, docs, 'Fee assignments retrieved successfully');
+    } catch (error) {
+      logger.error('Get fee assignments error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  update: async (req, res) => {
+    try {
+      const doc = await FeeAssignment.findOneAndUpdate(
+        { _id: req.params.id, institutionId: req.tenantId },
+        req.body,
+        { new: true, runValidators: true }
+      );
+      if (!doc) return notFoundResponse(res, 'Fee assignment not found');
+      return updatedResponse(res, doc, 'Fee assignment updated successfully');
+    } catch (error) {
+      logger.error('Update fee assignment error:', error);
+      return errorResponse(res, error.message, 500);
+    }
+  },
+  delete: async (req, res) => {
+    try {
+      const doc = await FeeAssignment.findOneAndDelete({ _id: req.params.id, institutionId: req.tenantId });
+      if (!doc) return notFoundResponse(res, 'Fee assignment not found');
+      return deletedResponse(res, 'Fee assignment deleted successfully');
+    } catch (error) {
+      logger.error('Delete fee assignment error:', error);
+      return errorResponse(res, error.message, 500);
     }
   }
 };
@@ -966,5 +1482,9 @@ export default {
   salaryController,
   paymentController,
   expenseCategoryController,
-  taxRateController
+  taxRateController,
+  feeGroupController,
+  feeTypeController,
+  feeMasterController,
+  feeAssignmentController
 };

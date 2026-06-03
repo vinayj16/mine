@@ -58,8 +58,8 @@ export const userIdValidator = [
     .isMongoId().withMessage('Invalid user ID')
 ];
 
-export const schoolIdQueryValidator = [
-  query('schoolId')
+export const institutionIdQueryValidator = [
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];

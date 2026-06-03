@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import authService from '../api/authService';
-import { type User } from '../utils/permissions';
+import { type User, getRoleDisplayName } from '../utils/permissions';
+import socketService from '../services/socketService';
 
 // Define all 14 user roles
+// See config/roles.ts for the canonical role definitions
 export type UserRole =
   | 'superadmin'        // System-wide administrator
   | 'institution_admin' // Institution-level administrator
@@ -44,6 +46,15 @@ export interface InstitutionData {
   };
 }
 
+// Normalize DB role "guardian" → "parent" so all role-based checks work everywhere
+const normalizeUser = (user: User | null): User | null => {
+  if (!user) return null;
+  if (user.role === 'guardian') {
+    return { ...user, role: 'parent' as User['role'] };
+  }
+  return user;
+};
+
 // Create the store with proper typing
 export const useAuthStore = create(
   persist(
@@ -61,8 +72,9 @@ export const useAuthStore = create(
         try {
           const authData = await authService.login({ email, password });
 
+          const normalizedUser = normalizeUser(authData.user);
           set({
-            user: authData.user,
+            user: normalizedUser,
             institutionData: authData.user?.institutionData || null,
             isAuthenticated: true,
             isLoading: false,
@@ -70,14 +82,20 @@ export const useAuthStore = create(
           });
 
           // Store complete user object and individual fields for compatibility
-          if (authData.user?.id) {
-            localStorage.setItem('user', JSON.stringify(authData.user));
+          if (normalizedUser?.id) {
+            localStorage.setItem('user', JSON.stringify(normalizedUser));
             localStorage.setItem('userId', authData.user.id);
             localStorage.setItem('userName', authData.user.name || '');
             localStorage.setItem('userEmail', authData.user.email || '');
-            // Always store role - fallback to 'superadmin' for testing
             localStorage.setItem('userRole', authData.user.role || 'superadmin');
+            const instId = authData.user.institutionId || '';
+            if (instId) localStorage.setItem('institutionId', instId);
             console.log('[AuthStore] Stored userRole:', authData.user.role);
+          }
+
+          // Connect socket for real-time notifications
+          if (authData.user?.id) {
+            socketService.connect(authData.user.id);
           }
 
           console.log('Login successful:', authData.user?.name || authData.user?.email || 'User');
@@ -102,7 +120,7 @@ export const useAuthStore = create(
           const authData = await authService.register(userData);
 
           set({
-            user: authData.user,
+            user: normalizeUser(authData.user),
             isAuthenticated: true,
             isLoading: false,
             error: null
@@ -121,37 +139,44 @@ export const useAuthStore = create(
         }
       },
 
+      // Set or clear the avatar on the current user (and persist to localStorage).
+      // This is the single source of truth for the avatar in the UI; every component
+      // that reads user.avatar from useAuthStore will re-render automatically.
+      setAvatar: (avatarUrl: string | null | undefined) => {
+        set((state: any) => {
+          if (!state.user) return state;
+          const next = { ...state.user, avatar: avatarUrl || '', photo: avatarUrl || '', profilePhoto: avatarUrl || '' };
+          try { localStorage.setItem('user', JSON.stringify(next)); } catch (e) { /* ignore */ }
+          return { user: next };
+        });
+      },
+
       // Logout action
       logout: async () => {
         set({ isLoading: true });
 
         try {
           await authService.logout();
-
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: null
-          });
-
-          console.log('Logout successful');
         } catch (error: any) {
-          // Even if logout API fails, clear local state
-          set({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: null
-          });
-
-          // Clear localStorage user data
-          localStorage.removeItem('user');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userRole');
+          console.warn('Logout API failed, clearing local state:', error);
         }
+
+        // Disconnect socket on logout
+        socketService.disconnect();
+
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null
+        });
+
+        localStorage.removeItem('user');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('userName');
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('institutionId');
       },
 
       // Refresh authentication
@@ -160,7 +185,7 @@ export const useAuthStore = create(
           const authData = await authService.refreshToken();
 
           set({
-            user: authData.user,
+            user: normalizeUser(authData.user),
             isAuthenticated: true,
             error: null
           });
@@ -189,7 +214,7 @@ export const useAuthStore = create(
           const result = await authService.updateProfile(data);
 
           set({
-            user: result.user,
+            user: normalizeUser(result.user),
             isLoading: false,
             error: null
           });
@@ -238,45 +263,55 @@ export const useAuthStore = create(
         set({ isLoading: true });
 
         try {
-          if (authService.isAuthenticated()) {
+          const hasToken = !!localStorage.getItem('accessToken');
+          const hasRefreshToken = !!localStorage.getItem('refreshToken');
 
-            // Try to get fresh user data for real users
-            const user = await authService.getProfile();
-
-            set({
-              user,
-              institutionData: user?.institutionData || null,
-              isAuthenticated: true,
-              isLoading: false,
-              error: null
-            });
-
-            // Store userId separately for agent pages
-            if (user?.id) {
-              localStorage.setItem('userId', user.id);
-              localStorage.setItem('userName', user.name || '');
-              localStorage.setItem('userEmail', user.email || '');
-            }
-
-            console.log('Auth initialized with existing session:', user.name);
-          } else {
+          if (!hasToken && !hasRefreshToken) {
             set({
               user: null,
               isAuthenticated: false,
               isLoading: false,
               error: null
             });
+            return;
           }
-        } catch (error: any) {
-          // Session is invalid - clear everything
-          authService.clearTokens();
+
+          // If access token is expired but refresh token exists, try refreshing
+          if (!authService.isAuthenticated() && hasRefreshToken) {
+            try {
+              await authService.refreshToken();
+            } catch {
+              // Refresh failed — keep session alive, never auto-logout
+              console.warn('[Auth] Token refresh failed, preserving session');
+            }
+          }
+
+          // Try to get fresh user data
+          const user = await authService.getProfile();
+
+          // Ensure photo field is synced with avatar for header/sidebar display
+          const userWithPhoto = { ...user, photo: user.avatar || user.photo || '' };
+
           set({
-            user: null,
-            isAuthenticated: false,
+            user: normalizeUser(userWithPhoto),
+            institutionData: user?.institutionData || null,
+            isAuthenticated: true,
             isLoading: false,
             error: null
           });
-          console.log('Auth initialization failed - session cleared');
+
+          // Store userId separately for agent pages
+          if (user?.id) {
+            localStorage.setItem('userId', user.id);
+            localStorage.setItem('userName', user.name || '');
+            localStorage.setItem('userEmail', user.email || '');
+          }
+
+          console.log('Auth initialized with existing session:', user.name);
+        } catch (error: any) {
+          // Server unavailable — keep cached session, never auto-logout
+          console.warn('[Auth] Init failed (server may be down), session preserved');
+          set({ isLoading: false });
         }
       }
     }),
@@ -455,30 +490,17 @@ export const useAuth = () => {
 
     // Get user role display name
     getRoleDisplayName: () => {
-      const roleNames: Record<UserRole, string> = {
-        superadmin: 'Super Administrator',
-        institution_admin: 'Institution Administrator',
-        admin: 'Administration',
-        principal: 'Principal',
-        teacher: 'Teacher',
-        student: 'Student',
-        parent: 'Parent',
-        accountant: 'Accountant',
-        hr_manager: 'HR Manager',
-        librarian: 'Librarian',
-        transport_manager: 'Transport Manager',
-        hostel_warden: 'Hostel Warden',
-        staff_member: 'Staff Member',
-        agent: 'Agent'
-      };
-      return store.user ? roleNames[store.user.role as UserRole] : 'Unknown';
+      return store.user ? getRoleDisplayName(store.user.role) : 'Unknown';
     },
 
     // Get navigation items based on role
     getNavigationItems: () => getNavigationForRole(store.user?.role),
 
     // Get dashboard widgets based on role
-    getDashboardWidgets: () => getDashboardWidgetsForRole(store.user?.role)
+    getDashboardWidgets: () => getDashboardWidgetsForRole(store.user?.role),
+
+    // Common tenant identifier for every institution category.
+    institutionId: (store.user?.institutionId || (store.user as any)?.institution || '') as string,
   };
 };
 
@@ -524,7 +546,7 @@ function getNavigationForRole(role: UserRole | undefined): NavigationItem[] {
       { label: 'Users', path: '/dashboard/users', icon: 'users' },
       { label: 'Students', path: '/dashboard/students', icon: 'users' },
       { label: 'Teachers', path: '/dashboard/teachers', icon: 'users' },
-      { label: 'Finance', path: '/dashboard/finance', icon: 'dollar' },
+      { label: 'Finance', path: '/dashboard/main/finance', icon: 'dollar' },
       { label: 'HR', path: '/dashboard/hr', icon: 'user' },
       { label: 'Reports', path: '/dashboard/reports', icon: 'chart' }
     ],
@@ -711,8 +733,8 @@ function getDashboardWidgetsForRole(role: UserRole | undefined): DashboardWidget
       { type: 'list', title: 'Recent Reports', items: [] }
     ],
     accountant: [
-      { type: 'metric', title: 'Monthly Revenue', value: '$45,000', change: '+8%' },
-      { type: 'metric', title: 'Outstanding Fees', value: '$8,500', change: '-12%' },
+      { type: 'metric', title: 'Monthly Revenue', value: '₹45,000', change: '+8%' },
+      { type: 'metric', title: 'Outstanding Fees', value: '₹8,500', change: '-12%' },
       { type: 'metric', title: 'Paid Invoices', value: '156', change: '+15%' },
       { type: 'metric', title: 'Budget Utilization', value: '78%', change: '+3%' },
       { type: 'chart', title: 'Revenue Trends', data: [] },
@@ -787,3 +809,4 @@ export interface DashboardWidget {
   data?: any[];
   items?: any[];
 }
+

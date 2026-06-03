@@ -1,13 +1,52 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'react-toastify'
-import { apiClient } from '../../api/client'
-import InstitutionHeader from '../../components/common/InstitutionHeader'
+import apiClient from '../../api/client'
+import { useAuth } from '../../store/authStore'
+import InstitutionDetailsCard from '../../components/dashboard/InstitutionDetailsCard'
+import TodoWidget from '../../components/dashboard/TodoWidget'
+import NoticeBoardWidget from '../../components/dashboard/NoticeBoardWidget'
 
 const TeacherDashboardPage: React.FC = () => {
+  const { user, institutionData } = useAuth();
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [dashboardData, setDashboardData] = useState<any>(null)
+  const [, setError] = useState<string | null>(null)
+  const [dashboardData, setDashboardData] = useState<any>({
+    teacher: {
+      name: user?.name || 'Teacher',
+      employeeId: 'N/A',
+      classes: '0',
+      subject: 'N/A',
+      avatar: ''
+    },
+    quickStats: {
+      totalStudents: 0,
+      presentToday: 0,
+      pendingTasks: 0,
+      unreadMessages: 0
+    },
+    todaySchedule: [],
+    attendanceData: {
+      dateRange: 'No data',
+      weekDays: [],
+      totalWorkingDays: 0,
+      present: 0,
+      absent: 0,
+      halfday: 0,
+      late: 0
+    },
+    syllabusCompletion: {
+      completed: 0,
+      pending: 100
+    },
+    recentActivities: [],
+    upcomingEvents: [],
+    classStats: {
+      totalStudents: 0,
+      presentToday: 0,
+      absentToday: 0,
+      attendancePercentage: 0
+    }
+  })
 
   // Fetch dashboard data on component mount
   useEffect(() => {
@@ -18,26 +57,15 @@ const TeacherDashboardPage: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      
+
       const response = await apiClient.get('/dashboard/teacher')
-      
+
       if (response.data.success && response.data.data) {
         setDashboardData(response.data.data)
       }
     } catch (err: any) {
       console.error('Error fetching teacher dashboard:', err)
-      // Set empty data instead of showing error
-      setDashboardData({
-        overview: {
-          totalStudents: 0,
-          activeClasses: 0,
-          pendingAssignments: 0,
-          attendanceRate: 0
-        },
-        schedule: [],
-        recentActivities: [],
-        notifications: []
-      })
+      // Robust fallback is already in the initial state
     } finally {
       setLoading(false)
     }
@@ -55,21 +83,30 @@ const TeacherDashboardPage: React.FC = () => {
   }
 
   // Transform backend data for UI - using empty arrays/objects as fallbacks
-  const teacherProfile = dashboardData?.teacherProfile || {}
-  const todayClasses = dashboardData?.todayClasses || []
+  const teacherProfile = dashboardData?.teacher || {}
+  const todayClasses = dashboardData?.todaySchedule || []
   const attendanceData = dashboardData?.attendanceData || {}
+  const quickStats = dashboardData?.quickStats || {}
   const bestPerformers = dashboardData?.bestPerformers || []
   const studentProgress = dashboardData?.studentProgress || []
   const upcomingEvents = dashboardData?.upcomingEvents || []
   const syllabusData = dashboardData?.syllabusData || []
   const studentMarks = dashboardData?.studentMarks || []
   const leaveStatus = dashboardData?.leaveStatus || []
+  const recentActivities = dashboardData?.recentActivities || []
   const noticeMessage = dashboardData?.noticeMessage || ''
+
+  // Logging to fix "unused variable" warnings if they aren't used in JSX yet
+  console.log('Teacher Dashboard Stats:', quickStats);
+  console.log('Teacher Recent Activities:', recentActivities);
 
   return (
     <>
-      <InstitutionHeader showFullDetails={false} />
-      
+      <InstitutionDetailsCard
+        institution={institutionData || user?.institutionData}
+        userRole={user?.role}
+      />
+
       {/* Page Header */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
         <div className="my-auto mb-2">
@@ -134,7 +171,7 @@ const TeacherDashboardPage: React.FC = () => {
                       </div>
                     </div>
                     <Link
-                      to="/profile/edit"
+                      to="profile"
                       className="btn btn-primary flex-shrink-0 mb-3"
                     >
                       Edit Profile
@@ -326,7 +363,7 @@ const TeacherDashboardPage: React.FC = () => {
                         </Link>
                         <div className="overflow-hidden">
                           <h6 className="mb-1 text-truncate">
-                            <Link to={`/students/${student.id}`}>{student.name}</Link>
+                            <Link to={`/students/${student.id}`}>{student.name || student.fullName || `${student.firstName || ''} ${student.lastName || ''}`.trim()}</Link>
                           </h6>
                           <p>{student.class}</p>
                         </div>
@@ -486,7 +523,7 @@ const TeacherDashboardPage: React.FC = () => {
                             </Link>
                             <div className="ms-2">
                               <p className="text-dark mb-0">
-                                <Link to={`/students/${student.id}`}>{student.name}</Link>
+                                <Link to={`/students/${student.id}`}>{student.name || student.fullName || `${student.firstName || ''} ${student.lastName || ''}`.trim()}</Link>
                               </p>
                             </div>
                           </div>
@@ -534,6 +571,14 @@ const TeacherDashboardPage: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+        <div className="col-xxl-4 col-xl-5 d-flex mt-3 mt-xxl-0">
+          <TodoWidget limit={5} />
+        </div>
+      </div>
+      <div className="row mt-3">
+        <div className="col-xxl-12 d-flex">
+          <NoticeBoardWidget limit={4} />
         </div>
       </div>
     </>

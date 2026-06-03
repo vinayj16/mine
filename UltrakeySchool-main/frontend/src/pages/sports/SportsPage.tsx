@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { getInstitutionId, getUser } from '../../utils/auth';
 
 interface Sport {
   _id: string;
@@ -53,7 +54,8 @@ const SportsPage: React.FC = () => {
     status: 'Active' as Sport['status']
   });
 
-  const institutionId = '507f1f77bcf86cd799439011';
+  const institutionId = getInstitutionId();
+  const currentUser = getUser();
 
   const fetchSports = async () => {
     try {
@@ -103,7 +105,7 @@ const SportsPage: React.FC = () => {
       const response = await apiClient.post('/sports', {
         ...formData,
         institution: institutionId,
-        createdBy: 'current-user-id' // In production, get from auth context
+        createdBy: currentUser?.id || currentUser?._id || ''
       });
 
       if (response.data.success) {

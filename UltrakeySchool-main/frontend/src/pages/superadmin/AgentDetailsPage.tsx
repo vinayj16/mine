@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import agentService, { type Agent, type AgentSettings } from '../../services/agentService'
+import superAdminService from '../../services/superAdminService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface AgentStatistics {
   totalInstitutions: number;
@@ -50,18 +53,19 @@ const AgentDetailsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'institutions' | 'commissions' | 'settings' | 'activity'>('overview')
   const [deletingInstitution, setDeletingInstitution] = useState<string | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
-  const handleDeleteInstitution = async (institutionId: string) => {
-    if (!window.confirm('Are you sure you want to delete this institution? This action cannot be undone.')) {
-      return
-    }
-    
-    setDeletingInstitution(institutionId)
+  const handleDeleteInstitution = (institutionId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget(institutionId)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeletingInstitution(deleteTarget)
     try {
-      // API call would go here - for now simulate success
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Remove from local state
+      await superAdminService.deleteInstitution(institutionId)
       if (agent) {
         setAgent({
           ...agent,
@@ -73,12 +77,14 @@ const AgentDetailsPage: React.FC = () => {
           }
         })
       }
-      alert('Institution deleted successfully')
+      toast.success('Institution deleted successfully')
     } catch (err: any) {
       console.error('Error deleting institution:', err)
-      alert(err.message || 'Failed to delete institution')
+      toast.error(err?.response?.data?.message || 'Failed to delete institution')
     } finally {
       setDeletingInstitution(null)
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -136,7 +142,13 @@ const AgentDetailsPage: React.FC = () => {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount)
+  }
+
+  const safeAddress = (addr: any): string => {
+    if (!addr) return 'N/A'
+    if (typeof addr === 'string') return addr
+    return [addr.street, addr.city, addr.state, addr.country].filter(Boolean).join(', ')
   }
 
   if (loading) {
@@ -275,7 +287,7 @@ const AgentDetailsPage: React.FC = () => {
                         <div className="fs-24 fw-bold">{formatCurrency(agent.statistics.totalCommission)}</div>
                       </div>
                       <div className="fs-32 opacity-50">
-                        <i className="ti ti-currency-dollar" />
+                        <i className="ti ti-currency-rupee" />
                       </div>
                     </div>
                   </div>
@@ -324,7 +336,7 @@ const AgentDetailsPage: React.FC = () => {
                     className={`nav-link ${activeTab === 'commissions' ? 'active' : ''}`}
                     onClick={() => setActiveTab('commissions')}
                   >
-                    <i className="ti ti-currency-dollar me-2" />Commissions
+                    <i className="ti ti-currency-rupee me-2" />Commissions
                   </button>
                 </li>
                 <li className="nav-item">
@@ -378,7 +390,7 @@ const AgentDetailsPage: React.FC = () => {
                       <div className="card-body">
                         <div className="mb-3">
                           <label className="text-muted small">Address</label>
-                          <div className="fw-semibold">{agent.address}</div>
+                          <div className="fw-semibold">{safeAddress(agent.address)}</div>
                         </div>
                         <div className="mb-3">
                           <label className="text-muted small">City, State</label>
@@ -649,7 +661,7 @@ const AgentDetailsPage: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-center py-4">
-                      <i className="ti ti-currency-dollar fs-48 text-muted mb-3 d-block" />
+                      <i className="ti ti-currency-rupee fs-48 text-muted mb-3 d-block" />
                       <h5 className="text-muted">No commissions found</h5>
                     </div>
                   )}
@@ -744,8 +756,14 @@ const AgentDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
-      </div>
-    )
-  }
+      <ConfirmModal 
+        isOpen={showDeleteModal} 
+        onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} 
+        onConfirm={handleConfirmDelete} 
+        message="Are you sure you want to delete this institution? This action cannot be undone." 
+      />
+    </div>
+  )
+}
 
 export default AgentDetailsPage

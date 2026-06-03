@@ -11,12 +11,14 @@ router.use(protect);
 // Class CRUD Operations (TESTED & VERIFIED)
 router.post('/', validators.createClassValidator, classController.createClass);  
 router.get('/', classController.getAllClasses);  
+router.get('/stats', classController.getClassStatistics);
 router.get('/statistics', classController.getClassStatistics);  
 router.get('/search', validators.searchValidator, classController.searchClasses);  
 router.get('/status/:status', classController.getClassesByStatus);  
 router.get('/institution/:institutionId', classController.getClassesByInstitution);  
 router.get('/teacher/:teacherId', classController.getClassesByTeacher);  
 router.get('/classId/:classId', classController.getClassByClassId);  
+router.get('/:id/overview', classController.getClassOverview);
 router.get('/:id', validators.classIdValidator, classController.getClassById);  
 router.put('/:id', validators.classIdValidator, validators.updateClassValidator, classController.updateClass);  
 router.delete('/:id', validators.classIdValidator, classController.deleteClass);  

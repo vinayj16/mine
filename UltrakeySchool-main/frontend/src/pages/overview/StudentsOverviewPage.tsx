@@ -70,13 +70,10 @@ const StudentsOverviewPage: React.FC = () => {
       
       const response = await apiClient.get('/analytics/student-overview')
       
-      console.log('Student Overview API Response:', response.data)
-      
       if (response.data.success && response.data.data) {
         setDashboardData(response.data.data)
         toast.success('Student Overview loaded successfully')
       } else {
-        console.error('API response structure:', response.data)
         setError('Invalid API response structure')
       }
     } catch (err: any) {

@@ -1,62 +1,55 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { getInstitutionId } from '../../utils/auth';
 import apiClient from '../../api/client';
-
-interface Student {
-  _id: string;
-  admissionNumber: string;
-  rollNumber?: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: string;
-  classId?: {
-    _id: string;
-    name: string;
-  };
-  sectionId?: {
-    _id: string;
-    name: string;
-  };
-  admissionDate: string;
-  status: string;
-  email?: string;
-  phone?: string;
-}
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 const StudentsPage: React.FC = () => {
+  const [showFilter, setShowFilter] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
   const [deleting, setDeleting] = useState(false);
-  
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [classFilter, setClassFilter] = useState('');
-  const [sectionFilter, setSectionFilter] = useState('');
-  const [genderFilter, setGenderFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{studentId: string; studentName: string} | null>(null);
+  const [filters, setFilters] = useState({
+    classId: '',
+    sectionId: '',
+    search: '',
+    status: '',
+    gender: ''
+  });
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 20,
+    totalPages: 0
+  });
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = getInstitutionId();
 
   const fetchStudents = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const params: any = { schoolId };
+      const params: any = { institutionId };
       
-      if (searchTerm) params.search = searchTerm;
-      if (classFilter) params.classId = classFilter;
-      if (sectionFilter) params.section = sectionFilter;
-      if (genderFilter) params.gender = genderFilter;
-      if (statusFilter) params.status = statusFilter;
+      if (filters.search) params.search = filters.search;
+      if (filters.classId) params.classId = filters.classId;
+      if (filters.sectionId) params.section = filters.sectionId;
+      if (filters.gender) params.gender = filters.gender;
+      if (filters.status) params.status = filters.status;
 
       const response = await apiClient.get('/students', { params });
 
       if (response.data.success) {
         setStudents(response.data.data || []);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to load students');
       }
     } catch (err: any) {
       console.error('Error fetching students:', err);
@@ -70,20 +63,22 @@ const StudentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchStudents();
-  }, [searchTerm, classFilter, sectionFilter, genderFilter, statusFilter]);
+  }, [filters.search, filters.classId, filters.sectionId, filters.gender, filters.status]);
 
   const handleDeleteStudent = async (studentId: string, studentName: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${studentName}? This action cannot be undone.`)) {
-      return;
-    }
+    setShowDeleteModal(true);
+    setDeleteTarget({ studentId, studentName });
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      setDeleting(true);
-      const response = await apiClient.delete(`/students/${studentId}`);
+      const response = await apiClient.delete(`/students/${deleteTarget.studentId}`);
 
       if (response.data.success) {
         toast.success('Student deleted successfully');
-        fetchStudents(); // Refresh the list
+        fetchStudents();
       }
     } catch (err: any) {
       console.error('Error deleting student:', err);
@@ -91,26 +86,53 @@ const StudentsPage: React.FC = () => {
       toast.error(errorMessage);
     } finally {
       setDeleting(false);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
     }
   };
 
   const handleResetFilters = () => {
-    setSearchTerm('');
-    setClassFilter('');
-    setSectionFilter('');
-    setGenderFilter('');
-    setStatusFilter('');
+    setFilters({ classId: '', sectionId: '', search: '', status: '', gender: '' });
   };
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const capitalize = (str?: string) => {
     if (!str) return 'N/A';
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = students.map(student => ({
+      'Admission No': student.admissionNumber,
+      'Roll No': student.rollNumber || 'N/A',
+      Name: `${student.firstName} ${student.lastName}`,
+      Class: student.classId?.name || 'N/A',
+      Section: student.sectionId?.name || 'N/A',
+      Gender: capitalize(student.gender),
+      Status: capitalize(student.status),
+      'Date of Join': formatDate(student.admissionDate),
+      DOB: formatDate(student.dateOfBirth)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'students', [
+        { key: 'Admission No', label: 'Admission No' },
+        { key: 'Roll No', label: 'Roll No' },
+        { key: 'Name', label: 'Name' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Gender', label: 'Gender' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Date of Join', label: 'Date of Join' },
+        { key: 'DOB', label: 'DOB' }
+      ], 'Students List');
+    } else {
+      exportToExcel(exportData, 'students');
+    }
   };
 
   return (
@@ -153,13 +175,13 @@ const StudentsPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>
@@ -167,7 +189,7 @@ const StudentsPage: React.FC = () => {
             </ul>
           </div>
           <div className="mb-2">
-            <Link to="/students/add" className="btn btn-primary d-flex align-items-center">
+            <Link to="/dashboard/student/add" className="btn btn-primary d-flex align-items-center">
               <i className="ti ti-square-rounded-plus me-2" />
               Add Student
             </Link>
@@ -187,8 +209,8 @@ const StudentsPage: React.FC = () => {
                 type="text" 
                 className="form-control" 
                 placeholder="Search by name or admission no"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={filters.search}
+                onChange={(e) => setFilters(prev => ({...prev, search: e.target.value}))}
               />
             </div>
             <div className="dropdown mb-3 me-2">
@@ -207,8 +229,8 @@ const StudentsPage: React.FC = () => {
                         <label className="form-label">Gender</label>
                         <select 
                           className="form-select"
-                          value={genderFilter}
-                          onChange={(e) => setGenderFilter(e.target.value)}
+                          value={filters.gender}
+                          onChange={(e) => setFilters(prev => ({...prev, gender: e.target.value}))}
                         >
                           <option value="">All</option>
                           <option value="male">Male</option>
@@ -222,8 +244,8 @@ const StudentsPage: React.FC = () => {
                         <label className="form-label">Status</label>
                         <select 
                           className="form-select"
-                          value={statusFilter}
-                          onChange={(e) => setStatusFilter(e.target.value)}
+                          value={filters.status}
+                          onChange={(e) => setFilters(prev => ({...prev, status: e.target.value}))}
                         >
                           <option value="">All</option>
                           <option value="active">Active</option>
@@ -245,7 +267,7 @@ const StudentsPage: React.FC = () => {
               <button className="btn btn-icon btn-sm primary-hover active me-1">
                 <i className="ti ti-list-tree" />
               </button>
-              <Link to="/students/grid" className="btn btn-icon btn-sm bg-light primary-hover">
+              <Link to="/dashboard/student/grid" className="btn btn-icon btn-sm bg-light primary-hover">
                 <i className="ti ti-grid-dots" />
               </Link>
             </div>
@@ -296,7 +318,7 @@ const StudentsPage: React.FC = () => {
               <button className="btn btn-light me-2" onClick={handleResetFilters}>
                 Reset Filters
               </button>
-              <Link to="/students/add" className="btn btn-primary">
+              <Link to="/dashboard/student/add" className="btn btn-primary">
                 <i className="ti ti-plus me-2"></i>
                 Add Student
               </Link>
@@ -400,6 +422,8 @@ const StudentsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message={deleteTarget ? `Are you sure you want to delete ${deleteTarget.studentName}? This action cannot be undone.` : ''} />
     </>
   );
 };

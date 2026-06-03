@@ -81,7 +81,8 @@ const TeacherAddPage: React.FC = () => {
         designation: formData.designation,
         qualification: formData.qualification,
         joiningDate: formData.joiningDate,
-        salary: formData.salary,
+        salary: Number(formData.salary) || 0,
+        experience: Number(formData.experience) || 0,
         address: {
           street: formData.address,
           city: formData.city,
@@ -125,10 +126,10 @@ const TeacherAddPage: React.FC = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/institution">Dashboard</Link>
+                <Link to="/dashboard/admin">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/teachers">Teachers</Link>
+                <Link to="/dashboard/admin/teachers">Teachers</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Add Teacher</li>
             </ol>
@@ -272,12 +273,13 @@ const TeacherAddPage: React.FC = () => {
                     <div className="mb-3">
                       <label className="form-label">Experience (Years)</label>
                       <input
-                        type="text"
+                        type="number"
                         className="form-control"
                         name="experience"
                         value={formData.experience}
                         onChange={handleChange}
                         placeholder="e.g., 5"
+                        min="0"
                       />
                     </div>
                   </div>
@@ -297,12 +299,13 @@ const TeacherAddPage: React.FC = () => {
                     <div className="mb-3">
                       <label className="form-label">Salary</label>
                       <input
-                        type="text"
+                        type="number"
                         className="form-control"
                         name="salary"
                         value={formData.salary}
                         onChange={handleChange}
                         placeholder="e.g., 50000"
+                        min="0"
                       />
                     </div>
                   </div>
@@ -390,7 +393,7 @@ const TeacherAddPage: React.FC = () => {
                 <button type="submit" className="btn btn-primary w-100 mb-2" disabled={loading}>
                   {loading ? 'Creating...' : 'Create Teacher'}
                 </button>
-                <button type="button" className="btn btn-outline-secondary w-100" onClick={() => navigate('/institution/teachers')}>
+                <button type="button" className="btn btn-outline-secondary w-100" onClick={() => navigate('/dashboard/admin/teachers')}>
                   Cancel
                 </button>
               </div>
@@ -420,7 +423,7 @@ const TeacherAddPage: React.FC = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Teacher Created Successfully!</h5>
-                <button type="button" className="btn-close" onClick={() => { setShowCredentials(false); navigate('/institution/teachers'); }}></button>
+                <button type="button" className="btn-close" onClick={() => { setShowCredentials(false); navigate('/dashboard/admin/teachers'); }}></button>
               </div>
               <div className="modal-body">
                 <div className="text-center mb-4">
@@ -480,7 +483,7 @@ const TeacherAddPage: React.FC = () => {
                 <button 
                   type="button" 
                   className="btn btn-outline-secondary" 
-                  onClick={() => { setShowCredentials(false); navigate('/institution/teachers'); }}
+                  onClick={() => { setShowCredentials(false); navigate('/dashboard/admin/teachers'); }}
                 >
                   Close
                 </button>

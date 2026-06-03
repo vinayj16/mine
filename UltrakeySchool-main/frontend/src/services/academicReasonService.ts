@@ -2,7 +2,7 @@ import apiService from './api';
 
 export interface AcademicReason {
   _id: string;
-  schoolId: string;
+  institutionId: string;
   role: 'Teacher' | 'Student' | 'Staff' | 'Parent';
   reason: string;
   category?: string;
@@ -46,8 +46,8 @@ export interface AcademicReasonFilters {
 }
 
 const academicReasonService = {
-  // Get all academic reasons for a school
-  getAll: async (schoolId: string, filters?: AcademicReasonFilters) => {
+  // Get all academic reasons for an institution
+  getAll: async (institutionId: string, filters?: AcademicReasonFilters) => {
     try {
       const params = new URLSearchParams();
       if (filters) {
@@ -59,7 +59,7 @@ const academicReasonService = {
       }
       
       const queryString = params.toString();
-      const url = `/academic-reasons/schools/${schoolId}${queryString ? `?${queryString}` : ''}`;
+      const url = `/academic-reasons/institutions/${institutionId}${queryString ? `?${queryString}` : ''}`;
       
       const response = await apiService.get<{ success: boolean; data: AcademicReason[]; pagination?: Record<string, unknown> }>(url);
       
@@ -75,10 +75,10 @@ const academicReasonService = {
   },
 
   // Get academic reason by ID
-  getById: async (schoolId: string, reasonId: string) => {
+  getById: async (institutionId: string, reasonId: string) => {
     try {
       const response = await apiService.get<{ success: boolean; data: AcademicReason }>(
-        `/academic-reasons/schools/${schoolId}/${reasonId}`
+        `/academic-reasons/institutions/${institutionId}/${reasonId}`
       );
       
       if (!response.success || !response.data) {
@@ -93,10 +93,10 @@ const academicReasonService = {
   },
 
   // Create new academic reason
-  create: async (schoolId: string, data: CreateAcademicReasonDto) => {
+  create: async (institutionId: string, data: CreateAcademicReasonDto) => {
     try {
       const response = await apiService.post<{ success: boolean; data: AcademicReason; message: string }>(
-        `/academic-reasons/schools/${schoolId}`,
+        `/academic-reasons/institutions/${institutionId}`,
         data
       );
       
@@ -112,10 +112,10 @@ const academicReasonService = {
   },
 
   // Update academic reason
-  update: async (schoolId: string, reasonId: string, data: UpdateAcademicReasonDto) => {
+  update: async (institutionId: string, reasonId: string, data: UpdateAcademicReasonDto) => {
     try {
       const response = await apiService.put<{ success: boolean; data: AcademicReason; message: string }>(
-        `/academic-reasons/schools/${schoolId}/${reasonId}`,
+        `/academic-reasons/schools/${institutionId}/${reasonId}`,
         data
       );
       
@@ -131,10 +131,10 @@ const academicReasonService = {
   },
 
   // Delete academic reason
-  delete: async (schoolId: string, reasonId: string) => {
+  delete: async (institutionId: string, reasonId: string) => {
     try {
       const response = await apiService.delete<{ success: boolean; message: string }>(
-        `/academic-reasons/schools/${schoolId}/${reasonId}`
+        `/academic-reasons/schools/${institutionId}/${reasonId}`
       );
       
       if (!response.success) {
@@ -149,10 +149,10 @@ const academicReasonService = {
   },
 
   // Get reasons by role
-  getByRole: async (schoolId: string, role: string) => {
+  getByRole: async (institutionId: string, role: string) => {
     try {
       const response = await apiService.get<{ success: boolean; data: AcademicReason[] }>(
-        `/academic-reasons/schools/${schoolId}/role/${role}`
+        `/academic-reasons/schools/${institutionId}/role/${role}`
       );
       
       if (!response.success || !response.data) {
@@ -167,10 +167,10 @@ const academicReasonService = {
   },
 
   // Get reasons by category
-  getByCategory: async (schoolId: string, category: string) => {
+  getByCategory: async (institutionId: string, category: string) => {
     try {
       const response = await apiService.get<{ success: boolean; data: AcademicReason[] }>(
-        `/academic-reasons/schools/${schoolId}/category/${category}`
+        `/academic-reasons/schools/${institutionId}/category/${category}`
       );
       
       if (!response.success || !response.data) {
@@ -185,10 +185,10 @@ const academicReasonService = {
   },
 
   // Search academic reasons
-  search: async (schoolId: string, query: string) => {
+  search: async (institutionId: string, query: string) => {
     try {
       const response = await apiService.get<{ success: boolean; data: AcademicReason[] }>(
-        `/academic-reasons/schools/${schoolId}/search?q=${encodeURIComponent(query)}`
+        `/academic-reasons/schools/${institutionId}/search?q=${encodeURIComponent(query)}`
       );
       
       if (!response.success || !response.data) {
@@ -203,10 +203,10 @@ const academicReasonService = {
   },
 
   // Get analytics
-  getAnalytics: async (schoolId: string) => {
+  getAnalytics: async (institutionId: string) => {
     try {
       const response = await apiService.get<{ success: boolean; data: Record<string, unknown> }>(
-        `/academic-reasons/schools/${schoolId}/analytics`
+        `/academic-reasons/schools/${institutionId}/analytics`
       );
       
       if (!response.success || !response.data) {
@@ -221,10 +221,10 @@ const academicReasonService = {
   },
 
   // Increment usage count
-  incrementUsage: async (schoolId: string, reasonId: string) => {
+  incrementUsage: async (institutionId: string, reasonId: string) => {
     try {
       const response = await apiService.post<{ success: boolean; message: string }>(
-        `/academic-reasons/schools/${schoolId}/${reasonId}/increment-usage`,
+        `/academic-reasons/schools/${institutionId}/${reasonId}/increment-usage`,
         {}
       );
       

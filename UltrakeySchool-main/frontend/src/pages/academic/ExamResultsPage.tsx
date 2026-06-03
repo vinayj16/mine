@@ -4,6 +4,9 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { examService } from '../../services/examService';
 import type { Exam } from '../../services/examService';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import { getInstitutionId } from '../../utils/auth';
+import apiClient from '../../api/client';
 
 interface StudentResult {
   id: string;
@@ -37,28 +40,41 @@ const ExamResultsPage: React.FC = () => {
 
   const fetchExams = async () => {
     try {
-      const response = await examService.getAll({ page: 1, limit: 100 });
-      setExams(response.data);
+      const response = await examService.getAll({ page: 1, limit: 100, institutionId: getInstitutionId() });
+      const rawExams = response?.data || response || [];
+      setExams(Array.isArray(rawExams) ? rawExams.map((e: any) => ({
+        ...e,
+        id: e.id || e._id,
+        name: e.title || e.name || '',
+        subject: typeof e.subjectId === 'object' ? e.subjectId?.name : (e.subjectId || e.subject || ''),
+        class: typeof e.classId === 'object' ? e.classId?.name : (e.classId || e.class || ''),
+        date: e.examDate || e.date || '',
+      })) : []);
     } catch (error) {
       console.error('Error fetching exams:', error);
       toast.error('Failed to load exams');
+      setExams([]);
     }
   };
 
   const fetchResults = async (examId: string) => {
     try {
       setLoading(true);
-      const response: any = await examService.getResults(examId);
-      // Handle both array and object response formats
-      const data = Array.isArray(response) ? response : (response?.data || []);
-      // Transform backend data to match our interface
-      const transformedResults: StudentResult[] = (data as any[]).map((item: any) => ({
+      const institutionId = getInstitutionId();
+      const response = await apiClient.get('/results', {
+        params: { examId, institutionId, limit: 500 }
+      });
+      const data = response.data?.data || [];
+      const transformedResults: StudentResult[] = data.map((item: any) => ({
         id: item.id || item._id,
-        studentId: item.studentId,
-        admissionNo: item.admissionNo || 'N/A',
-        name: item.studentName || item.name,
-        rollNo: item.rollNo || 'N/A',
-        subjects: item.subjects || {},
+        studentId: item.studentId?._id || item.studentId,
+        admissionNo: item.studentId?.admissionNumber || item.admissionNo || 'N/A',
+        name: item.studentId ? `${item.studentId.firstName || ''} ${item.studentId.lastName || ''}`.trim() : (item.studentName || item.name || 'N/A'),
+        rollNo: item.studentId?.rollNumber || item.rollNo || 'N/A',
+        subjects: item.subjects?.reduce((acc: any, s: any) => {
+          acc[s.subjectName || s.subjectId?.name || 'Subject'] = s.marksObtained || 0;
+          return acc;
+        }, {}) || {},
         total: item.totalMarksObtained || 0,
         percentage: item.percentage || 0,
         grade: item.overallGrade || 'N/A',
@@ -93,7 +109,15 @@ const ExamResultsPage: React.FC = () => {
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export as ${type.toUpperCase()} - Feature coming soon`);
+    if (!results.length) { toast.error('No data to export'); return; }
+    const exportData = results.map(r => ({ 'Admission No': r.admissionNo, 'Student Name': r.name, Total: r.total, 'Percentage(%)': r.percentage, Grade: r.grade, Result: r.result }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'exam-results', [
+        { key: 'Admission No', label: 'Admission No' }, { key: 'Student Name', label: 'Student Name' }, { key: 'Total', label: 'Total' }, { key: 'Percentage(%)', label: 'Percent(%)' }, { key: 'Grade', label: 'Grade' }, { key: 'Result', label: 'Result' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'exam-results');
+    }
   };
 
   const isFailMark = (mark: number) => mark < 35;
@@ -361,7 +385,7 @@ const ExamResultsPage: React.FC = () => {
                         <div className="d-flex align-items-center">
                           <div className="ms-2">
                             <p className="text-dark mb-0">
-                              <Link to="#">{student.name}</Link>
+                              <Link to="#">{student.name || `${student.firstName} ${student.lastName}`}</Link>
                             </p>
                             <span className="fs-12">Roll No: {student.rollNo}</span>
                           </div>

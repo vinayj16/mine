@@ -7,8 +7,8 @@ import path from 'path';
 import fs from 'fs';
 
 // Validation constants
-const VALID_STATUSES = ['pending', 'approved', 'rejected', 'expired', 'archived'];
-const VALID_DOCUMENT_TYPES = ['resume', 'certificate', 'id_proof', 'address_proof', 'qualification', 'experience', 'medical', 'police_verification', 'contract', 'other'];
+const VALID_STATUSES = ['active', 'expired', 'pending'];
+const VALID_DOCUMENT_TYPES = ['contract', 'certificate', 'id-proof', 'medical', 'resume', 'other'];
 const VALID_SORT_ORDERS = ['asc', 'desc'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 const ALLOWED_FILE_TYPES = /pdf|doc|docx|jpg|jpeg|png/;

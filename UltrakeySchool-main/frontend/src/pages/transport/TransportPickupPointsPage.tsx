@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { transportService, type PickupPoint } from '../../services/transportService';
 import { toast } from 'react-toastify';
-
-const DEFAULT_INSTITUTION_ID = import.meta.env.VITE_DEFAULT_INSTITUTION_ID || '507f1f77bcf86cd799439011';
+import { useAuth } from '../../store/authStore';
 
 const TransportPickupPointsPage: React.FC = () => {
+  const { user } = useAuth();
+  const institutionId = user?.institutionId || user?.institution || '';
   const [pickupPoints, setPickupPoints] = useState<PickupPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,8 +24,6 @@ const TransportPickupPointsPage: React.FC = () => {
     longitude: '',
     status: 'Active' as 'Active' | 'Inactive'
   });
-
-  const institutionId = DEFAULT_INSTITUTION_ID;
 
   useEffect(() => {
     fetchPickupPoints();
@@ -58,7 +57,7 @@ const TransportPickupPointsPage: React.FC = () => {
   const formatAddedDate = (point: PickupPoint) => {
     const value = point.createdAt || point.updatedAt;
     if (!value) return 'N/A';
-    return new Date(value).toLocaleDateString('en-US', {
+    return new Date(value).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -167,21 +166,32 @@ const TransportPickupPointsPage: React.FC = () => {
   };
 
   const handleDeletePickupPoint = async () => {
+    const idsToDelete = selectedPoints.length > 0 ? [...selectedPoints] : (selectedPickupPoint ? [selectedPickupPoint._id] : []);
+    if (idsToDelete.length === 0) return;
+
+    // Save original data for potential rollback
+    const originalData = [...pickupPoints];
+
+    // Optimistically remove from UI immediately
+    setPickupPoints(prev => prev.filter(p => !idsToDelete.includes(p._id)));
+    setShowDeleteModal(false);
+    setSelectedPickupPoint(null);
+    setSelectedPoints([]);
+    setSelectAll(false);
+    setSaving(true);
+
     try {
-      setSaving(true);
       if (selectedPoints.length > 0) {
-        const response = await transportService.bulkDeletePickupPoints(selectedPoints, { institutionId });
+        const response = await transportService.bulkDeletePickupPoints(idsToDelete, { institutionId });
         toast.success(response.message || 'Selected pickup points deleted');
-        setSelectedPoints([]);
-        setSelectAll(false);
       } else if (selectedPickupPoint) {
         const response = await transportService.deletePickupPoint(selectedPickupPoint._id, { institutionId });
         toast.success(response.message || 'Pickup point deleted successfully');
       }
-      setShowDeleteModal(false);
-      setSelectedPickupPoint(null);
       fetchPickupPoints();
     } catch (error: any) {
+      // Rollback optimistic removal on failure
+      setPickupPoints(originalData);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to delete pickup point';
       toast.error(errorMessage);
     } finally {
@@ -248,10 +258,10 @@ const TransportPickupPointsPage: React.FC = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/transport/routes">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Pickup Points</li>
             </ol>

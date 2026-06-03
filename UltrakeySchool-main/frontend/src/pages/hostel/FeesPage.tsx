@@ -63,11 +63,11 @@ const FeesPage = () => {
                 <tr key={f._id}>
                   <td className="py-2 px-3 fw-medium">{f.studentName}</td>
                   <td className="py-2">{f.period}</td>
-                  <td className="py-2 text-end">&#8377;{f.amount.toLocaleString()}</td>
-                  <td className="py-2 text-end text-success">&#8377;{f.paidAmount.toLocaleString()}</td>
-                  <td className="py-2 text-end text-danger">&#8377;{f.dueAmount.toLocaleString()}</td>
+                  <td className="py-2 text-end">&#8377;{(f.amount || 0).toLocaleString()}</td>
+                  <td className="py-2 text-end text-success">&#8377;{(f.paidAmount || 0).toLocaleString()}</td>
+                  <td className="py-2 text-end text-danger">&#8377;{(f.dueAmount || 0).toLocaleString()}</td>
                   <td className="py-2"><span className={`badge ${f.status === 'paid' ? 'bg-success' : f.status === 'partial' ? 'bg-warning' : 'bg-danger'}`}>{f.status}</span></td>
-                  <td className="py-2">{f.status !== 'paid' && <button className="btn btn-xs btn-success" onClick={() => { setSelectedFee(f); setPaymentAmount(f.dueAmount.toString()); setShowPaymentModal(true) }}><i className="ti ti-cash me-1" />Collect</button>}</td>
+                  <td className="py-2">{f.status !== 'paid' && <button className="btn btn-xs btn-success" onClick={() => { setSelectedFee(f); setPaymentAmount((f.dueAmount || 0).toString()); setShowPaymentModal(true) }}><i className="ti ti-cash me-1" />Collect</button>}</td>
                 </tr>
               ))}
               {fees.length === 0 && <tr><td colSpan={7} className="text-center py-4 text-muted">No fees found</td></tr>}
@@ -97,8 +97,8 @@ const FeesPage = () => {
           <div className="modal-dialog modal-dialog-centered modal-sm"><div className="modal-content">
             <div className="modal-header"><h5 className="modal-title">Collect Payment</h5><button type="button" className="btn-close" onClick={() => { setShowPaymentModal(false); setSelectedFee(null) }}></button></div>
             <div className="modal-body">
-              <div className="alert alert-light mb-2"><strong>{selectedFee.studentName}</strong><br /><span className="text-muted">{selectedFee.period}</span><br /><span className="text-danger">Due: &#8377;{selectedFee.dueAmount.toLocaleString()}</span></div>
-              <div className="mb-2"><label className="form-label small">Amount (&#8377;)</label><input type="number" className="form-control" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} max={selectedFee.dueAmount} /></div>
+              <div className="alert alert-light mb-2"><strong>{selectedFee.studentName}</strong><br /><span className="text-muted">{selectedFee.period}</span><br /><span className="text-danger">Due: &#8377;{(selectedFee.dueAmount || 0).toLocaleString()}</span></div>
+              <div className="mb-2"><label className="form-label small">Amount (&#8377;)</label><input type="number" className="form-control" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} max={selectedFee.dueAmount || 0} /></div>
             </div>
             <div className="modal-footer"><button className="btn btn-light btn-sm" onClick={() => { setShowPaymentModal(false); setSelectedFee(null) }}>Cancel</button><button className="btn btn-success btn-sm" onClick={handlePayment} disabled={!paymentAmount}>Collect</button></div>
           </div></div>

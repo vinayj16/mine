@@ -15,6 +15,7 @@ export interface HrmDepartment {
 }
 
 export interface HrmDesignation {
+  _id: string;
   designationId: string;
   name: string;
   code?: string;

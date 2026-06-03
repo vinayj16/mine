@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { MODULES } from '../../config/modules'
 import { getInstitutionConfigFromPath } from '../../utils/institutionUtils'
-import { apiService } from '../../services/api'
+import { superAdminService } from '../../services/superAdminService'
 
 interface School {
   id: string
@@ -12,7 +13,7 @@ interface School {
   expiryDate: string
   students: number
   monthlyRevenue: number
-  totalRevenue: number
+  totalRevenue: number  
   email: string
   phone: string
   address: string
@@ -45,14 +46,9 @@ const InstitutionsEditPage: React.FC = () => {
         setLoading(true)
         setError(null)
 
-        // Fetch school from API based on institution type
-        const response = await apiService.get(`/schools/${id}`)
-
-        if (response.success && response.data) {
-          setSchool(response.data as School)
-        } else {
-          setError('Failed to fetch school details')
-        }
+        // Fetch school from API using superAdminService
+        const data = await superAdminService.getInstitutionById(id!)
+        setSchool(data as unknown as School)
       } catch (err) {
         console.error('Error fetching school:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch school details')
@@ -68,16 +64,8 @@ const InstitutionsEditPage: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      const response = await apiService.put(`/schools/${id}`, school)
-      if (response.success) {
-        console.log('School updated successfully:', response.data)
-        // Show success message or redirect
-        alert('School updated successfully!')
-        // Optionally navigate back to details page
-        // window.location.href = `/super-admin/institutions/${institutionConfig?.basePath?.split('/').pop()}/${id}`
-      } else {
-        setError('Failed to update school')
-      }
+      await superAdminService.updateInstitution(id!, school as unknown as Record<string, unknown>)
+      toast.success('School updated successfully!')
     } catch (err) {
       console.error('Error saving school:', err)
       setError(err instanceof Error ? err.message : 'Failed to update school')

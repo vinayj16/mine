@@ -1,6 +1,11 @@
 import { Vehicle, TransportRoute, StudentTransport, Trip, VehicleMaintenance } from '../models/Transport.js';
 import logger from '../utils/logger.js';
 
+const tenantFilter = (tenantId) => {
+  if (!tenantId) return {};
+  return { $or: [{ tenant: tenantId }, { institutionId: tenantId }] };
+};
+
 class TransportService {
   // Vehicle Management
   async createVehicle(vehicleData, tenantId) {
@@ -18,7 +23,7 @@ class TransportService {
   async getVehicles(tenantId, filters = {}) {
     try {
       const { page = 1, limit = 10, status, vehicleType } = filters;
-      const query = { tenant: tenantId };
+      const query = { ...tenantFilter(tenantId) };
       
       if (status) query.status = status;
       if (vehicleType) query.vehicleType = vehicleType;
@@ -47,7 +52,7 @@ class TransportService {
 
   async getVehicleById(vehicleId, tenantId) {
     try {
-      const vehicle = await Vehicle.findOne({ _id: vehicleId, tenant: tenantId })
+      const vehicle = await Vehicle.findOne({ _id: vehicleId, ...tenantFilter(tenantId) })
         .populate('driver');
       
       if (!vehicle) {
@@ -132,7 +137,7 @@ class TransportService {
   async getRoutes(tenantId, filters = {}) {
     try {
       const { page = 1, limit = 10, status } = filters;
-      const query = { tenant: tenantId };
+      const query = { ...tenantFilter(tenantId) };
       
       if (status) query.status = status;
 
@@ -160,7 +165,7 @@ class TransportService {
 
   async getRouteById(routeId, tenantId) {
     try {
-      const route = await TransportRoute.findOne({ _id: routeId, tenant: tenantId })
+      const route = await TransportRoute.findOne({ _id: routeId, ...tenantFilter(tenantId) })
         .populate(['vehicle', 'driver']);
       
       if (!route) {
@@ -480,7 +485,7 @@ class TransportService {
   }
 
   // Vehicle Maintenance
-  async scheduleMaintenance(maintenanceData, tenantId) {
+  async createMaintenance(maintenanceData, tenantId) {
     try {
       const maintenance = new VehicleMaintenance({ ...maintenanceData, tenant: tenantId });
       await maintenance.save();
@@ -517,7 +522,7 @@ class TransportService {
   async getMaintenanceRecords(tenantId, filters = {}) {
     try {
       const { page = 1, limit = 10, status, vehicleId, maintenanceType } = filters;
-      const query = { tenant: tenantId };
+      const query = { ...tenantFilter(tenantId) };
       
       if (status) query.status = status;
       if (vehicleId) query.vehicle = vehicleId;
@@ -549,7 +554,7 @@ class TransportService {
     try {
       const maintenance = await VehicleMaintenance.findOneAndDelete({
         _id: maintenanceId,
-        tenant: tenantId,
+        ...tenantFilter(tenantId),
       });
 
       if (!maintenance) {
@@ -567,6 +572,8 @@ class TransportService {
   // Statistics and Reports
   async getTransportStats(tenantId) {
     try {
+      const query = tenantId ? tenantFilter(tenantId) : {};
+
       const [
         totalVehicles,
         activeVehicles,
@@ -577,21 +584,21 @@ class TransportService {
         todayTrips,
         pendingMaintenance,
       ] = await Promise.all([
-        Vehicle.countDocuments({ tenant: tenantId }),
-        Vehicle.countDocuments({ tenant: tenantId, status: 'Active' }),
-        TransportRoute.countDocuments({ tenant: tenantId }),
-        TransportRoute.countDocuments({ tenant: tenantId, status: 'Active' }),
-        StudentTransport.countDocuments({ tenant: tenantId }),
-        StudentTransport.countDocuments({ tenant: tenantId, status: 'Active' }),
+        Vehicle.countDocuments(query),
+        Vehicle.countDocuments({ ...query, status: 'Active' }),
+        TransportRoute.countDocuments(query),
+        TransportRoute.countDocuments({ ...query, status: 'Active' }),
+        StudentTransport.countDocuments(query),
+        StudentTransport.countDocuments({ ...query, status: 'Active' }),
         Trip.countDocuments({
-          tenant: tenantId,
+          ...query,
           date: {
             $gte: new Date(new Date().setHours(0, 0, 0, 0)),
             $lt: new Date(new Date().setHours(23, 59, 59, 999)),
           },
         }),
         VehicleMaintenance.countDocuments({
-          tenant: tenantId,
+          ...query,
           status: { $in: ['Scheduled', 'InProgress'] },
         }),
       ]);

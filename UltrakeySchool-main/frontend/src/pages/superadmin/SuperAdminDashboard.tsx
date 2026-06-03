@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   LineChart, Line, AreaChart, Area,
 } from 'recharts'
+import { toast } from 'react-toastify'
 import TopStatCard from '../../components/dashboard/TopStatCard'
+import { exportToPDF } from '../../utils/exportUtils'
 import superAdminService, { type Institution, type ExpiryAlert, type OverduePayment } from '../../services/superAdminService'
 
 // Add custom styles for hover effects
@@ -27,58 +29,61 @@ const customStyles = `
 const C = ['#6366f1','#10b981','#f59e0b','#ef4444','#06b6d4','#8b5cf6','#ec4899','#14b8a6']
 
 // ─── DYNAMIC TOP STATS ───────────────────────────────────────────────────────
-const getTopStats = (institutions: Institution[], monthlyRev: number, totalStudents: number, expiringIn7: number, agentAnalytics?: any) => [
-  { 
-    label:'Total Institutions', 
-    value:institutions.length.toString(),      
-    delta:'+0%',  
-    deltaTone:'bg-primary',  
-    icon:'/assets/img/icons/student.svg',  
-    active:`${institutions.filter(i => i.status === 'Active').length} Active`,    
-    inactive:`${institutions.length - institutions.filter(i => i.status === 'Active').length} Inactive`, 
-    avatarTone:'bg-primary-transparent'    
-  },
-  { 
-    label:'Monthly Revenue',    
-    value:`₹${monthlyRev.toLocaleString()}`, 
-    delta:'+0%',   
-    deltaTone:'bg-success', 
-    icon:'/assets/img/icons/teacher.svg',  
-    active:`₹${monthlyRev.toLocaleString()} Paid`,  
-    inactive:`₹${Math.floor(monthlyRev * 0.25).toLocaleString()} Due`, 
-    avatarTone:'bg-success-transparent' 
-  },
-  { 
-    label:'Total Agents',        
-    value:agentAnalytics?.totalAgents?.toString() || '0',   
-    delta:'+0%',  
-    deltaTone:'bg-info', 
-    icon:'/assets/img/icons/staff.svg',    
-    active:agentAnalytics ? `${agentAnalytics.globalAgents || 0} Global` : '0 Global', 
-    inactive:agentAnalytics ? `${agentAnalytics.institutionSpecificAgents || 0} Institution` : '0 Institution', 
-    avatarTone:'bg-info-transparent'   
-  },
-  { 
-    label:'Total Students',        
-    value:totalStudents.toLocaleString(),   
-    delta:'+0%',  
-    deltaTone:'bg-warning', 
-    icon:'/assets/img/icons/staff.svg',    
-    active:totalStudents > 0 ? Math.floor(totalStudents * 0.9).toLocaleString() + ' Active' : '0 Active', 
-    inactive:Math.floor(totalStudents * 0.1).toLocaleString() + ' Idle', 
-    avatarTone:'bg-warning-transparent'   
-  },
-  { 
-    label:'Active Plans',       
-    value:institutions.filter(i => i.status === 'Active').length.toString(),      
-    delta:'+0%',   
-    deltaTone:'bg-secondary', 
-    icon:'/assets/img/icons/subject.svg',  
-    active:`${institutions.filter(i => i.status === 'Active').length} Running`,   
-    inactive:expiringIn7 + ' Expiring', 
-    avatarTone:'bg-secondary-transparent'   
-  },
-]
+const getTopStats = (institutions: Institution[], monthlyRev: number, totalStudents: number, expiringIn7: number, agentAnalytics?: any) => {
+  const activeCount = institutions.filter(i => (i.status || '').toLowerCase() === 'active').length;
+  return [
+    { 
+      label:'Total Institutions', 
+      value:institutions.length.toString(),      
+      delta:'+0%',  
+      deltaTone:'bg-primary',  
+      icon:'/assets/img/icons/student.svg',  
+      active:`${activeCount} Active`,    
+      inactive:`${institutions.length - activeCount} Inactive`, 
+      avatarTone:'bg-primary-transparent'    
+    },
+    { 
+      label:'Monthly Revenue',    
+      value:`₹${monthlyRev.toLocaleString()}`, 
+      delta:'+0%',   
+      deltaTone:'bg-success', 
+      icon:'/assets/img/icons/teacher.svg',  
+      active:`₹${monthlyRev.toLocaleString()} Paid`,  
+      inactive:`₹${Math.floor(monthlyRev * 0.25).toLocaleString()} Due`, 
+      avatarTone:'bg-success-transparent' 
+    },
+    { 
+      label:'Total Agents',        
+      value:agentAnalytics?.totalAgents?.toString() || '0',   
+      delta:'+0%',  
+      deltaTone:'bg-info', 
+      icon:'/assets/img/icons/staff.svg',    
+      active:agentAnalytics ? `${agentAnalytics.globalAgents || 0} Global` : '0 Global', 
+      inactive:agentAnalytics ? `${agentAnalytics.institutionSpecificAgents || 0} Institution` : '0 Institution', 
+      avatarTone:'bg-info-transparent'   
+    },
+    { 
+      label:'Total Students',        
+      value:totalStudents.toLocaleString(),   
+      delta:'+0%',  
+      deltaTone:'bg-warning', 
+      icon:'/assets/img/icons/staff.svg',    
+      active:totalStudents > 0 ? Math.floor(totalStudents * 0.9).toLocaleString() + ' Active' : '0 Active', 
+      inactive:Math.floor(totalStudents * 0.1).toLocaleString() + ' Idle', 
+      avatarTone:'bg-warning-transparent'   
+    },
+    { 
+      label:'Active Plans',       
+      value:activeCount.toString(),      
+      delta:'+0%',   
+      deltaTone:'bg-secondary', 
+      icon:'/assets/img/icons/subject.svg',  
+      active:`${activeCount} Running`,   
+      inactive:expiringIn7 + ' Expiring', 
+      avatarTone:'bg-secondary-transparent'   
+    },
+  ];
+}
 
 // ─── DYNAMIC REVENUE DATA ─────────────────────────────────────────────────────
 const getRevenueData = (analyticsData: any, institutions: Institution[]) => {
@@ -144,44 +149,60 @@ const SuperAdminDashboard = () => {
   const [overduePayments, setOverduePayments] = useState<OverduePayment[]>([])
   const [analyticsData, setAnalyticsData] = useState<any>(null)
   const [agentAnalytics, setAgentAnalytics] = useState<any>(null)
+  const [dateFilter, setDateFilter] = useState<string>('all')
   
-  useEffect(() => {
-    const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const [dashboardRes, institutionsRes, alertsRes, overdueRes, analyticsRes] = await Promise.all([
+        superAdminService.getDashboardData(),
+        superAdminService.getInstitutions(),
+        superAdminService.getExpiryAlerts(),
+        superAdminService.getOverduePayments(),
+        superAdminService.getAnalyticsSummary()
+      ])
+      
+      setDashboardData(dashboardRes || {})
+      setInstitutions(institutionsRes || [])
+      setExpiryAlerts(alertsRes || [])
+      setOverduePayments(overdueRes || [])
+      setAnalyticsData(analyticsRes || {})
+      
       try {
-        setLoading(true)
-        setError(null)
-        
-        const [dashboardRes, institutionsRes, alertsRes, overdueRes, analyticsRes] = await Promise.all([
-          superAdminService.getDashboardData(),
-          superAdminService.getInstitutions(),
-          superAdminService.getExpiryAlerts(),
-          superAdminService.getOverduePayments(),
-          superAdminService.getAnalyticsSummary()
-        ])
-        
-        setDashboardData(dashboardRes || {})
-        setInstitutions(institutionsRes || [])
-        setExpiryAlerts(alertsRes || [])
-        setOverduePayments(overdueRes || [])
-        setAnalyticsData(analyticsRes || {})
-        
-        try {
-          const agentRes = await superAdminService.getAgentAnalytics()
-          setAgentAnalytics(agentRes || {})
-        } catch (agentErr) {
-          console.warn('Agent analytics not available:', agentErr)
-          setAgentAnalytics({ totalAgents: 0, globalAgents: 0, institutionSpecificAgents: 0 })
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch dashboard data')
-      } finally {
-        setLoading(false)
+        const agentRes = await superAdminService.getAgentAnalytics()
+        setAgentAnalytics(agentRes || {})
+      } catch (agentErr) {
+        console.warn('Agent analytics not available:', agentErr)
+        setAgentAnalytics({ totalAgents: 0, globalAgents: 0, institutionSpecificAgents: 0 })
       }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch dashboard data')
+    } finally {
+      setLoading(false)
     }
-    
-    fetchDashboardData()
   }, [])
   
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
+
+  const handleExportDashboard = () => {
+    const exportDataArr = [
+      ...institutions.map((inst: any) => ({
+        Institution: inst.name || inst.institutionName,
+        Type: inst.type,
+        Status: inst.status,
+        City: inst.city || '-',
+        Students: inst.students || inst.currentUsers || 0,
+        Revenue: inst._monthlyRevenue || 0
+      }))
+    ]
+
+    exportToPDF(exportDataArr, 'SuperAdmin_Dashboard_Report', undefined, 'Super Admin Dashboard Report', true)
+  }
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{height: '80vh'}}>
@@ -198,19 +219,17 @@ const SuperAdminDashboard = () => {
         <strong>Error:</strong> {error}
       </div>
     )
-  }
-  
-  // Calculate derived data from API
-  const totalStudents = (institutions || []).reduce((sum, inst) => sum + (inst.students || inst.currentUsers || 0), 0)
-  const totalTeachers = Math.floor(totalStudents * 0.05)
-  const totalStaff = Math.floor(totalStudents * 0.08)
-  const totalParents = Math.floor(totalStudents * 1.8)
-  const monthlyRev = (institutions || []).reduce((sum, inst) => sum + (inst._monthlyRevenue || 0), 0)
-  const yearlyRev = monthlyRev * 12
-  const schoolsOnly = (institutions || []).filter(s => s.type === 'School')
-  const interColleges = (institutions || []).filter(s => s.type === 'Inter College')
-  const degreeColleges = (institutions || []).filter(s => s.type === 'Degree College')
-  const expiringIn7 = (expiryAlerts || []).filter(a => a.daysUntilExpiry <= 7).length
+  }      // Calculate derived data from API
+      const totalStudents = (institutions || []).reduce((sum, inst) => sum + (inst.students || inst.currentUsers || 0), 0)
+      const totalTeachers = Math.floor(totalStudents * 0.05)
+      const totalStaff = Math.floor(totalStudents * 0.08)
+      const totalParents = Math.floor(totalStudents * 1.8)
+      const monthlyRev = (institutions || []).reduce((sum, inst) => sum + (inst._monthlyRevenue || inst.monthlyCost || (inst.subscription?.monthlyCost) || 0), 0)
+      const yearlyRev = monthlyRev * 12
+      const schoolsOnly = (institutions || []).filter(s => (s.type || '').toLowerCase() === 'school')
+      const interColleges = (institutions || []).filter(s => (s.type || '').toLowerCase() === 'inter college')
+      const degreeColleges = (institutions || []).filter(s => (s.type || '').toLowerCase() === 'degree college')
+      const expiringIn7 = (expiryAlerts || []).filter(a => a.daysUntilExpiry <= 7).length
   
   // Get dynamic data
   const topStats = getTopStats(institutions, monthlyRev, totalStudents, expiringIn7, agentAnalytics)
@@ -268,7 +287,21 @@ const SuperAdminDashboard = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="mb-2 me-2">
-            <button className="btn btn-outline-primary d-flex align-items-center" onClick={() => {}} disabled={loading}>
+            <select className="form-select" value={dateFilter} onChange={e => setDateFilter(e.target.value)} style={{ minWidth: 130 }}>
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="thisWeek">This Week</option>
+              <option value="thisMonth">This Month</option>
+              <option value="lastMonth">Last Month</option>
+            </select>
+          </div>
+          <div className="mb-2 me-2">
+            <button className="btn btn-success d-flex align-items-center" onClick={handleExportDashboard} disabled={loading}>
+              <i className="ti ti-file-export me-2" />Export Report
+            </button>
+          </div>
+          <div className="mb-2 me-2">
+            <button className="btn btn-outline-primary d-flex align-items-center" onClick={fetchDashboardData} disabled={loading}>
               <i className={`ti ti-refresh me-2 ${loading ? 'fa-spin' : ''}`} />Refresh
             </button>
           </div>
@@ -361,9 +394,9 @@ const SuperAdminDashboard = () => {
           { label:'Schools',         list:schoolsOnly,    icon:'ti ti-school',   bg:'bg-primary-transparent',  iconBg:'bg-primary',  color:'text-primary'  },
           { label:'Inter Colleges',  list:interColleges,  icon:'ti ti-building', bg:'bg-warning-transparent',  iconBg:'bg-warning',  color:'text-warning'  },
           { label:'Degree Colleges', list:degreeColleges, icon:'ti ti-award',    bg:'bg-info-transparent',     iconBg:'bg-info',     color:'text-info'     },
-          { label:'Engineering Colleges', list:institutions.filter(s => s.type === 'Engineering College'), icon:'ti ti-award',    bg:'bg-info-transparent',     iconBg:'bg-info',     color:'text-info'     },
+          { label:'Engineering Colleges', list:institutions.filter(s => (s.type || '').toLowerCase() === 'engineering college'), icon:'ti ti-award',    bg:'bg-info-transparent',     iconBg:'bg-info',     color:'text-info'     },
         ].map(row => {
-          const active   = row.list.filter((inst: Institution) => inst.status==='Active').length
+          const active   = row.list.filter((inst: Institution) => (inst.status || '').toLowerCase() === 'active').length
           const students = row.list.reduce((s: number, inst: Institution) => s + (inst.analytics?.totalStudents || 0), 0)
           return (
             <div key={row.label} className="col-xl-4 col-md-6 d-flex">
@@ -531,7 +564,7 @@ const SuperAdminDashboard = () => {
                     },
                     { 
                       label:'Engineering Colleges', 
-                      value:institutions.filter(s => s.type === 'Engineering College').length, 
+                      value:institutions.filter(s => (s.type || '').toLowerCase() === 'engineering college').length, 
                       icon:'ti ti-building-factory', 
                       bg:'bg-info-transparent',
                       color:'text-info',
@@ -648,9 +681,9 @@ const SuperAdminDashboard = () => {
                 <LineChart data={revenueData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="left"  tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${(v/1000).toFixed(0)}k`} />
+                  <YAxis yAxisId="left"  tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`₹${(v/1000).toFixed(0)}k`} />
                   <YAxis yAxisId="right" orientation="right" tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v: any, name: any) => name === 'Revenue' ? `$${(v?.toLocaleString() || '0').toString()}` : (v?.toLocaleString() || '0').toString()} contentStyle={{borderRadius:10,fontSize:12}} />
+                  <Tooltip formatter={(v: any, name: any) => name === 'Revenue' ? `₹${(v?.toLocaleString() || '0').toString()}` : (v?.toLocaleString() || '0').toString()} contentStyle={{borderRadius:10,fontSize:12}} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}} />
                   <Line yAxisId="left"  type="monotone" dataKey="revenue"       name="Revenue"           stroke={C[0]} strokeWidth={2.5} dot={{fill:C[0],r:3}} />
                   <Line yAxisId="right" type="monotone" dataKey="registrations" name="New Registrations"  stroke={C[1]} strokeWidth={2}   dot={{fill:C[1],r:3}} strokeDasharray="5 3" />
@@ -669,7 +702,7 @@ const SuperAdminDashboard = () => {
               <div className="d-flex align-items-center justify-content-between mb-2">
                 <div>
                   <h6 className="mb-1">Platform Earnings</h6>
-                  <h2>${monthlyRev.toLocaleString()}</h2>
+                  <h2>₹{monthlyRev.toLocaleString()}</h2>
                 </div>
                 <span className="avatar avatar-lg bg-primary rounded-circle">
                   <i className="ti ti-coin fs-20" />
@@ -684,7 +717,7 @@ const SuperAdminDashboard = () => {
                     </linearGradient>
                   </defs>
                   <Area type="monotone" dataKey="revenue" stroke={C[0]} strokeWidth={2} fill="url(#earnGrad)" dot={false} />
-                  <Tooltip formatter={(v: any) => `$${(v || 0).toString()}k`} contentStyle={{borderRadius:8,fontSize:11}} />
+                  <Tooltip formatter={(v: any) => `₹${(v || 0).toString()}k`} contentStyle={{borderRadius:8,fontSize:11}} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -974,8 +1007,8 @@ const SuperAdminDashboard = () => {
                 <BarChart data={platformExpenses} barSize={18} barGap={3}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="month" tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} />
-                  <YAxis tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${(v/1000).toFixed(1)}k`} />
-                  <Tooltip formatter={(v: any) => `$${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:10,fontSize:12}} />
+                  <YAxis tick={{fontSize:11,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`₹${(v/1000).toFixed(1)}k`} />
+                  <Tooltip formatter={(v: any) => `₹${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:10,fontSize:12}} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}} />
                   <Bar dataKey="infra"       name="Infrastructure" fill={C[0]} radius={[4,4,0,0]} />
                   <Bar dataKey="support"     name="Support"        fill={C[1]} radius={[4,4,0,0]} />
@@ -1002,7 +1035,7 @@ const SuperAdminDashboard = () => {
                   ]} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value">
                     {[0,1,2,3].map(i => <Cell key={i} fill={C[i]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => `$${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:8,fontSize:12}} />
+                  <Tooltip formatter={(v: any) => `₹${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:8,fontSize:12}} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}} />
                 </PieChart>
               </ResponsiveContainer>
@@ -1014,8 +1047,8 @@ const SuperAdminDashboard = () => {
             <div className="card-header"><h4 className="card-title">Financial Snapshot</h4></div>
             <div className="card-body pb-1">
               {[
-                { label:'Yearly Revenue',  value:`$${yearlyRev.toLocaleString()}`, badge:'badge-soft-success', delta:'+8%'      },
-                { label:'Monthly Revenue', value:`$${monthlyRev.toLocaleString()}`,badge:'badge-soft-primary', delta:'+5%'      },
+                { label:'Yearly Revenue',  value:`₹${yearlyRev.toLocaleString()}`, badge:'badge-soft-success', delta:'+8%'      },
+                { label:'Monthly Revenue', value:`₹${monthlyRev.toLocaleString()}`,badge:'badge-soft-primary', delta:'+5%'      },
                 { label:'Failed Payments', value:'3',                               badge:'badge-soft-danger',  delta:'Fix Now'  },
                 { label:'Expiring (7d)',   value:`${expiringIn7}`,                  badge:'badge-soft-danger',  delta:'Critical' },
                 { label:'Expiring (30d)',  value:'0',                 badge:'badge-soft-warning', delta:'Warning'  },
@@ -1085,79 +1118,16 @@ const SuperAdminDashboard = () => {
         </div>
 
          {/* Yearly Revenue Donut */}
-         <div className="col-xxl-4 col-xl-6 order-1 order-xxl-1 d-flex">
-  <div className="card flex-fill">
-    <div className="card-header">
-      <h5 className="card-title mb-0">Top Institutions</h5>
-    </div>
-    <div className="card-body p-0">
-      {loading ? (
-        <div className="text-center p-4">
-          <div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div>
-        </div>
-      ) : institutions.length > 0 ? (
-        <div className="table-responsive">
-          <table className="table table-hover">
-            <thead>
-              <tr>
-                <th>Institution</th>
-                <th>Code</th>
-                <th>Type</th>
-                <th>Total Users</th>
-                <th>Active Users</th>
-                <th>Users by Role</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {institutions.map((inst: any) => {
-                const instType = typeof inst.type === 'string' ? inst.type : (inst.type?.name || inst.type?.type || 'N/A');
-                const instCode = typeof inst.instituteCode === 'string' ? inst.instituteCode : (inst.instituteCode?.code || 'N/A');
-                return (
-                  <tr key={inst._id}>
-                    <td>
-                      <div className="d-flex align-items-center">
-                        <span className="avatar avatar-md bg-primary-transparent rounded me-2">
-                          <i className="ti ti-building text-primary" />
-                        </span>
-                        <div>
-                          <h6 className="mb-0">{inst.name || 'N/A'}</h6>
-                          <small className="text-muted">{inst.code || ''}</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td><span className="badge badge-soft-info">{instCode}</span></td>
-                    <td>{instType}</td>
-                    <td>{inst.currentUsers || 0}</td>
-                    <td>{Math.floor((inst.currentUsers || 0) * 0.85)}</td>
-                    <td>
-                      <div className="d-flex flex-wrap gap-1">
-                        <span className="badge badge-soft-secondary" style={{fontSize: '10px'}}>
-                          No role data
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge badge-soft-${inst.status === 'active' || inst.status === 'Active' ? 'success' : inst.status === 'suspended' || inst.status === 'Suspended' ? 'warning' : 'danger'}`}>
-                        {inst.status || 'Unknown'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="text-center p-4 text-muted">No institutions found</div>
-      )}
-    </div>
-  </div>
+        <div className="col-xxl-4 col-xl-6 order-1 order-xxl-1 d-flex flex-column">
+          <div className="card flex-fill mb-3">
+            <div className="card-header">
+              <h5 className="card-title mb-0">Yearly Revenue Breakdown</h5>
+            </div>
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <div>
                   <h6 className="mb-1">Total Yearly Revenue</h6>
-                  <h2>${yearlyRev.toLocaleString()}</h2>
+                  <h2>₹{yearlyRev.toLocaleString()}</h2>
                 </div>
                 <span className="avatar avatar-lg bg-success rounded-circle">
                   <i className="ti ti-trending-up fs-20" />
@@ -1175,7 +1145,7 @@ const SuperAdminDashboard = () => {
                   >
                     {[0,1,2].map(i => <Cell key={i} fill={[C[4],C[2],C[1]][i]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => `$${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:8,fontSize:12}} />
+                  <Tooltip formatter={(v: any) => `₹${v?.toLocaleString() || '0'}`} contentStyle={{borderRadius:8,fontSize:12}} />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:11}} />
                 </PieChart>
               </ResponsiveContainer>
@@ -1209,8 +1179,8 @@ const SuperAdminDashboard = () => {
                   </thead>
                   <tbody>
 {institutions.slice(-10).map((school: any) => {
-                        const schoolType = typeof school.type === 'string' ? school.type : (school.type?.name || school.type?.type || 'N/A');
-                        const statusLabel = typeof school.status === 'string' ? school.status : 'Unknown';
+                        const schoolType = (typeof school.type === 'string' ? school.type : (school.type?.name || school.type?.type || 'N/A')).toLowerCase();
+                        const statusLabel = (typeof school.status === 'string' ? school.status : 'Unknown').toLowerCase();
                       const d = school.subscriptionExpiry ? daysUntil(school.subscriptionExpiry) : 0
                       return (
                         <tr key={school._id}>
@@ -1225,10 +1195,10 @@ const SuperAdminDashboard = () => {
                               </div>
                             </div>
                           </td>
-                          <td><span className={`badge ${schoolType==='School'?'badge-soft-primary':schoolType==='Inter College'?'badge-soft-warning':'badge-soft-info'}`}>{schoolType}</span></td>
-                          <td><span className={`badge ${statusLabel==='Active'?'badge-soft-success':statusLabel==='Suspended'?'badge-soft-warning':'badge-soft-danger'}`}>{statusLabel}</span></td>
+                          <td><span className={`badge ${schoolType==='school'?'badge-soft-primary':schoolType==='inter college'?'badge-soft-warning':'badge-soft-info'}`}>{schoolType}</span></td>
+                          <td><span className={`badge ${statusLabel==='active'?'badge-soft-success':statusLabel==='suspended'?'badge-soft-warning':'badge-soft-danger'}`}>{statusLabel}</span></td>
                           <td>{school.students || school.analytics?.totalStudents || 0}</td>
-                          <td>${school._monthlyRevenue || 0}</td>
+                          <td>₹{school._monthlyRevenue || 0}</td>
                           <td>{school._createdAt || 'N/A'}</td>
                           <td>
                             <span className={`badge ${d<=7?'badge-soft-danger':d<=15?'badge-soft-warning':'badge-soft-info'} me-1`}>{d} days</span>
@@ -1236,9 +1206,9 @@ const SuperAdminDashboard = () => {
                           </td>
                           <td>
                             <div className="d-flex gap-1">
-                              <button className="btn btn-sm btn-outline-primary py-0 px-2"><i className="ti ti-bell" /></button>
-                              <button className="btn btn-sm btn-outline-success py-0 px-2"><i className="ti ti-credit-card" /></button>
-                              <button className="btn btn-sm btn-outline-info py-0 px-2"><i className="ti ti-message" /></button>
+                              <button className="btn btn-sm btn-outline-primary py-0 px-2" onClick={() => toast.info(`Send alert to ${school.name}`)}><i className="ti ti-bell" /></button>
+                              <button className="btn btn-sm btn-outline-success py-0 px-2" onClick={() => toast.info(`View billing for ${school.name}`)}><i className="ti ti-credit-card" /></button>
+                              <button className="btn btn-sm btn-outline-info py-0 px-2" onClick={() => toast.info(`Send message to ${school.name}`)}><i className="ti ti-message" /></button>
                             </div>
                           </td>
                         </tr>
@@ -1345,9 +1315,9 @@ const SuperAdminDashboard = () => {
                           </td>
                           <td>
                             <div className="d-flex gap-1">
-                              <button className="btn btn-sm btn-outline-primary py-0 px-2"><i className="ti ti-bell" /></button>
-                              <button className="btn btn-sm btn-outline-success py-0 px-2"><i className="ti ti-credit-card" /></button>
-                              <button className="btn btn-sm btn-outline-info py-0 px-2"><i className="ti ti-message" /></button>
+                              <button className="btn btn-sm btn-outline-primary py-0 px-2" onClick={() => toast.info(`Send alert to ${school.name}`)}><i className="ti ti-bell" /></button>
+                              <button className="btn btn-sm btn-outline-success py-0 px-2" onClick={() => toast.info(`View billing for ${school.name}`)}><i className="ti ti-credit-card" /></button>
+                              <button className="btn btn-sm btn-outline-info py-0 px-2" onClick={() => toast.info(`Send message to ${school.name}`)}><i className="ti ti-message" /></button>
                             </div>
                           </td>
                         </tr>
@@ -1360,8 +1330,9 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
+</>
+)
 }
-
 export default SuperAdminDashboard

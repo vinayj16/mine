@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { classScheduleService } from '../../services/classScheduleService';
@@ -26,7 +26,7 @@ const ScheduleClassesPage: React.FC = () => {
     startTime: '',
     endTime: '',
     academicYear: '2024/2025',
-    institutionId: localStorage.getItem('schoolId') || ''
+    institutionId: localStorage.getItem('institutionId') || ''
   });
 
   useEffect(() => {
@@ -38,7 +38,7 @@ const ScheduleClassesPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await classScheduleService.getAll({
-        institutionId: localStorage.getItem('schoolId') || '',
+        institutionId: localStorage.getItem('institutionId') || '',
         page: 1,
         limit: 100
       });
@@ -145,7 +145,7 @@ const ScheduleClassesPage: React.FC = () => {
       startTime: '',
       endTime: '',
       academicYear: '2024/2025',
-      institutionId: localStorage.getItem('schoolId') || ''
+      institutionId: localStorage.getItem('institutionId') || ''
     });
   };
 

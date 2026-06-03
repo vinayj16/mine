@@ -1,8 +1,3 @@
-/**
- * Token Service
- * Handles JWT token generation, validation, and refresh
- */
-
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import logger from '../utils/logger.js';

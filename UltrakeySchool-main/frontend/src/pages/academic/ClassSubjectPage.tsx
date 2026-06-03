@@ -2,30 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import apiClient from '../../api/client';
 import { subjectService } from '../../services/subjectService';
 import type { Subject, CreateSubjectInput, UpdateSubjectInput } from '../../services/subjectService';
 
-const ClassSubjectPage: React.FC = () => {
-  const [userFromStorage, setUserFromStorage] = useState<any>(null);
-  
-  useEffect(() => {
+const getUserId = () => {
+  try {
     const storedUser = localStorage.getItem('user');
-    const storedSchoolId = localStorage.getItem('schoolId');
-    console.log('Stored user:', storedUser); 
-    console.log('Stored schoolId:', storedSchoolId);
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      setUserFromStorage(parsed);
-    }
-  }, []);
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch { return null; }
+};
+
+const ClassSubjectPage: React.FC = () => {
+  const userData = getUserId();
   
-  const schoolId = userFromStorage?.schoolId || userFromStorage?.institutionId || localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
-  const institutionId = userFromStorage?.institutionId || localStorage.getItem('institutionId') || '';
+  const institutionId = userData?.institutionId || userData?.institution || localStorage.getItem('institutionId') || userData?.institutionId || localStorage.getItem('institutionId') || '';
   
-  // State management
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [searchText, setSearchText] = useState('');
+  const [filterClass, setFilterClass] = useState('');
+  const [filterTeacher, setFilterTeacher] = useState('');
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -41,21 +40,19 @@ const ClassSubjectPage: React.FC = () => {
     teacher: '',
     credits: 0,
     semester: '',
-    schoolId: '',
     department: '',
     institutionId: ''
   });
   
-  // Update form when schoolId and institutionId are available
+  // Keep subject payloads scoped to the common institution identifier.
   useEffect(() => {
-    if (schoolId || institutionId) {
+    if (institutionId) {
       setFormData(prev => ({ 
         ...prev, 
-        schoolId: schoolId || prev.schoolId,
         institutionId: institutionId || prev.institutionId
       }));
     }
-  }, [schoolId, institutionId]);
+  }, [institutionId]);
 
   // Fetch subjects from backend
   useEffect(() => {
@@ -66,19 +63,40 @@ const ClassSubjectPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      // Include institutionId to filter subjects for the correct institution
-      const response = await subjectService.getAll({
-        page: 1,
-        limit: 100,
-        sortBy: 'name',
-        sortOrder: 'asc',
-        institutionId: institutionId
-      });
-      console.log('[ClassSubjectPage] Institution ID used:', institutionId);
-      console.log('[ClassSubjectPage] Fetched subjects response:', response);
-      // Extract subjects array from response
-      const subjectsArray = response?.subjects || [];
+
+      // Try teacher-specific endpoint first, then fall back to general subjects endpoint
+      let subjectsArray: any[] = [];
+      
+      if (userData?.role === 'teacher' && userData?.id) {
+        try {
+          const res = await apiClient.get(`/teachers/${userData.id}/subjects`);
+          subjectsArray = res.data?.data || [];
+          console.log('[ClassSubjectPage] Teacher subjects:', subjectsArray.length);
+        } catch (teacherErr) {
+          console.warn('[ClassSubjectPage] Teacher subjects endpoint failed, falling back:', teacherErr);
+        }
+      }
+      
+      // If teacher endpoint returned no subjects or wasn't a teacher, fetch all subjects
+      if (subjectsArray.length === 0) {
+        try {
+          const response = await subjectService.getAll({
+            page: 1,
+            limit: 100,
+            sortBy: 'name',
+            sortOrder: 'asc',
+            institutionId: institutionId
+          });
+          console.log('[ClassSubjectPage] Institution ID used:', institutionId);
+          console.log('[ClassSubjectPage] Fetched subjects response count:', response?.subjects?.length || 0);
+          subjectsArray = response?.subjects || [];
+        } catch (subjErr) {
+          console.error('[ClassSubjectPage] General subjects fetch also failed:', subjErr);
+        }
+      }
+      
       setSubjects(subjectsArray);
+      console.log('[ClassSubjectPage] Final subjects count:', subjectsArray.length);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch subjects';
       console.error('Error fetching subjects:', err);
@@ -100,14 +118,11 @@ const ClassSubjectPage: React.FC = () => {
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log('SchoolId from component:', schoolId);
-      console.log('User from storage:', userFromStorage);
       const subjectData = {
         ...formData,
-        schoolId: schoolId,
+        institutionId,
         department: formData.department || ''
       };
-      console.log('Subject data being sent:', JSON.stringify(subjectData));
       await subjectService.create(subjectData);
       toast.success('Subject added successfully');
       setFormData({
@@ -118,7 +133,6 @@ const ClassSubjectPage: React.FC = () => {
         teacher: '',
         credits: 0,
         semester: '',
-        schoolId,
         department: '',
         institutionId
       });
@@ -174,6 +188,26 @@ const ClassSubjectPage: React.FC = () => {
     }
   };
 
+  const filteredSubjects = React.useMemo(() => {
+    return subjects.filter(s => {
+      if (searchText) {
+        const q = searchText.toLowerCase();
+        const nameMatch = s.name?.toLowerCase().includes(q);
+        const codeMatch = s.code?.toLowerCase().includes(q);
+        if (!nameMatch && !codeMatch) return false;
+      }
+      if (filterClass) {
+        const clsName = String(s.class || '');
+        if (!clsName.toLowerCase().includes(filterClass.toLowerCase())) return false;
+      }
+      if (filterTeacher) {
+        const teacherName = String(s.teacher || '');
+        if (!teacherName.toLowerCase().includes(filterTeacher.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [subjects, searchText, filterClass, filterTeacher]);
+
   const openEditModal = (subject: Subject) => {
     setSelectedSubject(subject);
     setFormData({
@@ -184,7 +218,6 @@ const ClassSubjectPage: React.FC = () => {
       teacher: subject.teacher,
       credits: subject.credits,
       semester: subject.semester,
-      schoolId,
       department: '',
       institutionId
     });
@@ -243,7 +276,6 @@ const ClassSubjectPage: React.FC = () => {
                   teacher: '',
                   credits: 0,
                   semester: '',
-                  schoolId,
                   department: '',
                   institutionId
                 });
@@ -259,6 +291,14 @@ const ClassSubjectPage: React.FC = () => {
       <div className="card">
         <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
           <h4 className="mb-3">Class Subjects</h4>
+          <div className="d-flex align-items-center flex-wrap gap-2 mb-3">
+            <div className="input-icon-start position-relative">
+              <span className="icon-addon"><i className="ti ti-search"></i></span>
+              <input type="text" className="form-control" placeholder="Search by name or code..." value={searchText} onChange={(e) => setSearchText(e.target.value)} />
+            </div>
+            <input type="text" className="form-control" placeholder="Filter by class..." value={filterClass} onChange={(e) => setFilterClass(e.target.value)} style={{ width: '150px' }} />
+            <input type="text" className="form-control" placeholder="Filter by teacher..." value={filterTeacher} onChange={(e) => setFilterTeacher(e.target.value)} style={{ width: '150px' }} />
+          </div>
         </div>
         <div className="card-body p-0 py-3">
           {loading ? (
@@ -273,10 +313,10 @@ const ClassSubjectPage: React.FC = () => {
               <i className="ti ti-alert-circle me-2"></i>
               {error}
             </div>
-          ) : subjects.length === 0 ? (
+          ) : filteredSubjects.length === 0 ? (
             <div className="text-center py-5">
               <i className="ti ti-book-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
-              <p className="mt-2 text-muted">No subjects found. Add your first subject to get started.</p>
+              <p className="mt-2 text-muted">No subjects match your filters.</p>
             </div>
           ) : (
             <div className="table-responsive">
@@ -299,7 +339,7 @@ const ClassSubjectPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {subjects.map((subject) => (
+                  {filteredSubjects.map((subject) => (
                     <tr key={subject._id}>
                       <td>
                         <div className="form-check form-check-md">
@@ -308,8 +348,8 @@ const ClassSubjectPage: React.FC = () => {
                       </td>
                       <td>{subject.name}</td>
                       <td>{subject.code}</td>
-                      <td>{subject.class}</td>
-                      <td>{subject.teacher}</td>
+                      <td>{subject.class || 'N/A'}</td>
+                      <td>{subject.teacher || 'N/A'}</td>
                       <td>{subject.credits}</td>
                       <td>{subject.semester}</td>
                       <td>

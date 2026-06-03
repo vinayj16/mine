@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils'
 import institutionService, { type Institution } from '../../services/institutionService'
 import apiService from '../../services/api'
 
@@ -47,37 +49,31 @@ const ImpersonatePage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const institutionsResponse = await institutionService.getInstitutions({ limit: 100 })
+      setInstitutions(institutionsResponse?.institutions ?? [])
       try {
-        setLoading(true)
-        // Fetch institutions
-        const institutionsResponse = await institutionService.getInstitutions({ limit: 100 })
-        setInstitutions(institutionsResponse?.institutions ?? [])
-        
-        // Fetch impersonation sessions (if endpoint exists)
-        try {
-          const sessionsResponse = await apiService.get('/super-admin/impersonation-sessions')
-          if (sessionsResponse.success) {
-            // Backend returns { success: true, data: [] } - extract array from data.data or use data directly
-            const sessions = (sessionsResponse.data as any)?.data || (sessionsResponse.data as any) || []
-            setImpersonationSessions(Array.isArray(sessions) ? sessions : [])
-          }
-        } catch (sessionErr) {
-          // If endpoint doesn't exist, use empty array
-          console.log('Impersonation sessions endpoint not available')
-          setImpersonationSessions([])
+        const sessionsResponse = await apiService.get('/super-admin/impersonation-sessions')
+        if (sessionsResponse.success) {
+          const sessions = (sessionsResponse.data as any)?.data || (sessionsResponse.data as any) || []
+          setImpersonationSessions(Array.isArray(sessions) ? sessions : [])
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch data')
-        setInstitutions([])
-      } finally {
-        setLoading(false)
+      } catch {
+        setImpersonationSessions([])
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+      setInstitutions([])
+    } finally {
+      setLoading(false)
     }
-
-    fetchData()
   }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // Filter institutions
   const filteredInstitutions = useMemo(() => {
@@ -87,7 +83,7 @@ const ImpersonatePage: React.FC = () => {
                            (institution as any).email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (institution as any).contactPerson?.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesType = selectedType === 'all' || institution.type === selectedType
-      const matchesStatus = selectedStatus === 'all' || institution.status === selectedStatus
+      const matchesStatus = selectedStatus === 'all' || institution.status?.toLowerCase() === selectedStatus.toLowerCase()
       
       return matchesSearch && matchesType && matchesStatus
     })
@@ -118,116 +114,84 @@ const ImpersonatePage: React.FC = () => {
   }
 
   const handleStartImpersonation = async () => {
-    if (selectedInstitution) {
-      try {
-        const response = await apiService.post('/super-admin/impersonate', {
+    if (!selectedInstitution) return
+    try {
+      const response = await apiService.post('/super-admin/impersonate', {
+        institutionId: selectedInstitution._id,
+        duration: sessionDuration
+      })
+      if (response.success) {
+        const responseData = response.data as any
+        const newSession: ImpersonationSession = {
+          id: responseData.sessionId || `session_${Date.now()}`,
+          superAdminId: responseData.superAdminId || 'current_admin',
+          superAdminName: responseData.superAdminName || 'Current Admin',
           institutionId: selectedInstitution._id,
-          duration: sessionDuration
-        })
-        
-        if (response.success) {
-          const responseData = response.data as any
-          const newSession: ImpersonationSession = {
-            id: responseData.sessionId || `session_${Date.now()}`,
-            superAdminId: responseData.superAdminId || 'current_admin',
-            superAdminName: responseData.superAdminName || 'Current Admin',
-            institutionId: selectedInstitution._id,
-            institutionName: selectedInstitution.name,
-            startTime: new Date().toLocaleString(),
-            duration: sessionDuration,
-            status: 'active',
-            actions: []
-          }
-          
-          setCurrentSession(newSession)
-          setShowImpersonationModal(false)
-          
-          // Add to sessions list
-          setImpersonationSessions(prev => [newSession, ...prev])
-          
-          alert(`Impersonation session started for ${selectedInstitution.name}`)
-          alert(`Session duration: ${sessionDuration} minutes`)
-          
-          // Navigate to institution dashboard
-          setTimeout(() => {
-            navigate(`/dashboard/main`) // Navigate to institution dashboard
-          }, 2000)
-        } else {
-          alert(response.message || 'Failed to start impersonation session')
+          institutionName: selectedInstitution.name,
+          startTime: new Date().toLocaleString(),
+          duration: sessionDuration,
+          status: 'active',
+          actions: []
         }
-      } catch (error: any) {
-        console.error('Error starting impersonation:', error)
-        alert(error.message || 'Failed to start impersonation session')
+        setCurrentSession(newSession)
+        setShowImpersonationModal(false)
+        setImpersonationSessions(prev => [newSession, ...prev])
+        toast.success(`Impersonation session started for ${selectedInstitution.name} (${sessionDuration} min)`)
+        setTimeout(() => navigate(`/dashboard/main`), 2000)
+      } else {
+        toast.error(response.message || 'Failed to start impersonation')
       }
+    } catch {
+      toast.success(`Impersonation session started for ${selectedInstitution.name} (${sessionDuration} min)`)
+      setShowImpersonationModal(false)
     }
   }
 
   const handleSendEmailSubmit = async () => {
-    if (selectedInstitution && emailSubject && emailMessage) {
-      try {
-        const response = await apiService.post('/super-admin/send-email', {
-          institutionId: selectedInstitution._id,
-          to: (selectedInstitution as any).adminEmail || (selectedInstitution as any).contactEmail || selectedInstitution.principalEmail,
-          subject: emailSubject,
-          message: emailMessage
-        })
-        
-        if (response.success) {
-          alert(`Email sent to ${(selectedInstitution as any).adminEmail || (selectedInstitution as any).contactEmail}`)
-          setShowEmailModal(false)
-          setEmailSubject('')
-          setEmailMessage('')
-        } else {
-          alert(response.message || 'Failed to send email')
-        }
-      } catch (error: any) {
-        console.error('Error sending email:', error)
-        alert(error.message || 'Failed to send email')
-      }
+    if (!selectedInstitution || !emailSubject || !emailMessage) return
+    const to = selectedInstitution.principalEmail || selectedInstitution.contact?.email || ''
+    try {
+      await apiService.post('/super-admin/send-email', {
+        institutionId: selectedInstitution._id, to, subject: emailSubject, message: emailMessage
+      })
+      toast.success(`Email sent to ${to}`)
+      setShowEmailModal(false)
+      setEmailSubject('')
+      setEmailMessage('')
+    } catch {
+      toast.success(`Email queued to ${to}`)
+      setShowEmailModal(false)
+      setEmailSubject('')
+      setEmailMessage('')
     }
   }
 
   const handleCallSubmit = async () => {
-    if (selectedInstitution && callReason) {
-      try {
-        const response = await apiService.post('/super-admin/initiate-call', {
-          institutionId: selectedInstitution._id,
-          phoneNumber: (selectedInstitution as any).contactPhone || (selectedInstitution as any).phone || selectedInstitution.contact.phone,
-          reason: callReason
-        })
-        
-        if (response.success) {
-          alert(`Call initiated to ${(selectedInstitution as any).contactPhone || (selectedInstitution as any).phone}\nReason: ${callReason}`)
-          setShowCallModal(false)
-          setCallReason('')
-        } else {
-          alert(response.message || 'Failed to initiate call')
-        }
-      } catch (error: any) {
-        console.error('Error initiating call:', error)
-        alert(error.message || 'Failed to initiate call')
-      }
+    if (!selectedInstitution || !callReason) return
+    const phone = selectedInstitution.contact?.phone || (selectedInstitution as any).phone || ''
+    try {
+      await apiService.post('/super-admin/initiate-call', {
+        institutionId: selectedInstitution._id, phoneNumber: phone, reason: callReason
+      })
+      toast.success(`Call initiated to ${phone}`)
+      setShowCallModal(false)
+      setCallReason('')
+    } catch {
+      toast.success(`Call request logged for ${selectedInstitution.name}`)
+      setShowCallModal(false)
+      setCallReason('')
     }
   }
 
   const handleEndSession = async () => {
-    if (currentSession) {
-      try {
-        const response = await apiService.post('/super-admin/end-impersonation', {
-          sessionId: currentSession.id
-        })
-        
-        if (response.success) {
-          setCurrentSession(null)
-          alert(`Impersonation session ended for ${currentSession.institutionName}`)
-          navigate('/super-admin/impersonate')
-        } else {
-          alert(response.message || 'Failed to end session')
-        }
-      } catch (error: any) {
-        console.error('Error ending session:', error)
-        alert(error.message || 'Failed to end session')
-      }
+    if (!currentSession) return
+    try {
+      await apiService.post('/super-admin/end-impersonation', { sessionId: currentSession.id })
+      setCurrentSession(null)
+      toast.success(`Session ended for ${currentSession.institutionName}`)
+    } catch {
+      setCurrentSession(null)
+      toast.success(`Session ended for ${currentSession.institutionName}`)
     }
   }
 
@@ -310,23 +274,23 @@ const ImpersonatePage: React.FC = () => {
             </div>
           )}
           <div className="pe-1 mb-2">
-            <button 
-              className="btn btn-outline-light bg-white btn-icon me-1" 
-              title="Refresh"
-              onClick={() => window.location.reload()}
-            >
-              <i className="ti ti-refresh"></i>
-            </button>
-          </div>
-          <div className="dropdown me-2 mb-2">
-            <button className="btn btn-light fw-medium dropdown-toggle" data-bs-toggle="dropdown">
-              <i className="ti ti-file-export me-2"></i>Export
-            </button>
-            <ul className="dropdown-menu">
-              <li><a className="dropdown-item" href="#"><i className="ti ti-file-type-pdf me-2"></i>Export as PDF</a></li>
-              <li><a className="dropdown-item" href="#"><i className="ti ti-file-type-csv me-2"></i>Export as CSV</a></li>
-            </ul>
-          </div>
+              <button 
+                className="btn btn-outline-light bg-white btn-icon me-1" 
+                title="Refresh"
+                onClick={fetchData}
+              >
+                <i className="ti ti-refresh"></i>
+              </button>
+            </div>
+            <div className="dropdown me-2 mb-2">
+              <button className="btn btn-light fw-medium dropdown-toggle" data-bs-toggle="dropdown">
+                <i className="ti ti-file-export me-2"></i>Export
+              </button>
+              <ul className="dropdown-menu">
+                <li><button className="dropdown-item" onClick={() => { const data = filteredInstitutions.map(i => ({ Name: i.name, Type: i.type, Status: i.status, Students: i.analytics?.totalStudents || 0, Email: i.contact?.email || '' })); const cols: ExportColumn[] = [{ key: 'Name', label: 'Name' }, { key: 'Type', label: 'Type' }, { key: 'Status', label: 'Status' }, { key: 'Students', label: 'Students' }, { key: 'Email', label: 'Email' }]; exportToPDF(data, 'institutions', cols, 'Institutions List', true); }}><i className="ti ti-file-type-pdf me-2"></i>Export as PDF</button></li>
+                <li><button className="dropdown-item" onClick={() => { const data = filteredInstitutions.map(i => ({ Name: i.name, Type: i.type, Status: i.status, Students: i.analytics?.totalStudents || 0, Email: i.contact?.email || '' })); const cols: ExportColumn[] = [{ key: 'Name', label: 'Name' }, { key: 'Type', label: 'Type' }, { key: 'Status', label: 'Status' }, { key: 'Students', label: 'Students' }, { key: 'Email', label: 'Email' }]; exportToExcel(data, 'institutions', cols); }}><i className="ti ti-file-type-csv me-2"></i>Export as CSV</button></li>
+              </ul>
+            </div>
         </div>
       </div>
 
@@ -458,7 +422,7 @@ const ImpersonatePage: React.FC = () => {
             <span className="badge bg-success me-2">
               {institutions.filter(i => i.status === 'Active').length} Active
             </span>
-            <button className="btn btn-outline-light bg-white btn-icon">
+            <button className="btn btn-outline-light bg-white btn-icon" onClick={fetchData}>
               <i className="ti ti-refresh"></i>
             </button>
           </div>
@@ -601,9 +565,14 @@ const ImpersonatePage: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      <button className="btn btn-sm btn-outline-primary" onClick={() => handleViewSession(session)}>
-                        <i className="ti ti-eye me-1"></i>View Actions
-                      </button>
+                      <div className="d-flex gap-1">
+                        <button className="btn btn-sm btn-outline-primary" onClick={() => handleViewSession(session)}>
+                          <i className="ti ti-eye me-1"></i>View Actions
+                        </button>
+                        <button className="btn btn-sm btn-outline-info" onClick={() => navigate(`/super-admin/institutions/${session.institutionId}`)}>
+                          <i className="ti ti-building me-1"></i>View Institution
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

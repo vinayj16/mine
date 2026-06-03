@@ -1,32 +1,27 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 import apiClient from '../../api/client';
 
-interface Teacher {
+interface TeacherUser {
   _id: string;
-  employeeId?: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   phone: string;
-  photo?: string;
-  departmentId?: {
-    _id: string;
-    name: string;
-    code: string;
-  };
-  designation: string;
-  subjects?: Array<{
-    _id: string;
-    name: string;
-    code: string;
-  }>;
-  classes?: string[];
-  status: 'active' | 'inactive' | 'on_leave';
-  joinDate: string;
-  isActive: boolean;
+  role: string;
+  status: string;
+  avatar?: string;
+  employeeId?: string;
+  designation?: string;
+  department?: string;
+  qualification?: string;
+  joiningDate?: string;
+  gender?: string;
+  institutionId?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface PaginationMeta {
@@ -37,12 +32,15 @@ interface PaginationMeta {
 }
 
 const TeacherListPage = () => {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachers, setTeachers] = useState<TeacherUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationMeta>({
     page: 1,
     limit: 20,
@@ -50,52 +48,32 @@ const TeacherListPage = () => {
     totalPages: 0
   });
 
-  // Get institutionId from localStorage user data
-  const getInstitutionId = () => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        return user.institutionId || user.schoolId || user.school || user.schoolID;
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-      }
-    }
-    return null;
-  };
-
-  const institutionId = getInstitutionId();
-
   useEffect(() => {
-    if (institutionId) {
-      fetchTeachers();
-    }
-  }, [pagination.page, searchTerm, institutionId]);
+    fetchTeachers();
+  }, [pagination.page]);
 
   const fetchTeachers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/teachers', {
+      const response = await apiClient.get('/users', {
         params: {
-          schoolId: institutionId,
+          role: 'teacher',
+          search: searchTerm || undefined,
           page: pagination.page,
-          limit: pagination.limit,
-          search: searchTerm || undefined
+          limit: pagination.limit
         }
       });
 
       if (response.data.success) {
         setTeachers(response.data.data || []);
-        // Backend returns pagination at root level, not in meta
-        const backendResponse = response.data as any;
-        if (backendResponse.pagination) {
-          setPagination({
-            page: backendResponse.pagination.page,
-            limit: backendResponse.pagination.limit,
-            total: backendResponse.pagination.total,
-            totalPages: backendResponse.pagination.pages
-          });
+        const pag = response.data.pagination;
+        if (pag) {
+          setPagination(prev => ({
+            ...prev,
+            total: pag.total,
+            totalPages: pag.pages || Math.ceil(pag.total / pag.limit)
+          }));
         }
       }
     } catch (error: any) {
@@ -104,6 +82,28 @@ const TeacherListPage = () => {
       toast.error(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setShowDeleteModal(true);
+    setDeleteTarget(id);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(deleteTarget);
+      await apiClient.delete(`/users/${deleteTarget}`);
+      toast.success('Teacher deleted successfully');
+      setTeachers(prev => prev.filter(t => t._id !== deleteTarget));
+      setPagination(prev => ({ ...prev, total: prev.total - 1 }));
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to delete teacher');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -125,7 +125,8 @@ const TeacherListPage = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -138,8 +139,6 @@ const TeacherListPage = () => {
         return 'badge-soft-success';
       case 'inactive':
         return 'badge-soft-danger';
-      case 'on_leave':
-        return 'badge-soft-warning';
       default:
         return 'badge-soft-secondary';
     }
@@ -147,8 +146,28 @@ const TeacherListPage = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setPagination({ ...pagination, page: 1 });
+    setPagination(prev => ({ ...prev, page: 1 }));
     fetchTeachers();
+  };
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'designation', label: 'Designation' },
+    { key: 'department', label: 'Department' },
+    { key: 'employeeId', label: 'Employee ID' },
+    { key: 'joiningDate', label: 'Date of Join', format: (v) => v ? formatDate(v) : 'N/A' },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!teachers.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(teachers, 'teachers-list', exportColumns, 'Teachers List');
+    } else {
+      exportToExcel(teachers, 'teachers-list', exportColumns);
+    }
   };
 
   // Loading state
@@ -197,7 +216,7 @@ const TeacherListPage = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <button 
+            <button
               className="btn btn-outline-light bg-white btn-icon me-1"
               onClick={fetchTeachers}
               title="Refresh"
@@ -206,7 +225,7 @@ const TeacherListPage = () => {
             </button>
           </div>
           <div className="pe-1 mb-2">
-            <button 
+            <button
               className="btn btn-outline-light bg-white btn-icon me-1"
               onClick={() => window.print()}
               title="Print"
@@ -221,13 +240,13 @@ const TeacherListPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>
@@ -235,10 +254,19 @@ const TeacherListPage = () => {
             </ul>
           </div>
           <div className="mb-2">
-            <Link to="/institution/teachers/add" className="btn btn-primary d-flex align-items-center">
+            <Link to="/dashboard/admin/teachers/add" className="btn btn-primary d-flex align-items-center">
               <i className="ti ti-square-rounded-plus me-2" />
               Add Teacher
             </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="alert alert-info d-flex align-items-center gap-2 mb-0 py-2">
+            <i className="ti ti-info-circle"></i>
+            <small>Showing teachers from your institution's user accounts. Total: <strong>{pagination.total}</strong></small>
           </div>
         </div>
       </div>
@@ -251,9 +279,9 @@ const TeacherListPage = () => {
               <span className="icon-addon">
                 <i className="ti ti-search" />
               </span>
-              <input 
-                type="text" 
-                className="form-control" 
+              <input
+                type="text"
+                className="form-control"
                 placeholder="Search teachers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -280,7 +308,7 @@ const TeacherListPage = () => {
                 {searchTerm ? 'Try adjusting your search criteria' : 'Start by adding your first teacher'}
               </p>
               {!searchTerm && (
-                <Link to="/institution/teachers/add" className="btn btn-primary">
+                <Link to="/dashboard/admin/teachers/add" className="btn btn-primary">
                   <i className="ti ti-plus me-2"></i>Add First Teacher
                 </Link>
               )}
@@ -295,8 +323,8 @@ const TeacherListPage = () => {
                   <tr>
                     <th>
                       <div className="form-check form-check-md">
-                        <input 
-                          className="form-check-input" 
+                        <input
+                          className="form-check-input"
                           type="checkbox"
                           checked={selectAll}
                           onChange={toggleSelectAll}
@@ -305,8 +333,8 @@ const TeacherListPage = () => {
                     </th>
                     <th>ID</th>
                     <th>Name</th>
+                    <th>Designation</th>
                     <th>Department</th>
-                    <th>Subjects</th>
                     <th>Email</th>
                     <th>Phone</th>
                     <th>Date of Join</th>
@@ -319,8 +347,8 @@ const TeacherListPage = () => {
                     <tr key={teacher._id}>
                       <td>
                         <div className="form-check form-check-md">
-                          <input 
-                            className="form-check-input" 
+                          <input
+                            className="form-check-input"
                             type="checkbox"
                             checked={selectedTeachers.includes(teacher._id)}
                             onChange={() => toggleTeacherSelection(teacher._id)}
@@ -328,39 +356,32 @@ const TeacherListPage = () => {
                         </div>
                       </td>
                       <td>
-                        <Link to={`/teachers/${teacher._id}`} className="link-primary">
+                        <span className="link-primary">
                           {teacher.employeeId || teacher._id.slice(-6)}
-                        </Link>
+                        </span>
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
                           <span className="avatar avatar-md me-2">
-                            <img 
-                              src={teacher.photo || `https://ui-avatars.com/api/?name=${teacher.firstName}+${teacher.lastName}&background=random`} 
-                              className="img-fluid rounded-circle" 
-                              alt={`${teacher.firstName} ${teacher.lastName}`} 
+                            <img
+                              src={teacher.avatar || `https://ui-avatars.com/api/?name=${teacher.name}&background=random`}
+                              className="img-fluid rounded-circle"
+                              alt={teacher.name}
                             />
                           </span>
                           <div className="overflow-hidden">
-                            <Link to={`/teachers/${teacher._id}`} className="text-dark mb-0 d-block">
-                              {teacher.firstName} {teacher.lastName}
-                            </Link>
-                            <small className="text-muted">{teacher.designation}</small>
+                            <span className="text-dark mb-0 d-block fw-medium">
+                              {teacher.name}
+                            </span>
+                            <small className="text-muted">{teacher.employeeId || 'N/A'}</small>
                           </div>
                         </div>
                       </td>
-                      <td>{teacher.departmentId?.name || 'N/A'}</td>
-                      <td>
-                        {teacher.subjects && teacher.subjects.length > 0
-                          ? teacher.subjects.slice(0, 2).map(s => s.name).join(', ')
-                          : 'N/A'}
-                        {teacher.subjects && teacher.subjects.length > 2 && (
-                          <span className="text-muted"> +{teacher.subjects.length - 2}</span>
-                        )}
-                      </td>
+                      <td>{teacher.designation || 'N/A'}</td>
+                      <td>{teacher.department || 'N/A'}</td>
                       <td>{teacher.email}</td>
-                      <td>{teacher.phone}</td>
-                      <td>{formatDate(teacher.joinDate)}</td>
+                      <td>{teacher.phone || 'N/A'}</td>
+                      <td>{formatDate(teacher.joiningDate!)}</td>
                       <td>
                         <span className={`badge ${getStatusBadge(teacher.status)} d-inline-flex align-items-center`}>
                           <i className="ti ti-circle-filled fs-5 me-1" />
@@ -369,29 +390,36 @@ const TeacherListPage = () => {
                       </td>
                       <td>
                         <div className="dropdown">
-                          <button 
-                            className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0" 
+                          <button
+                            className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
                             data-bs-toggle="dropdown"
                           >
                             <i className="ti ti-dots-vertical fs-14" />
                           </button>
                           <ul className="dropdown-menu dropdown-menu-end p-3">
                             <li>
-                              <Link className="dropdown-item rounded-1" to={`/teachers/${teacher._id}`}>
-                                <i className="ti ti-menu me-2" />
-                                View Teacher
+                              <Link className="dropdown-item rounded-1" to={`/dashboard/admin/teachers/${teacher._id}`}>
+                                <i className="ti ti-eye me-2" />
+                                View
                               </Link>
                             </li>
                             <li>
-                              <Link className="dropdown-item rounded-1" to={`/teachers/${teacher._id}/edit`}>
+                              <Link className="dropdown-item rounded-1" to={`/dashboard/admin/teachers/edit/${teacher._id}`}>
                                 <i className="ti ti-edit-circle me-2" />
                                 Edit
                               </Link>
                             </li>
                             <li>
-                              <button className="dropdown-item rounded-1">
-                                <i className="ti ti-lock me-2" />
-                                Login Details
+                              <button
+                                className="dropdown-item rounded-1 text-danger"
+                                onClick={() => handleDelete(teacher._id)}
+                                disabled={deleting === teacher._id}
+                              >
+                                {deleting === teacher._id ? (
+                                  <><span className="spinner-border spinner-border-sm me-2" /> Deleting...</>
+                                ) : (
+                                  <><i className="ti ti-trash me-2" /> Delete</>
+                                )}
                               </button>
                             </li>
                           </ul>
@@ -413,28 +441,28 @@ const TeacherListPage = () => {
               <nav>
                 <ul className="pagination mb-0">
                   <li className={`page-item ${pagination.page === 1 ? 'disabled' : ''}`}>
-                    <button 
+                    <button
                       className="page-link"
-                      onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                       disabled={pagination.page === 1}
                     >
                       Previous
                     </button>
                   </li>
-                  {[...Array(pagination.totalPages)].map((_, index) => (
+                  {[...Array(Math.max(pagination.totalPages, 1))].map((_, index) => (
                     <li key={index} className={`page-item ${pagination.page === index + 1 ? 'active' : ''}`}>
-                      <button 
+                      <button
                         className="page-link"
-                        onClick={() => setPagination({ ...pagination, page: index + 1 })}
+                        onClick={() => setPagination(prev => ({ ...prev, page: index + 1 }))}
                       >
                         {index + 1}
                       </button>
                     </li>
                   ))}
                   <li className={`page-item ${pagination.page === pagination.totalPages ? 'disabled' : ''}`}>
-                    <button 
+                    <button
                       className="page-link"
-                      onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                       disabled={pagination.page === pagination.totalPages}
                     >
                       Next
@@ -446,6 +474,8 @@ const TeacherListPage = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Delete this teacher? This will permanently remove their account." />
     </>
   );
 };

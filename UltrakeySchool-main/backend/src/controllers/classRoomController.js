@@ -166,6 +166,7 @@ const getAllClassRooms = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
+    const resolvedInstitutionId = institutionId || req.user?.institutionId || req.user?.institutionId;
     const filters = {
       roomNo,
       capacity: capacity ? parseInt(capacity) : undefined,
@@ -174,7 +175,7 @@ const getAllClassRooms = async (req, res) => {
       building,
       floor: floor ? parseInt(floor) : undefined,
       academicYear,
-      institutionId,
+      institutionId: resolvedInstitutionId,
       search
     };
     const options = { page: pageNum, limit: limitNum, sortBy, sortOrder };

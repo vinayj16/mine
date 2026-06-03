@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 import apiClient from '../../api/client';
 
 interface LibraryMember {
@@ -30,22 +31,29 @@ const LibraryMembersPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/users', {
-        params: {
-          role: 'student,teacher,staff' // Filter for library-eligible users
-        }
-      });
-      
+      const response = await apiClient.get('/library/members');
+
       if (response.data.success) {
         const data = response.data.data;
-        // Ensure data is always an array
-        setMembers(Array.isArray(data) ? data : []);
+        // Handle both array and paginated response
+        const membersList = Array.isArray(data) ? data : (data?.members || []);
+        setMembers(membersList);
       }
     } catch (error: any) {
       console.error('Error fetching members:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to fetch library members';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      // Try alternative - fetch from users
+      try {
+        const altResponse = await apiClient.get('/users', {
+          params: { role: 'student,teacher,staff' }
+        });
+        if (altResponse.data.success) {
+          const data = altResponse.data.data;
+          setMembers(Array.isArray(data) ? data : []);
+        }
+      } catch (altError) {
+        const errorMessage = error.response?.data?.message || 'Failed to fetch library members';
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -53,11 +61,29 @@ const LibraryMembersPage: React.FC = () => {
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'memberId', label: 'ID', format: (_, row) => row.studentId || row.employeeId || row._id?.slice(-6) },
+    { key: 'name', label: 'Member' },
+    { key: 'role', label: 'Role' },
+    { key: 'email', label: 'Email' },
+    { key: 'createdAt', label: 'Date of Join', format: (v) => v ? formatDate(v) : 'N/A' },
+    { key: 'phone', label: 'Mobile', format: (v) => v || 'N/A' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!members.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(members, 'library-members', exportColumns, 'Library Members');
+    } else {
+      exportToExcel(members, 'library-members', exportColumns);
+    }
   };
 
   const getMemberCardNo = (member: LibraryMember): string => {
@@ -82,7 +108,7 @@ const LibraryMembersPage: React.FC = () => {
 
     try {
       const response = await apiClient.delete(`/users/${selectedMember._id}`);
-      
+
       if (response.data.success) {
         toast.success('Member removed successfully');
         setShowDeleteModal(false);
@@ -124,178 +150,178 @@ const LibraryMembersPage: React.FC = () => {
     <>
       {/* Page Header */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
-          <div className="my-auto mb-2">
-            <h3 className="page-title mb-1">Library Members</h3>
-            <nav>
-              <ol className="breadcrumb mb-0">
-                <li className="breadcrumb-item">
-                  <Link to="/dashboard">Dashboard</Link>
-                </li>
-                <li className="breadcrumb-item">
-                  <a href="#!">Management</a>
-                </li>
-                <li className="breadcrumb-item active" aria-current="page">Library Members</li>
-              </ol>
-            </nav>
+        <div className="my-auto mb-2">
+          <h3 className="page-title mb-1">Library Members</h3>
+          <nav>
+            <ol className="breadcrumb mb-0">
+              <li className="breadcrumb-item">
+                <Link to="/dashboard">Dashboard</Link>
+              </li>
+              <li className="breadcrumb-item">
+                <a href="#!">Management</a>
+              </li>
+              <li className="breadcrumb-item active" aria-current="page">Library Members</li>
+            </ol>
+          </nav>
+        </div>
+        <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+          <div className="pe-1 mb-2">
+            <button
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              title="Refresh"
+              onClick={fetchMembers}
+            >
+              <i className="ti ti-refresh"></i>
+            </button>
           </div>
-          <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-            <div className="pe-1 mb-2">
-              <button 
-                className="btn btn-outline-light bg-white btn-icon me-1" 
-                title="Refresh"
-                onClick={fetchMembers}
-              >
-                <i className="ti ti-refresh"></i>
-              </button>
-            </div>
-            <div className="pe-1 mb-2">
-              <button 
-                className="btn btn-outline-light bg-white btn-icon me-1" 
-                title="Print"
-                onClick={() => window.print()}
-              >
-                <i className="ti ti-printer"></i>
-              </button>
-            </div>
-            <div className="dropdown me-2 mb-2">
-              <button 
-                className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center" 
-                data-bs-toggle="dropdown"
-              >
-                <i className="ti ti-file-export me-2"></i>Export
-              </button>
-              <ul className="dropdown-menu dropdown-menu-end p-3">
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                  </a>
-                </li>
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                  </a>
-                </li>
-              </ul>
-            </div>
+          <div className="pe-1 mb-2">
+            <button
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              title="Print"
+              onClick={() => window.print()}
+            >
+              <i className="ti ti-printer"></i>
+            </button>
+          </div>
+          <div className="dropdown me-2 mb-2">
+            <button
+              className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
+              data-bs-toggle="dropdown"
+            >
+              <i className="ti ti-file-export me-2"></i>Export
+            </button>
+            <ul className="dropdown-menu dropdown-menu-end p-3">
+              <li>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                  <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
+                </button>
+              </li>
+              <li>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                  <i className="ti ti-file-type-xls me-1"></i>Export as Excel
+                </button>
+              </li>
+            </ul>
           </div>
         </div>
-        {/* /Page Header */}
+      </div>
+      {/* /Page Header */}
 
-        {/* Library Members List */}
-        <div className="card">
-          <div className="card-header">
-            <h4 className="card-title">Library Members List</h4>
-          </div>
-          
-          <div className="card-body p-0 py-3">
-            <div className="table-responsive">
-              <table className="table datatable">
-                <thead className="thead-light">
+      {/* Library Members List */}
+      <div className="card">
+        <div className="card-header">
+          <h4 className="card-title">Library Members List</h4>
+        </div>
+
+        <div className="card-body p-0 py-3">
+          <div className="table-responsive">
+            <table className="table datatable">
+              <thead className="thead-light">
+                <tr>
+                  <th className="no-sort">
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="select-all"
+                      />
+                    </div>
+                  </th>
+                  <th>ID</th>
+                  <th>Member</th>
+                  <th>Role</th>
+                  <th>Email</th>
+                  <th>Date of Join</th>
+                  <th>Mobile</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.length === 0 ? (
                   <tr>
-                    <th className="no-sort">
-                      <div className="form-check">
-                        <input 
-                          className="form-check-input" 
-                          type="checkbox" 
-                          id="select-all"
-                        />
-                      </div>
-                    </th>
-                    <th>ID</th>
-                    <th>Member</th>
-                    <th>Role</th>
-                    <th>Email</th>
-                    <th>Date of Join</th>
-                    <th>Mobile</th>
-                    <th>Action</th>
+                    <td colSpan={8} className="text-center py-4">
+                      <p className="text-muted mb-0">No library members found</p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {members.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="text-center py-4">
-                        <p className="text-muted mb-0">No library members found</p>
+                ) : (
+                  members.map(member => (
+                    <tr key={member._id}>
+                      <td>
+                        <div className="form-check">
+                          <input className="form-check-input" type="checkbox" />
+                        </div>
+                      </td>
+                      <td><Link to="#" className="link-primary">{getMemberCardNo(member)}</Link></td>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          <div className="avatar avatar-md me-2">
+                            {member.avatar ? (
+                              <img
+                                src={member.avatar}
+                                className="img-fluid rounded-circle"
+                                alt={member.name}
+                              />
+                            ) : (
+                              <div className="avatar-title bg-primary rounded-circle">
+                                {member.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-dark mb-0">{member.name}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${getRoleBadge(member.role)}`}>
+                          {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
+                        </span>
+                      </td>
+                      <td>{member.email}</td>
+                      <td>{formatDate(member.createdAt)}</td>
+                      <td>{member.phone || 'N/A'}</td>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          <div className="dropdown">
+                            <button
+                              className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
+                              data-bs-toggle="dropdown"
+                              aria-expanded="false"
+                            >
+                              <i className="ti ti-dots-vertical fs-14"></i>
+                            </button>
+                            <ul className="dropdown-menu dropdown-menu-end p-3">
+                              <li>
+                                <Link
+                                  to={`/users/${member._id}`}
+                                  className="dropdown-item rounded-1"
+                                >
+                                  <i className="ti ti-eye me-2"></i>View Details
+                                </Link>
+                              </li>
+                              <li>
+                                <button
+                                  className="dropdown-item rounded-1 text-danger"
+                                  onClick={() => {
+                                    setSelectedMember(member);
+                                    setShowDeleteModal(true);
+                                  }}
+                                >
+                                  <i className="ti ti-trash-x me-2"></i>Remove
+                                </button>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
                       </td>
                     </tr>
-                  ) : (
-                    members.map(member => (
-                      <tr key={member._id}>
-                        <td>
-                          <div className="form-check">
-                            <input className="form-check-input" type="checkbox" />
-                          </div>
-                        </td>
-                        <td><Link to="#" className="link-primary">{getMemberCardNo(member)}</Link></td>
-                        <td>
-                          <div className="d-flex align-items-center">
-                            <div className="avatar avatar-md me-2">
-                              {member.avatar ? (
-                                <img 
-                                  src={member.avatar} 
-                                  className="img-fluid rounded-circle" 
-                                  alt={member.name} 
-                                />
-                              ) : (
-                                <div className="avatar-title bg-primary rounded-circle">
-                                  {member.name.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-dark mb-0">{member.name}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`badge ${getRoleBadge(member.role)}`}>
-                            {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
-                          </span>
-                        </td>
-                        <td>{member.email}</td>
-                        <td>{formatDate(member.createdAt)}</td>
-                        <td>{member.phone || 'N/A'}</td>
-                        <td>
-                          <div className="d-flex align-items-center">
-                            <div className="dropdown">
-                              <button
-                                className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
-                                data-bs-toggle="dropdown"
-                                aria-expanded="false"
-                              >
-                                <i className="ti ti-dots-vertical fs-14"></i>
-                              </button>
-                              <ul className="dropdown-menu dropdown-menu-end p-3">
-                                <li>
-                                  <Link 
-                                    to={`/users/${member._id}`}
-                                    className="dropdown-item rounded-1"
-                                  >
-                                    <i className="ti ti-eye me-2"></i>View Details
-                                  </Link>
-                                </li>
-                                <li>
-                                  <button 
-                                    className="dropdown-item rounded-1 text-danger"
-                                    onClick={() => {
-                                      setSelectedMember(member);
-                                      setShowDeleteModal(true);
-                                    }}
-                                  >
-                                    <i className="ti ti-trash-x me-2"></i>Remove
-                                  </button>
-                                </li>
-                              </ul>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
+      </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedMember && (
@@ -308,12 +334,12 @@ const LibraryMembersPage: React.FC = () => {
                 </div>
                 <h4 className="mb-3">Confirm Removal</h4>
                 <p className="mb-4">
-                  Are you sure you want to remove "{selectedMember.name}" from library members? 
+                  Are you sure you want to remove "{selectedMember.name}" from library members?
                   This action cannot be undone.
                 </p>
                 <div className="d-flex justify-content-center">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-light me-3"
                     onClick={() => {
                       setShowDeleteModal(false);
@@ -322,8 +348,8 @@ const LibraryMembersPage: React.FC = () => {
                   >
                     Cancel
                   </button>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-danger"
                     onClick={handleDeleteMember}
                   >

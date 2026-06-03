@@ -219,7 +219,7 @@ const DataRightsPage: React.FC = () => {
 
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('en-US', { 
+    return date.toLocaleString('en-IN', { 
       year: 'numeric', 
       month: 'short', 
       day: 'numeric',

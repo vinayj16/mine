@@ -192,12 +192,66 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Restore note from trash
-router.post('/:id/restore', async (req, res) => {
+// Toggle important status
+router.patch('/:id/toggle-important', async (req, res) => {
   try {
     const query = { _id: req.params.id };
     
-    // If not admin or superadmin, only allow user's own notes
+    if (!['superadmin', 'admin', 'principal', 'institution_admin'].includes(req.user.role)) {
+      query.userId = req.user.id;
+    }
+    
+    const note = await Note.findOne(query);
+    
+    if (!note) {
+      return res.status(404).json({ success: false, message: 'Note not found' });
+    }
+
+    note.important = !note.important;
+    await note.save();
+
+    res.json({
+      success: true,
+      data: note,
+      message: 'Note importance updated'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update note importance', error: error.message });
+  }
+});
+
+// Move note to trash (alternative PATCH endpoint)
+router.patch('/:id/trash', async (req, res) => {
+  try {
+    const query = { _id: req.params.id };
+    
+    if (!['superadmin', 'admin', 'principal', 'institution_admin'].includes(req.user.role)) {
+      query.userId = req.user.id;
+    }
+    
+    const note = await Note.findOne(query);
+    
+    if (!note) {
+      return res.status(404).json({ success: false, message: 'Note not found' });
+    }
+
+    note.status = 'trash';
+    await note.save();
+
+    res.json({
+      success: true,
+      message: 'Note moved to trash'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to move note to trash', error: error.message });
+  }
+});
+
+// Restore note from trash
+router.patch('/:id/restore', async (req, res) => {
+  try {
+    const query = { _id: req.params.id };
+    
     if (!['superadmin', 'admin', 'principal', 'institution_admin'].includes(req.user.role)) {
       query.userId = req.user.id;
     }
@@ -218,6 +272,25 @@ router.post('/:id/restore', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to restore note', error: error.message });
+  }
+});
+
+// Restore all notes from trash for user
+router.patch('/restore-all', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    await Note.updateMany(
+      { userId, status: 'trash' },
+      { $set: { status: 'active', deletedAt: null } }
+    );
+
+    res.json({
+      success: true,
+      message: 'All notes restored from trash'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to restore notes', error: error.message });
   }
 });
 

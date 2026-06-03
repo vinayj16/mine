@@ -144,6 +144,134 @@ export interface PaginatedResponse<T> {
 
 // API Functions
 export const libraryService = {
+  // Overview
+  async getOverview(): Promise<{
+    totalBooks: number;
+    issuedBooks: number;
+    availableBooks: number;
+    overdueBooks: number;
+    members: number;
+    recentIssues: Array<{
+      id: string;
+      bookName: string;
+      borrower: string;
+      issueDate: string;
+      dueDate: string;
+      status: string;
+    }>;
+  }> {
+    try {
+      const response = await apiService.get<{
+        totalBooks: number;
+        issuedBooks: number;
+        availableBooks: number;
+        overdueBooks: number;
+        members: number;
+        recentIssues: Array<{
+          id: string;
+          bookName: string;
+          borrower: string;
+          issueDate: string;
+          dueDate: string;
+          status: string;
+        }>;
+      }>(API_ENDPOINTS.LIBRARY.OVERVIEW);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch library overview');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[Library Service] Failed to fetch overview:', error);
+      throw error;
+    }
+  },
+
+  // Statistics
+  async getStatistics(): Promise<{
+    totalBooks: number;
+    availableBooks: number;
+    borrowedBooks: number;
+    totalBorrowings: number;
+    activeBorrowings: number;
+    overdueBorrowings: number;
+    totalFines: number;
+    pendingFines: number;
+    byCategory: { category: string; count: number }[];
+  }> {
+    try {
+      const response = await apiService.get<{
+        totalBooks: number;
+        availableBooks: number;
+        borrowedBooks: number;
+        totalBorrowings: number;
+        activeBorrowings: number;
+        overdueBorrowings: number;
+        totalFines: number;
+        pendingFines: number;
+        byCategory: { category: string; count: number }[];
+      }>(API_ENDPOINTS.LIBRARY.STATISTICS);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch statistics');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[Library Service] Failed to fetch statistics:', error);
+      throw error;
+    }
+  },
+
+  // Issues
+  async getIssues(params?: Record<string, unknown>): Promise<any> {
+    try {
+      const response = await apiService.get<any>(API_ENDPOINTS.LIBRARY.ISSUES, params);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch issues');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[Library Service] Failed to fetch issues:', error);
+      throw error;
+    }
+  },
+
+  // Overdue
+  async getOverdue(): Promise<any> {
+    try {
+      const response = await apiService.get<any>(API_ENDPOINTS.LIBRARY.OVERDUE);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch overdue');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[Library Service] Failed to fetch overdue:', error);
+      throw error;
+    }
+  },
+
+  // Available Books
+  async getAvailable(params?: Record<string, unknown>): Promise<any> {
+    try {
+      const response = await apiService.get<any>(API_ENDPOINTS.LIBRARY.AVAILABLE, params);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch available books');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[Library Service] Failed to fetch available:', error);
+      throw error;
+    }
+  },
+
   // Books Management
   async getBooks(filters: LibraryFilters = {}): Promise<PaginatedResponse<Book>> {
     try {
@@ -336,7 +464,7 @@ export const libraryService = {
 
   async returnBook(id: string, data?: ReturnBookInput): Promise<Borrowing> {
     try {
-      const response = await apiService.put<Borrowing>(
+      const response = await apiService.post<Borrowing>(
         API_ENDPOINTS.LIBRARY.BORROWINGS.RETURN(id),
         data || {}
       );
@@ -354,7 +482,7 @@ export const libraryService = {
 
   async renewBook(id: string): Promise<Borrowing> {
     try {
-      const response = await apiService.put<Borrowing>(
+      const response = await apiService.post<Borrowing>(
         API_ENDPOINTS.LIBRARY.BORROWINGS.RENEW(id),
         {}
       );
@@ -507,7 +635,7 @@ export const libraryService = {
     try {
       const params = { ...filters, format: 'csv' };
       const response = await apiService.get<Blob>(
-        `${API_ENDPOINTS.LIBRARY.BOOKS.LIST}/export`,
+        API_ENDPOINTS.LIBRARY.EXPORT,
         params
       );
       
@@ -526,7 +654,7 @@ export const libraryService = {
     try {
       const params = { ...filters, format: 'pdf' };
       const response = await apiService.get<Blob>(
-        `${API_ENDPOINTS.LIBRARY.BOOKS.LIST}/export`,
+        API_ENDPOINTS.LIBRARY.EXPORT,
         params
       );
       
@@ -541,41 +669,6 @@ export const libraryService = {
     }
   },
 
-  // Statistics
-  async getStatistics(): Promise<{
-    totalBooks: number;
-    availableBooks: number;
-    borrowedBooks: number;
-    totalBorrowings: number;
-    activeBorrowings: number;
-    overdueBorrowings: number;
-    totalFines: number;
-    pendingFines: number;
-    byCategory: { category: string; count: number }[];
-  }> {
-    try {
-      const response = await apiService.get<{
-        totalBooks: number;
-        availableBooks: number;
-        borrowedBooks: number;
-        totalBorrowings: number;
-        activeBorrowings: number;
-        overdueBorrowings: number;
-        totalFines: number;
-        pendingFines: number;
-        byCategory: { category: string; count: number }[];
-      }>(`${API_ENDPOINTS.LIBRARY.BOOKS.LIST}/statistics`);
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to fetch statistics');
-      }
-      
-      return response.data;
-    } catch (error) {
-      console.error('[Library Service] Failed to fetch statistics:', error);
-      throw error;
-    }
-  },
-};
+  };
 
 export default libraryService;

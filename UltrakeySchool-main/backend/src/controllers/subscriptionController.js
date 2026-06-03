@@ -2,6 +2,9 @@ import * as subscriptionService from '../services/subscriptionService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import paymentGatewayService from '../services/paymentGatewayService.js';
+import emailService from '../services/emailService.js';
+import User from '../models/User.js';
 
 // Validation constants
 const VALID_STATUSES = ['active', 'expired', 'cancelled', 'suspended', 'trial', 'pending'];
@@ -39,25 +42,25 @@ export const getSchoolSubscription = async (req, res) => {
   try {
     logger.info('Fetching school subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const subscription = await subscriptionService.getSchoolSubscription(schoolId);
+    const subscription = await subscriptionService.getSchoolSubscription(institutionId);
     
     if (!subscription) {
       return notFoundResponse(res, 'No active subscription found');
     }
     
-    logger.info('School subscription fetched successfully:', { schoolId });
+    logger.info('School subscription fetched successfully:', { institutionId });
     return successResponse(res, subscription, 'Subscription retrieved successfully');
   } catch (error) {
     logger.error('Error fetching school subscription:', error);
@@ -116,16 +119,16 @@ export const createSubscription = async (req, res) => {
   try {
     logger.info('Creating subscription');
     
-    const { schoolId, planId, billingCycle, startDate } = req.body;
+    const { institutionId, planId, billingCycle, startDate } = req.body;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!planId) {
@@ -152,10 +155,95 @@ export const createSubscription = async (req, res) => {
     
     const result = await subscriptionService.createSubscription(req.body);
     
-    logger.info('Subscription created successfully:', { schoolId, planId });
+    logger.info('Subscription created successfully:', { institutionId, planId });
     return createdResponse(res, result, 'Subscription created successfully');
   } catch (error) {
     logger.error('Error creating subscription:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+export const createRazorpayOrder = async (req, res) => {
+  try {
+    const { planId, billingCycle = 'monthly', institutionId } = req.body;
+    if (!planId) {
+      return validationErrorResponse(res, ['Plan ID is required']);
+    }
+    const plan = await subscriptionService.getPlanById(planId);
+    if (!plan) {
+      return notFoundResponse(res, 'Plan not found');
+    }
+    let amount = plan.price;
+    if (!amount || amount <= 0) {
+      logger.error('Invalid plan price:', { planId, price: amount, plan });
+      return errorResponse(res, `Invalid plan price for ${planId}: ${amount}`);
+    }
+    if (billingCycle === 'yearly') {
+      amount = amount * 12 * 0.85;
+    }
+    // Subscription payments use PLATFORM Razorpay keys (payments go to superadmin, not institution)
+    const razorpayInstance = await paymentGatewayService.getPlatformRazorpay();
+    logger.info(`Creating Razorpay order for plan ${planId}: ₹${amount} (${billingCycle})`);
+    const order = await paymentGatewayService.createRazorpayOrder({
+      amount,
+      currency: 'INR',
+      receipt: `sub_${Date.now()}`,
+      notes: { planId, billingCycle },
+      razorpayInstance
+    });
+    const keyId = await paymentGatewayService.getPlatformRazorpayKeyId();
+    return successResponse(res, {
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      key_id: keyId
+    }, 'Razorpay order created');
+  } catch (error) {
+    logger.error('Error creating Razorpay order:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+export const verifyPayment = async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, billingCycle, institutionId, discount } = req.body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return validationErrorResponse(res, ['Missing Razorpay payment details']);
+    }
+    const verification = await paymentGatewayService.verifyRazorpayPayment({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature
+    });
+    if (!verification.success) {
+      return errorResponse(res, 'Payment verification failed');
+    }
+    const result = await subscriptionService.createSubscription({
+      institutionId,
+      planId,
+      billingCycle: billingCycle || 'monthly',
+      paymentMethod: { type: 'razorpay', brand: 'Razorpay', lastFour: razorpay_payment_id.slice(-4) },
+      discount: discount || undefined
+    });
+    logger.info('Subscription created after Razorpay payment:', { institutionId, planId, razorpay_payment_id });
+    try {
+      const subscriber = await User.findById(institutionId).select('email name fullName').lean();
+      if (subscriber?.email) {
+        const plan = await subscriptionService.getPlanById(planId);
+        await emailService.sendPaymentConfirmationEmail(subscriber.email, {
+          name: subscriber.name || subscriber.fullName || 'Valued Customer',
+          planName: plan?.name || planId,
+          amount: result.subscription?.price || 0,
+          paymentId: razorpay_payment_id,
+          status: 'Pending Approval'
+        });
+      }
+    } catch (emailErr) {
+      logger.warn('Failed to send payment confirmation email:', emailErr.message);
+    }
+    return createdResponse(res, result, 'Payment verified and subscription created successfully');
+  } catch (error) {
+    logger.error('Error verifying payment:', error);
     return errorResponse(res, error.message);
   }
 };
@@ -165,30 +253,28 @@ export const upgradeSubscription = async (req, res) => {
   try {
     logger.info('Upgrading subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { targetPlanId } = req.body;
     const userId = req.user?.id;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!targetPlanId) {
       errors.push('Target plan ID is required');
-    } else {
-      const targetPlanIdError = validateObjectId(targetPlanId, 'Target plan ID');
-      if (targetPlanIdError) errors.push(targetPlanIdError);
     }
+    // Accept plan name strings ("basic", "medium", "premium") or ObjectIds — service layer handles lookup
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subscriptionService.upgradeSubscription(schoolId, targetPlanId, userId);
+    const result = await subscriptionService.upgradeSubscription(institutionId, targetPlanId, userId);
     
-    logger.info('Subscription upgraded successfully:', { schoolId, targetPlanId });
+    logger.info('Subscription upgraded successfully:', { institutionId, targetPlanId });
     return successResponse(res, result, 'Subscription upgraded successfully');
   } catch (error) {
     logger.error('Error upgrading subscription:', error);
@@ -201,15 +287,15 @@ export const cancelSubscription = async (req, res) => {
   try {
     logger.info('Cancelling subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { reason } = req.body;
     const userId = req.user?.id;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (reason && reason.length > MAX_REASON_LENGTH) {
       errors.push('Reason must not exceed ' + MAX_REASON_LENGTH + ' characters');
@@ -219,13 +305,13 @@ export const cancelSubscription = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subscription = await subscriptionService.cancelSubscription(schoolId, reason, userId);
+    const subscription = await subscriptionService.cancelSubscription(institutionId, reason, userId);
     
     if (!subscription) {
       return notFoundResponse(res, 'Subscription not found');
     }
     
-    logger.info('Subscription cancelled successfully:', { schoolId });
+    logger.info('Subscription cancelled successfully:', { institutionId });
     return successResponse(res, subscription, 'Subscription cancelled successfully');
   } catch (error) {
     logger.error('Error cancelling subscription:', error);
@@ -238,25 +324,25 @@ export const renewSubscription = async (req, res) => {
   try {
     logger.info('Renewing subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subscriptionService.renewSubscription(schoolId);
+    const result = await subscriptionService.renewSubscription(institutionId);
     
     if (!result) {
       return notFoundResponse(res, 'Subscription not found');
     }
     
-    logger.info('Subscription renewed successfully:', { schoolId });
+    logger.info('Subscription renewed successfully:', { institutionId });
     return successResponse(res, result, 'Subscription renewed successfully');
   } catch (error) {
     logger.error('Error renewing subscription:', error);
@@ -294,6 +380,53 @@ export const getExpiringSubscriptions = async (req, res) => {
   }
 };
 
+// Create a new plan (superadmin only)
+export const createPlan = async (req, res) => {
+  try {
+    logger.info('Creating new plan');
+    const plan = await subscriptionService.createPlan(req.body);
+    logger.info('Plan created successfully:', { planId: plan.planId });
+    return createdResponse(res, plan, 'Plan created successfully');
+  } catch (error) {
+    logger.error('Error creating plan:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Update an existing plan (superadmin only)
+export const updatePlan = async (req, res) => {
+  try {
+    logger.info('Updating plan');
+    const { planId } = req.params;
+    const plan = await subscriptionService.updatePlan(planId, req.body);
+    if (!plan) {
+      return notFoundResponse(res, 'Plan not found');
+    }
+    logger.info('Plan updated successfully:', { planId });
+    return successResponse(res, plan, 'Plan updated successfully');
+  } catch (error) {
+    logger.error('Error updating plan:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Delete a plan (superadmin only)
+export const deletePlan = async (req, res) => {
+  try {
+    logger.info('Deleting plan');
+    const { planId } = req.params;
+    const plan = await subscriptionService.deletePlan(planId);
+    if (!plan) {
+      return notFoundResponse(res, 'Plan not found');
+    }
+    logger.info('Plan deleted successfully:', { planId });
+    return successResponse(res, null, 'Plan deleted successfully');
+  } catch (error) {
+    logger.error('Error deleting plan:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
 // Get subscription stats
 export const getSubscriptionStats = async (_req, res) => {
   try {
@@ -314,24 +447,64 @@ export const checkSubscriptionLimits = async (req, res) => {
   try {
     logger.info('Checking subscription limits');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subscriptionService.checkSubscriptionLimits(schoolId);
+    const result = await subscriptionService.checkSubscriptionLimits(institutionId);
     
-    logger.info('Subscription limits checked successfully:', { schoolId });
+    logger.info('Subscription limits checked successfully:', { institutionId });
     return successResponse(res, result, 'Subscription limits retrieved successfully');
   } catch (error) {
     logger.error('Error checking subscription limits:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Get pending subscriptions (for superadmin approval)
+export const getPendingSubscriptions = async (req, res) => {
+  try {
+    logger.info('Fetching pending subscriptions');
+    
+    const { default: Subscription } = await import('../models/Subscription.js');
+    const subscriptions = await Subscription.find({ status: 'pending' })
+      .populate('institutionId', 'name instituteCode')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    logger.info('Pending subscriptions fetched:', { count: subscriptions.length });
+    return successResponse(res, subscriptions, 'Pending subscriptions retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching pending subscriptions:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Approve or reject a subscription
+// eslint-disable-next-line max-statements
+export const approveSubscription = async (req, res) => {
+  try {
+    const { subscriptionId } = req.params;
+    const { action, notes } = req.body;
+
+    if (!action || !['approve', 'reject'].includes(action)) {
+      return validationErrorResponse(res, ['Action must be "approve" or "reject"']);
+    }
+
+    const result = await subscriptionService.approveSubscription(subscriptionId, action, notes);
+
+    logger.info(`Subscription ${action}d: ${subscriptionId}`);
+    return successResponse(res, result, `Subscription ${action}d successfully`);
+  } catch (error) {
+    logger.error('Error approving subscription:', error);
     return errorResponse(res, error.message);
   }
 };
@@ -489,15 +662,15 @@ export const suspendSubscription = async (req, res) => {
   try {
     logger.info('Suspending subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { reason } = req.body;
     const userId = req.user?.id;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (reason && reason.length > MAX_REASON_LENGTH) {
       errors.push('Reason must not exceed ' + MAX_REASON_LENGTH + ' characters');
@@ -507,13 +680,13 @@ export const suspendSubscription = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subscription = await subscriptionService.suspendSubscription(schoolId, reason, userId);
+    const subscription = await subscriptionService.suspendSubscription(institutionId, reason, userId);
     
     if (!subscription) {
       return notFoundResponse(res, 'Subscription not found');
     }
     
-    logger.info('Subscription suspended successfully:', { schoolId });
+    logger.info('Subscription suspended successfully:', { institutionId });
     return successResponse(res, subscription, 'Subscription suspended successfully');
   } catch (error) {
     logger.error('Error suspending subscription:', error);
@@ -526,26 +699,26 @@ export const reactivateSubscription = async (req, res) => {
   try {
     logger.info('Reactivating subscription');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const userId = req.user?.id;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const subscription = await subscriptionService.reactivateSubscription(schoolId, userId);
+    const subscription = await subscriptionService.reactivateSubscription(institutionId, userId);
     
     if (!subscription) {
       return notFoundResponse(res, 'Subscription not found');
     }
     
-    logger.info('Subscription reactivated successfully:', { schoolId });
+    logger.info('Subscription reactivated successfully:', { institutionId });
     return successResponse(res, subscription, 'Subscription reactivated successfully');
   } catch (error) {
     logger.error('Error reactivating subscription:', error);
@@ -558,21 +731,21 @@ export const getSubscriptionHistory = async (req, res) => {
   try {
     logger.info('Fetching subscription history');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const history = await subscriptionService.getSubscriptionHistory(schoolId);
+    const history = await subscriptionService.getSubscriptionHistory(institutionId);
     
-    logger.info('Subscription history fetched successfully:', { schoolId, count: history.length });
+    logger.info('Subscription history fetched successfully:', { institutionId, count: history.length });
     return successResponse(res, history, 'Subscription history retrieved successfully');
   } catch (error) {
     logger.error('Error fetching subscription history:', error);
@@ -585,21 +758,21 @@ export const getSubscriptionUsage = async (req, res) => {
   try {
     logger.info('Fetching subscription usage');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const usage = await subscriptionService.getSubscriptionUsage(schoolId);
+    const usage = await subscriptionService.getSubscriptionUsage(institutionId);
     
-    logger.info('Subscription usage fetched successfully:', { schoolId });
+    logger.info('Subscription usage fetched successfully:', { institutionId });
     return successResponse(res, usage, 'Subscription usage retrieved successfully');
   } catch (error) {
     logger.error('Error fetching subscription usage:', error);
@@ -728,21 +901,21 @@ export const sendRenewalReminder = async (req, res) => {
   try {
     logger.info('Sending renewal reminder');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subscriptionService.sendRenewalReminder(schoolId);
+    const result = await subscriptionService.sendRenewalReminder(institutionId);
     
-    logger.info('Renewal reminder sent successfully:', { schoolId });
+    logger.info('Renewal reminder sent successfully:', { institutionId });
     return successResponse(res, result, 'Renewal reminder sent successfully');
   } catch (error) {
     logger.error('Error sending renewal reminder:', error);

@@ -1,5 +1,36 @@
 import React, { useState, useEffect } from 'react'
+import { toast } from 'react-toastify'
 import { apiService } from '../../services/api'
+import ConfirmModal from '../../components/common/ConfirmModal'
+
+// ─── Types ──────────────────────────────────────────────
+
+interface InstitutionSubscription {
+  _id: string
+  name: string
+  instituteCode: string
+  type: string
+  status: string
+  contact: {
+    email?: string
+    phone?: string
+  }
+  plan: string
+  planId: string
+  subscriptionExpiry: string | null
+  monthlyCost: number
+  billingCycle: 'monthly' | 'yearly'
+  subscriptionStatus: string
+  autoRenew: boolean
+  totalPaid: number
+  lastPaymentDate: string | null
+  lastPaymentAmount: number
+  paymentMethod: string
+  previousPaymentDate: string | null
+  previousPaymentAmount: number
+  transactionCount: number
+  createdAt: string
+}
 
 interface Module {
   id: string
@@ -37,9 +68,34 @@ interface Plan {
 }
 
 const MembershipsManagementPage: React.FC = () => {
+  const [activeMainTab, setActiveMainTab] = useState<'plans' | 'institutions'>('plans')
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Institution subscriptions state
+  const [institutionSubs, setInstitutionSubs] = useState<InstitutionSubscription[]>([])
+  const [instSubsLoading, setInstSubsLoading] = useState(false)
+  const [instFilterStatus, setInstFilterStatus] = useState<string>('all')
+  const [instFilterPlan, setInstFilterPlan] = useState<string>('all')
+  const [instSearchTerm, setInstSearchTerm] = useState('')
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalRecords, setTotalRecords] = useState(0)
+  const pageSize = 50
+
+  // Action modals
+  const [selectedInstitution, setSelectedInstitution] = useState<InstitutionSubscription | null>(null)
+  const [showChangePlanModal, setShowChangePlanModal] = useState(false)
+  const [changePlanTarget, setChangePlanTarget] = useState<string>('medium')
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [showRenewModal, setShowRenewModal] = useState(false)
+  const [showSuspendModal, setShowSuspendModal] = useState(false)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [showReactivateModal, setShowReactivateModal] = useState(false)
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -47,12 +103,12 @@ const MembershipsManagementPage: React.FC = () => {
         setLoading(true)
         setError(null)
         
-        const response = await apiService.get('/subscriptions/plans')
+        const response: any = await apiService.get('/subscriptions/plans')
         
         if (response.success) {
           // The backend returns: { success: true, data: [...plans], message: '...' }
           // So the plans array is directly at response.data
-          let plansData = [];
+          let plansData: any[] = [];
           
           if (Array.isArray(response.data)) {
             plansData = response.data;
@@ -75,10 +131,45 @@ const MembershipsManagementPage: React.FC = () => {
     fetchPlans()
   }, [])
 
+  const fetchInstitutionSubscriptions = async (page?: number) => {
+    try {
+      setInstSubsLoading(true)
+      const pageToFetch = page ?? currentPage
+      const params: Record<string, string> = { limit: String(pageSize), page: String(pageToFetch) }
+      if (instFilterStatus !== 'all') params.status = instFilterStatus
+      if (instFilterPlan !== 'all') params.plan = instFilterPlan
+      if (instSearchTerm) params.search = instSearchTerm
+
+      const response: any = await apiService.get('/super-admin/institution-subscriptions', params)
+
+      if (response.success && Array.isArray(response.data)) {
+        setInstitutionSubs(response.data as InstitutionSubscription[])
+      }
+      if (response.pagination) {
+        setTotalPages(response.pagination.pages || 1)
+        setTotalRecords(response.pagination.total || 0)
+        setCurrentPage(pageToFetch)
+      }
+    } catch (err) {
+      console.error('Error fetching institution subscriptions:', err)
+      toast.error('Failed to load institution subscriptions')
+    } finally {
+      setInstSubsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeMainTab === 'institutions') {
+      fetchInstitutionSubscriptions()
+    }
+  }, [activeMainTab])
+
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showComparison, setShowComparison] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [newPlan, setNewPlan] = useState<Partial<Plan>>({
     name: '',
     status: 'Active',
@@ -162,7 +253,7 @@ const MembershipsManagementPage: React.FC = () => {
         trialDays: 14,
         discountYearly: 17
       })
-      alert('Plan created successfully!')
+      toast.success('Plan created successfully!')
     } catch (err) {
       console.error('Error creating plan:', err)
       setError(err instanceof Error ? err.message : 'Failed to create plan')
@@ -190,7 +281,7 @@ const MembershipsManagementPage: React.FC = () => {
         }
         setShowEditModal(false)
         setSelectedPlan(null)
-        alert('Plan updated successfully!')
+        toast.success('Plan updated successfully!')
       } catch (err) {
         console.error('Error updating plan:', err)
         setError(err instanceof Error ? err.message : 'Failed to update plan')
@@ -221,25 +312,32 @@ const MembershipsManagementPage: React.FC = () => {
     }
   }
 
-  const handleDeletePlan = async (planId: string) => {
-    if (window.confirm('Are you sure you want to delete this plan?')) {
+  const handleDeletePlan = (planId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget(planId)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
       try {
-        try {
-          const response = await apiService.delete(`/subscriptions/plans/${planId}`)
-          
-          if (response.success) {
-            setPlans(plans.filter(p => p.id !== planId))
-          } else {
-            setPlans(plans.filter(p => p.id !== planId))
-          }
-        } catch {
-          setPlans(plans.filter(p => p.id !== planId))
+        const response = await apiService.delete(`/subscriptions/plans/${deleteTarget}`)
+        
+        if (response.success) {
+          setPlans(plans.filter(p => p.id !== deleteTarget))
+        } else {
+          setPlans(plans.filter(p => p.id !== deleteTarget))
         }
-        alert('Plan deleted successfully!')
-      } catch (err) {
-        console.error('Error deleting plan:', err)
-        setError(err instanceof Error ? err.message : 'Failed to delete plan')
+      } catch {
+        setPlans(plans.filter(p => p.id !== deleteTarget))
       }
+      toast.success('Plan deleted successfully!')
+    } catch (err) {
+      console.error('Error deleting plan:', err)
+      setError(err instanceof Error ? err.message : 'Failed to delete plan')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -266,40 +364,682 @@ const MembershipsManagementPage: React.FC = () => {
     )
   }
 
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '—'
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  }
+
+  const getSubStatusBadge = (status: string) => {
+    const config: Record<string, string> = {
+      active: 'bg-success',
+      pending: 'bg-warning',
+      suspended: 'bg-warning text-dark',
+      expired: 'bg-danger',
+      cancelled: 'bg-secondary',
+      trial: 'bg-info',
+      none: 'bg-light text-dark'
+    }
+    return config[status] || 'bg-secondary'
+  }
+
+  const handleChangePlan = async () => {
+    if (!selectedInstitution) return
+    try {
+      await apiService.post(`/subscriptions/schools/${selectedInstitution._id}/upgrade`, {
+        targetPlanId: changePlanTarget
+      })
+      toast.success(`Plan changed to ${changePlanTarget} successfully`)
+      setShowChangePlanModal(false)
+      setSelectedInstitution(null)
+      fetchInstitutionSubscriptions()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to change plan')
+    }
+  }
+
+  const handleCancelSubscription = async () => {
+    if (!selectedInstitution) return
+    try {
+      await apiService.post(`/subscriptions/schools/${selectedInstitution._id}/cancel`, {
+        reason: cancelReason || 'Cancelled by SuperAdmin'
+      })
+      toast.success('Subscription cancelled successfully')
+      setShowCancelModal(false)
+      setSelectedInstitution(null)
+      setCancelReason('')
+      fetchInstitutionSubscriptions()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to cancel subscription')
+    }
+  }
+
+  const handleRenewSubscription = async () => {
+    if (!selectedInstitution) return
+    try {
+      await apiService.post(`/subscriptions/schools/${selectedInstitution._id}/renew`)
+      toast.success('Subscription renewed successfully')
+      setShowRenewModal(false)
+      setSelectedInstitution(null)
+      fetchInstitutionSubscriptions()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to renew subscription')
+    }
+  }
+
+  const handleSuspendSubscription = async () => {
+    if (!selectedInstitution) return
+    try {
+      await apiService.post(`/subscriptions/schools/${selectedInstitution._id}/suspend`, {
+        reason: suspendReason || 'Suspended by SuperAdmin'
+      })
+      toast.success('Subscription suspended successfully')
+      setShowSuspendModal(false)
+      setSelectedInstitution(null)
+      setSuspendReason('')
+      fetchInstitutionSubscriptions()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to suspend subscription')
+    }
+  }
+
+  const handleReactivateSubscription = async () => {
+    if (!selectedInstitution) return
+    try {
+      await apiService.post(`/subscriptions/schools/${selectedInstitution._id}/reactivate`)
+      toast.success('Subscription reactivated successfully')
+      setShowReactivateModal(false)
+      setSelectedInstitution(null)
+      fetchInstitutionSubscriptions()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to reactivate subscription')
+    }
+  }
+
+  // Filter institution subscriptions
+  const filteredInstSubs = institutionSubs.filter(sub => {
+    const matchesSearch = !instSearchTerm || 
+      sub.name.toLowerCase().includes(instSearchTerm.toLowerCase()) ||
+      sub.instituteCode?.toLowerCase().includes(instSearchTerm.toLowerCase())
+    return matchesSearch
+  })
+
+  const renderInstitutionSubscriptions = () => (
+    <>
+      {/* Filters */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="row">
+            <div className="col-md-4">
+              <div className="mb-3">
+                <label className="form-label">Search Institution</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search by name or code..."
+                  value={instSearchTerm}
+                  onChange={(e) => setInstSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="mb-3">
+                <label className="form-label">Status</label>
+                <select className="form-select" value={instFilterStatus} onChange={(e) => setInstFilterStatus(e.target.value)}>
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="mb-3">
+                <label className="form-label">Plan</label>
+                <select className="form-select" value={instFilterPlan} onChange={(e) => setInstFilterPlan(e.target.value)}>
+                  <option value="all">All Plans</option>
+                  <option value="basic">Basic</option>
+                  <option value="medium">Medium</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </div>
+            </div>
+            <div className="col-md-2 d-flex align-items-end">
+              <div className="mb-3 w-100">
+                <button className="btn btn-primary w-100" onClick={() => fetchInstitutionSubscriptions()}>
+                  <i className="ti ti-refresh me-1"></i>Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="row mb-4">
+        <div className="col-lg-3 col-md-6">
+          <div className="card bg-primary">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between">
+                <div>
+                  <h4 className="text-white mb-1">{filteredInstSubs.length}</h4>
+                  <p className="text-white mb-0">Total Institutions</p>
+                </div>
+                <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
+                  <i className="ti ti-building text-white fs-4"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <div className="card bg-success">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between">
+                <div>
+                  <h4 className="text-white mb-1">{filteredInstSubs.filter(s => s.subscriptionStatus === 'active').length}</h4>
+                  <p className="text-white mb-0">Active Subscriptions</p>
+                </div>
+                <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
+                  <i className="ti ti-checks text-white fs-4"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <div className="card bg-info">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between">
+                <div>
+                  <h4 className="text-white mb-1">{formatCurrency(filteredInstSubs.reduce((sum, s) => sum + s.totalPaid, 0))}</h4>
+                  <p className="text-white mb-0">Total Revenue</p>
+                </div>
+                <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
+                  <i className="ti ti-currency-rupee text-white fs-4"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-lg-3 col-md-6">
+          <div className="card bg-warning">
+            <div className="card-body">
+              <div className="d-flex align-items-center justify-content-between">
+                <div>
+                  <h4 className="text-white mb-1">{filteredInstSubs.reduce((sum, s) => sum + s.monthlyCost, 0)}</h4>
+                  <p className="text-white mb-0">Monthly Recurring</p>
+                </div>
+                <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
+                  <i className="ti ti-trending-up text-white fs-4"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Institution Subscriptions Table */}
+      <div className="card">
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h4 className="card-title">Institution Subscriptions ({filteredInstSubs.length})</h4>
+          <div className="text-muted">
+            Monthly: {formatCurrency(filteredInstSubs.reduce((sum, s) => sum + s.monthlyCost, 0))} |
+            Total Paid: {formatCurrency(filteredInstSubs.reduce((sum, s) => sum + s.totalPaid, 0))}
+          </div>
+        </div>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover">
+              <thead>
+                <tr>
+                  <th>Institution</th>
+                  <th>Plan</th>
+                  <th>Monthly</th>
+                  <th>Last Payment</th>
+                  <th>Total Paid</th>
+                  <th>Subscription</th>
+                  <th>Expiry</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instSubsLoading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-5">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredInstSubs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-5">
+                      <i className="ti ti-building text-muted fs-1 mb-3 d-block"></i>
+                      <h5 className="text-muted">No Institutions Found</h5>
+                      <p className="text-muted mb-0">No institutions match your current filters.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredInstSubs.map((inst) => (
+                    <tr key={inst._id}>
+                      <td>
+                        <div className="d-flex align-items-center">
+                          <div className="avatar avatar-sm me-2">
+                            <i className="ti ti-building text-primary"></i>
+                          </div>
+                          <div>
+                            <div className="fw-medium">{inst.name}</div>
+                            <small className="text-muted">
+                              {inst.instituteCode} · {inst.type}
+                            </small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${inst.plan === 'Premium' ? 'bg-success' : inst.plan === 'Medium' ? 'bg-warning text-dark' : 'bg-info'}`}>
+                          {inst.plan}
+                        </span>
+                      </td>
+                      <td className="fw-semibold">{formatCurrency(inst.monthlyCost)}</td>
+                      <td>
+                        <div>
+                          <div className="fw-medium">{formatCurrency(inst.lastPaymentAmount)}</div>
+                          <small className="text-muted">{formatDate(inst.lastPaymentDate)}</small>
+                        </div>
+                      </td>
+                      <td className="fw-semibold text-success">{formatCurrency(inst.totalPaid)}</td>
+                      <td>
+                        <span className={`badge ${getSubStatusBadge(inst.subscriptionStatus)}`}>
+                          {inst.subscriptionStatus || 'None'}
+                        </span>
+                      </td>
+                      <td>
+                        {inst.subscriptionExpiry ? (
+                          <div>
+                            <div className="small">{formatDate(inst.subscriptionExpiry)}</div>
+                            <small className={`${new Date(inst.subscriptionExpiry) < new Date() ? 'text-danger' : 'text-muted'}`}>
+                              {Math.ceil((new Date(inst.subscriptionExpiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) > 0
+                                ? `${Math.ceil((new Date(inst.subscriptionExpiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
+                                : 'Expired'
+                              }
+                            </small>
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="dropdown">
+                          <button
+                            className="btn btn-sm btn-outline-secondary dropdown-toggle"
+                            type="button"
+                            data-bs-toggle="dropdown"
+                          >
+                            <i className="ti ti-dots-vertical"></i>
+                          </button>
+                          <ul className="dropdown-menu dropdown-menu-end">
+                            <li>
+                              <button
+                                className="dropdown-item"
+                                onClick={() => window.location.href = `/super-admin/institutions/${inst._id}`}
+                              >
+                                <i className="ti ti-eye me-2"></i>View Details
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                className="dropdown-item"
+                                onClick={() => window.location.href = `/super-admin/transactions`}
+                              >
+                                <i className="ti ti-report-money me-2"></i>Transactions
+                              </button>
+                            </li>
+                            <li><hr className="dropdown-divider" /></li>
+                            <li>
+                              <button
+                                className="dropdown-item"
+                                onClick={() => {
+                                  setSelectedInstitution(inst)
+                                  setChangePlanTarget(inst.planId === 'basic' ? 'medium' : inst.planId === 'medium' ? 'premium' : 'premium')
+                                  setShowChangePlanModal(true)
+                                }}
+                              >
+                                <i className="ti ti-arrow-up-circle me-2"></i>Change Plan
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                className="dropdown-item"
+                                onClick={() => {
+                                  setSelectedInstitution(inst)
+                                  setShowRenewModal(true)
+                                }}
+                                disabled={inst.subscriptionStatus === 'active' && new Date(inst.subscriptionExpiry || '') > new Date()}
+                              >
+                                <i className="ti ti-refresh me-2"></i>Renew
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                className="dropdown-item text-success"
+                                onClick={() => {
+                                  setSelectedInstitution(inst)
+                                  setShowReactivateModal(true)
+                                }}
+                                disabled={inst.subscriptionStatus !== 'suspended' && inst.subscriptionStatus !== 'cancelled'}
+                              >
+                                <i className="ti ti-player-play me-2"></i>Reactivate
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                className="dropdown-item text-warning"
+                                onClick={() => {
+                                  setSelectedInstitution(inst)
+                                  setShowSuspendModal(true)
+                                }}
+                                disabled={inst.subscriptionStatus === 'suspended' || inst.subscriptionStatus === 'expired' || inst.subscriptionStatus === 'cancelled'}
+                              >
+                                <i className="ti ti-player-pause me-2"></i>Suspend
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                className="dropdown-item text-danger"
+                                onClick={() => {
+                                  setSelectedInstitution(inst)
+                                  setShowCancelModal(true)
+                                }}
+                                disabled={inst.subscriptionStatus === 'cancelled' || inst.subscriptionStatus === 'expired'}
+                              >
+                                <i className="ti ti-x-circle me-2"></i>Cancel
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Change Plan Modal */}
+      {showChangePlanModal && selectedInstitution && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Change Plan - {selectedInstitution.name}</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowChangePlanModal(false); setSelectedInstitution(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <p>Current Plan: <strong>{selectedInstitution.plan}</strong></p>
+                <div className="mb-3">
+                  <label className="form-label">New Plan</label>
+                  <select className="form-select" value={changePlanTarget} onChange={(e) => setChangePlanTarget(e.target.value)}>
+                    <option value="basic">Basic - ₹29/mo</option>
+                    <option value="medium">Medium - ₹79/mo</option>
+                    <option value="premium">Premium - ₹199/mo</option>
+                  </select>
+                </div>
+                <div className="alert alert-info">
+                  <i className="ti ti-info-circle me-2"></i>
+                  The institution will be upgraded to the new plan. Prorated charges will apply.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowChangePlanModal(false); setSelectedInstitution(null); }}>Cancel</button>
+                <button type="button" className="btn btn-primary" onClick={handleChangePlan}>Change Plan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Subscription Modal */}
+      {showCancelModal && selectedInstitution && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Cancel Subscription - {selectedInstitution.name}</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowCancelModal(false); setSelectedInstitution(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-danger">
+                  <i className="ti ti-alert-triangle me-2"></i>
+                  This will cancel the subscription for <strong>{selectedInstitution.name}</strong>. They will lose access to premium features.
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Reason for Cancellation</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="Enter reason..."
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowCancelModal(false); setSelectedInstitution(null); }}>Keep Active</button>
+                <button type="button" className="btn btn-danger" onClick={handleCancelSubscription}>Confirm Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Renew Subscription Modal */}
+      {showRenewModal && selectedInstitution && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Renew Subscription - {selectedInstitution.name}</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowRenewModal(false); setSelectedInstitution(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <p>Institution: <strong>{selectedInstitution.name}</strong></p>
+                <p>Plan: <strong>{selectedInstitution.plan}</strong> - {formatCurrency(selectedInstitution.monthlyCost)}/mo</p>
+                {selectedInstitution.subscriptionExpiry && (
+                  <p>Expires: <strong>{formatDate(selectedInstitution.subscriptionExpiry)}</strong></p>
+                )}
+                <div className="alert alert-success">
+                  <i className="ti ti-check-circle me-2"></i>
+                  The subscription will be renewed with the same plan and billing cycle.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowRenewModal(false); setSelectedInstitution(null); }}>Cancel</button>
+                <button type="button" className="btn btn-success" onClick={handleRenewSubscription}>
+                  <i className="ti ti-refresh me-1"></i>Renew Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend Subscription Modal */}
+      {showSuspendModal && selectedInstitution && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Suspend Subscription - {selectedInstitution.name}</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowSuspendModal(false); setSelectedInstitution(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-warning">
+                  <i className="ti ti-alert-triangle me-2"></i>
+                  This will temporarily suspend the subscription for <strong>{selectedInstitution.name}</strong>.
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Reason for Suspension</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    value={suspendReason}
+                    onChange={(e) => setSuspendReason(e.target.value)}
+                    placeholder="Enter reason..."
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowSuspendModal(false); setSelectedInstitution(null); }}>Cancel</button>
+                <button type="button" className="btn btn-warning" onClick={handleSuspendSubscription}>Suspend</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate Subscription Modal */}
+      {showReactivateModal && selectedInstitution && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Reactivate Subscription - {selectedInstitution.name}</h5>
+                <button type="button" className="btn-close" onClick={() => { setShowReactivateModal(false); setSelectedInstitution(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <div className="alert alert-success">
+                  <i className="ti ti-check-circle me-2"></i>
+                  This will reactivate the subscription for <strong>{selectedInstitution.name}</strong>.
+                </div>
+                <p>Plan: <strong>{selectedInstitution.plan}</strong> - {formatCurrency(selectedInstitution.monthlyCost)}/mo</p>
+                <p>Status: <span className={`badge ${getSubStatusBadge(selectedInstitution.subscriptionStatus)}`}>{selectedInstitution.subscriptionStatus}</span></p>
+                <div className="alert alert-info">
+                  <i className="ti ti-info-circle me-2"></i>
+                  The institution will regain access to all plan features upon reactivation.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => { setShowReactivateModal(false); setSelectedInstitution(null); }}>Cancel</button>
+                <button type="button" className="btn btn-success" onClick={handleReactivateSubscription}>
+                  <i className="ti ti-player-play me-1"></i>Reactivate
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="d-flex justify-content-between align-items-center mt-3">
+          <div className="text-muted small">
+            Showing {filteredInstSubs.length} of {totalRecords} institutions
+          </div>
+          <nav>
+            <ul className="pagination pagination-sm mb-0">
+              <li className={`page-item ${currentPage <= 1 ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => fetchInstitutionSubscriptions(currentPage - 1)} disabled={currentPage <= 1}>
+                  <i className="ti ti-chevron-left"></i>
+                </button>
+              </li>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const startPage = Math.max(1, currentPage - 2)
+                const pageNum = startPage + i
+                if (pageNum > totalPages) return null
+                return (
+                  <li key={pageNum} className={`page-item ${pageNum === currentPage ? 'active' : ''}`}>
+                    <button className="page-link" onClick={() => fetchInstitutionSubscriptions(pageNum)}>{pageNum}</button>
+                  </li>
+                )
+              })}
+              <li className={`page-item ${currentPage >= totalPages ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => fetchInstitutionSubscriptions(currentPage + 1)} disabled={currentPage >= totalPages}>
+                  <i className="ti ti-chevron-right"></i>
+                </button>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      )}
+    </>
+  )
+
   return (
     <>
       {/* Page Header */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
         <div className="my-auto mb-2">
-          <h3 className="page-title mb-1">Subscription Plans</h3>
+          <h3 className="page-title mb-1">Subscriptions Management</h3>
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
                 <a href="/super-admin/dashboard">Dashboard</a>
               </li>
-              <li className="breadcrumb-item active" aria-current="page">Subscription Plans</li>
+              <li className="breadcrumb-item active" aria-current="page">
+                {activeMainTab === 'plans' ? 'Subscription Plans' : 'Institution Subscriptions'}
+              </li>
             </ol>
           </nav>
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-          <div className="pe-1 mb-2">
-            <button 
-              className="btn btn-primary"
-              onClick={() => setShowCreateModal(true)}
-            >
-              <i className="ti ti-plus me-2"></i>Create Plan
-            </button>
-          </div>
-          <div className="pe-1 mb-2">
-            <button 
-              className="btn btn-info"
-              onClick={() => setShowComparison(true)}
-            >
-              <i className="ti ti-scales me-2"></i>Compare Plans
-            </button>
-          </div>
+          {activeMainTab === 'plans' && (
+            <>
+              <div className="pe-1 mb-2">
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  <i className="ti ti-plus me-2"></i>Create Plan
+                </button>
+              </div>
+              <div className="pe-1 mb-2">
+                <button 
+                  className="btn btn-info"
+                  onClick={() => setShowComparison(true)}
+                >
+                  <i className="ti ti-scales me-2"></i>Compare Plans
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Tab Navigation */}
+      <div className="card mb-4">
+        <div className="card-body p-0">
+          <ul className="nav nav-tabs nav-tabs-bottom" role="tablist">
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeMainTab === 'plans' ? 'active' : ''}`}
+                onClick={() => setActiveMainTab('plans')}
+              >
+                <i className="ti ti-crown me-2"></i>Subscription Plans
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeMainTab === 'institutions' ? 'active' : ''}`}
+                onClick={() => setActiveMainTab('institutions')}
+              >
+                <i className="ti ti-building me-2"></i>Institution Subscriptions
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeMainTab === 'institutions' ? renderInstitutionSubscriptions() : (
+        <>
+          {/* Original Plans Content */}
 
       {/* Summary Cards */}
       <div className="row mb-4">
@@ -930,8 +1670,12 @@ const MembershipsManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this plan?" />
     </>
   )
+}
+</>
+)
 }
 
 export default MembershipsManagementPage

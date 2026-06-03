@@ -89,7 +89,7 @@ const authService = {
           plan: user.plan,
           avatar: user.avatar,
           institutionId: user.institution,
-          schoolId: user.schoolId
+          institutionId: user.institutionId
         },
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
@@ -111,47 +111,31 @@ const authService = {
       }
 
       // Find user in users collection first
-      let user = await User.findOne({ email }).select('+password');
+      let user = await User.findOne({ email }).select('+password +refreshToken');
       let loginSource = 'user';
 
-      // If not found in users, check agents collection
-      if (!user) {
-        const Agent = (await import('../models/Agent.js')).default;
-        const agent = await Agent.findOne({ email }).select('+password');
-        if (agent) {
-          // Verify agent password
-          const isAgentPasswordValid = await agent.comparePassword(password);
-          if (!isAgentPasswordValid) {
-            throw new Error('Invalid email or password');
-          }
-          // Create a virtual user object from agent data for token generation
-          user = {
-            _id: agent._id,
-            email: agent.email,
-            name: agent.name,
-            role: 'agent',
-            status: agent.status === 'Active' ? 'active' : 'inactive',
-            isActive: agent.status === 'Active',
-            institutionId: null,
-            plan: null,
-            avatar: '',
-            lastLogin: new Date(),
-            save: async function() {
-              agent.lastLogin = new Date();
-              agent.loginCount = (agent.loginCount || 0) + 1;
-              await agent.save();
-            }
-          };
-          loginSource = 'agent';
-        }
-      }
+       // If not found in users, check agents collection
+       if (!user) {
+         const Agent = (await import('../models/Agent.js')).default;
+         const agent = await Agent.findOne({ email }).select('+password');
+         if (agent) {
+           const isAgentPasswordValid = await agent.comparePassword(password);
+           if (!isAgentPasswordValid) {
+             throw new Error('Invalid email or password');
+           }
+           if (agent.status !== 'Active') {
+             throw new Error('Account is deactivated. Please contact administrator.');
+           }
+           user = agent;
+           loginSource = 'agent';
+         }
+       }
 
       if (!user) {
         throw new Error('Invalid email or password');
       }
 
-      // Check if account is active
-      if (user.status !== 'active' && user.isActive !== true) {
+      if (loginSource === 'user' && user.status !== 'active' && user.isActive !== true) {
         throw new Error('Account is deactivated. Please contact administrator.');
       }
 
@@ -168,27 +152,37 @@ const authService = {
         sub: user._id.toString(),
         id: user._id.toString(),
         email: user.email,
-        role: user.role,
+        role: loginSource === 'agent' ? 'agent' : user.role,
         institution: user.institution || user.institutionId?.toString() || null
       };
 
       const tokens = tokenService.generateTokens(tokenPayload);
 
-      // Store refresh token hash
-      user.refreshToken = hashToken(tokens.refreshToken);
-      user.lastLogin = new Date();
-      await user.save();
+      const hashedRefresh = hashToken(tokens.refreshToken);
+      if (loginSource === 'agent') {
+        const Agent = (await import('../models/Agent.js')).default;
+        const { buildAgentIdFilter } = await import('../utils/agentAuthHelpers.js');
+        const idFilter = buildAgentIdFilter(user._id) || { email: user.email.toLowerCase() };
+        await Agent.updateOne(idFilter, {
+          $set: { refreshToken: hashedRefresh, lastLogin: new Date(), role: 'agent' },
+          $inc: { loginCount: 1 }
+        });
+      } else {
+        user.refreshToken = hashedRefresh;
+        user.lastLogin = new Date();
+        await user.save();
+      }
 
       return {
         user: {
           id: user._id,
           name: user.name,
           email: user.email,
-          role: user.role,
+          role: loginSource === 'agent' ? 'agent' : user.role,
           plan: user.plan,
           avatar: user.avatar,
           institutionId: user.institutionId,
-          schoolId: user.schoolId,
+          institutionId: user.institutionId,
           lastLogin: user.lastLogin
         },
         accessToken: tokens.accessToken,
@@ -200,73 +194,101 @@ const authService = {
     }
   },
 
-  /**
-   * Refresh access token
-   */
-  refreshToken: async (refreshToken) => {
-    try {
-      if (!refreshToken) {
-        throw new Error('Refresh token is required');
+   /**
+    * Refresh access token
+    */
+   refreshToken: async (refreshToken) => {
+     try {
+       if (!refreshToken) {
+         throw new Error('Refresh token is required');
+       }
+
+       // Additional validation for token format
+       if (typeof refreshToken !== 'string' || refreshToken.trim() === '') {
+         throw new Error('Invalid refresh token format');
+       }
+
+       // Verify refresh token
+       const decoded = tokenService.verifyRefreshToken(refreshToken);
+
+       const hashedRefresh = hashToken(refreshToken);
+
+       let user = await User.findOne({ refreshToken: hashedRefresh });
+       let loginSource = 'user';
+
+       if (!user) {
+         const Agent = (await import('../models/Agent.js')).default;
+         user = await Agent.findOne({ refreshToken: hashedRefresh }).select('+refreshToken');
+         if (user) {
+           loginSource = 'agent';
+         }
+       }
+
+       if (!user) {
+         throw new Error('Invalid refresh token');
+       }
+
+       if (loginSource === 'agent' && user.status !== 'Active') {
+         throw new Error('Account is deactivated');
+       }
+       if (loginSource === 'user' && user.status !== 'active' && user.isActive !== true) {
+         throw new Error('Account is deactivated');
+       }
+
+       // Generate new tokens
+       const tokenPayload = {
+         sub: user._id.toString(),
+         id: user._id.toString(),
+         email: user.email,
+         role: loginSource === 'user' ? user.role : 'agent',
+         institution: loginSource === 'user' ? user.institutionId?.toString() : user.institutionId?.toString()
+       };
+
+       const tokens = tokenService.generateTokens(tokenPayload);
+
+       const newHashedRefresh = hashToken(tokens.refreshToken);
+       if (loginSource === 'user') {
+         user.refreshToken = newHashedRefresh;
+         await user.save();
+       } else {
+         const Agent = (await import('../models/Agent.js')).default;
+         const { buildAgentIdFilter } = await import('../utils/agentAuthHelpers.js');
+         const idFilter = buildAgentIdFilter(user._id) || { email: user.email?.toLowerCase() };
+         await Agent.updateOne(idFilter, {
+           $set: { refreshToken: newHashedRefresh, lastLogin: new Date() },
+           $inc: { loginCount: 1 }
+         });
+       }
+
+       return {
+         accessToken: tokens.accessToken,
+         refreshToken: tokens.refreshToken,
+         expiresIn: tokens.expiresIn
+       };
+      } catch (error) {
+        console.error('=== REFRESH TOKEN ERROR ===', error.name, error.message, error.stack);
+        throw new Error(error.message || 'Token refresh failed');
       }
-
-      // Additional validation for token format
-      if (typeof refreshToken !== 'string' || refreshToken.trim() === '') {
-        throw new Error('Invalid refresh token format');
-      }
-
-      // Verify refresh token
-      const decoded = tokenService.verifyRefreshToken(refreshToken);
-
-      // Find user with matching refresh token hash
-      const user = await User.findOne({
-        _id: decoded.id || decoded.sub,
-        refreshToken: hashToken(refreshToken)
-      });
-
-      if (!user) {
-        throw new Error('Invalid refresh token');
-      }
-
-      // Check if account is still active
-      if (user.status !== 'active' && user.isActive !== true) {
-        throw new Error('Account is deactivated');
-      }
-
-      // Generate new tokens
-      const tokenPayload = {
-        sub: user._id.toString(),
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role,
-        institution: user.institutionId?.toString()
-      };
-
-      const tokens = tokenService.generateTokens(tokenPayload);
-
-      // Update refresh token hash
-      user.refreshToken = hashToken(tokens.refreshToken);
-      await user.save();
-
-      return {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn
-      };
-    } catch (error) {
-      throw new Error(error.message || 'Token refresh failed');
-    }
-  },
+   },
 
   /**
    * User logout
    */
-  logout: async (userId) => {
+  logout: async (userId, role) => {
     try {
-      // Clear refresh token from database
-      await User.findByIdAndUpdate(userId, {
-        refreshToken: null,
-        lastLogout: new Date()
-      });
+      const normalizedRole = (role || '').toLowerCase();
+      if (normalizedRole === 'agent') {
+        const Agent = (await import('../models/Agent.js')).default;
+        await Agent.findByIdAndUpdate(String(userId), {
+          refreshToken: null,
+          lastLogout: new Date()
+        });
+      } else {
+        await User.findByIdAndUpdate(userId, {
+          refreshToken: null,
+          lastLogout: new Date()
+        });
+      }
 
       return { success: true, message: 'Logged out successfully' };
     } catch (error) {
@@ -324,29 +346,75 @@ const authService = {
       // If not found, try UserCredential collection
       if (!user) {
         const UserCredential = (await import('../models/UserCredential.js')).default;
-        user = await UserCredential.findById(userId).lean();
+        const ucUser = await UserCredential.findById(userId).lean();
         
-        if (user) {
+          if (ucUser) {
           // Convert UserCredential format to match User format
           user = {
-            _id: user._id,
-            name: user.fullName,
-            email: user.email,
-            role: user.role,
+            _id: ucUser._id,
+            name: ucUser.fullName,
+            email: ucUser.email,
+            role: ucUser.role,
             plan: 'basic',
-            permissions: user.permissions || [],
+            permissions: ucUser.permissions || [],
             modules: [],
-            institutionId: user.institution,
-            status: user.status,
-            lastLogin: user.lastLoginAt,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt
+            avatar: ucUser.avatar || ucUser.photo || '',
+            institutionId: ucUser.institutionId || ucUser.institution,
+            status: ucUser.status,
+            lastLogin: ucUser.lastLoginAt,
+            createdAt: ucUser.createdAt,
+            updatedAt: ucUser.updatedAt
           };
         }
       }
 
       if (!user) {
-        throw new Error('User not found');
+        return {
+          success: true,
+          data: {
+            user: {
+              id: userId,
+              name: 'Unknown User',
+              email: '',
+              role: 'guest',
+              plan: 'basic',
+              permissions: [],
+              modules: [],
+              status: 'inactive',
+              institutionId: null,
+              institutionData: null
+            }
+          }
+        };
+      }
+
+      // Fetch institution details if user has an institutionId
+      let institutionData = null;
+      const institutionId = user.institutionId || user.institution;
+      if (institutionId) {
+        try {
+          const Institution = (await import('../models/Institution.js')).default;
+          const institutionDoc = await Institution.findById(institutionId.toString())
+            .select('name instituteCode type status contact address email phone')
+            .lean();
+          if (institutionDoc) {
+            institutionData = {
+              id: institutionDoc._id,
+              name: institutionDoc.name,
+              instituteCode: institutionDoc.instituteCode || institutionDoc.code,
+              type: institutionDoc.type,
+              status: institutionDoc.status,
+              contact: institutionDoc.contact || {
+                email: institutionDoc.email,
+                phone: institutionDoc.phone,
+                address: institutionDoc.address
+              }
+            };
+          }
+        } catch (instErr) {
+          // Non-blocking: institution fetch failure should not break profile
+          console.warn('[authService.getProfile] Could not fetch institution details:', instErr.message);
+        }
       }
 
       return {
@@ -362,11 +430,12 @@ const authService = {
             modules: user.modules || [],
             avatar: user.avatar,
             institutionId: user.institutionId,
-            schoolId: user.schoolId,
+            institutionId: user.institutionId,
             status: user.status || (user.isActive ? 'active' : 'inactive'),
             lastLogin: user.lastLogin,
             createdAt: user.createdAt,
-            updatedAt: user.updatedAt
+            updatedAt: user.updatedAt,
+            institutionData
           }
         }
       };
@@ -381,7 +450,11 @@ const authService = {
   updateProfile: async (userId, updateData) => {
     try {
       const allowedFields = [
-        'name', 'avatar', 'preferences', 'address', 'dateOfBirth', 'gender'
+        'name', 'avatar', 'preferences', 'address', 'dateOfBirth', 'gender',
+        'phone', 'email', 'bio', 'bloodGroup', 'department', 'designation',
+        'salary', 'joiningDate', 'skills', 'qualification', 'experience',
+        'linkedinProfile', 'aadharCard', 'panCard', 'bankAccount', 'bankIfsc',
+        'photo', 'employeeId'
       ];
 
       const filteredData = {};
@@ -391,21 +464,115 @@ const authService = {
         }
       });
 
-      const user = await User.findByIdAndUpdate(
+      // Try User collection first (for superadmins, direct users)
+      let user = await User.findByIdAndUpdate(
         userId,
         { ...filteredData, updatedAt: new Date() },
         { new: true, runValidators: true }
       ).select('-password -refreshToken');
 
-      if (!user) {
-        throw new Error('User not found');
+      if (user) {
+        return {
+          success: true,
+          message: 'Profile updated successfully',
+          data: { user }
+        };
       }
 
-      return {
-        success: true,
-        message: 'Profile updated successfully',
-        data: { user }
-      };
+      // If not found in User collection, try UserCredential (staff members, students, etc.)
+      const UserCredential = (await import('../models/UserCredential.js')).default;
+      const ucUser = await UserCredential.findById(userId);
+
+      if (ucUser) {
+        // Update compatible fields in UserCredential
+        const ucUpdate = {};
+        if (filteredData.name) ucUpdate.fullName = filteredData.name;
+        if (filteredData.email) ucUpdate.email = filteredData.email;
+        if (filteredData.phone) ucUpdate.phone = filteredData.phone;
+        if (filteredData.avatar || filteredData.photo) ucUpdate.avatar = filteredData.avatar || filteredData.photo;
+
+        if (Object.keys(ucUpdate).length > 0) {
+          await UserCredential.findByIdAndUpdate(userId, { ...ucUpdate, updatedAt: new Date() });
+        }
+
+        // Also try to find/create a User document for extended profile fields
+        // (bio, bloodGroup, department, etc. are not on UserCredential)
+        const userOnlyKeys = Object.keys(filteredData).filter(k => !['name', 'email', 'phone', 'avatar', 'photo'].includes(k));
+        if (userOnlyKeys.length > 0 || filteredData.name || filteredData.avatar || filteredData.photo) {
+          const userOnlyData = {};
+          userOnlyKeys.forEach(k => { userOnlyData[k] = filteredData[k]; });
+          if (filteredData.name) userOnlyData.name = filteredData.name;
+          if (filteredData.avatar) userOnlyData.avatar = filteredData.avatar;
+          if (filteredData.photo) userOnlyData.avatar = filteredData.photo;
+          if (filteredData.phone) userOnlyData.phone = filteredData.phone;
+
+          // Try to find existing User with matching email or userId
+          let linkedUser = await User.findOne({
+            $or: [
+              { _id: userId },
+              { email: ucUser.email.toLowerCase() }
+            ]
+          });
+
+          if (linkedUser) {
+            // Update existing User document with extended fields
+            await User.findByIdAndUpdate(linkedUser._id, {
+              ...userOnlyData,
+              role: ucUser.role,
+              institutionId: ucUser.institution || ucUser.institutionId,
+              updatedAt: new Date()
+            });
+          } else {
+            // Create a User document linked to this UserCredential
+            await User.create({
+              _id: userId,
+              name: filteredData.name || ucUser.fullName,
+              email: filteredData.email || ucUser.email,
+              role: ucUser.role,
+              institutionId: ucUser.institution || ucUser.institutionId,
+              ...userOnlyData,
+              status: ucUser.status || 'active',
+              createdAt: new Date(),
+              updatedAt: new Date()
+            });
+          }
+        }
+
+        return {
+          success: true,
+          message: 'Profile updated successfully',
+          data: { user: { ...ucUser.toObject(), ...filteredData } }
+        };
+      }
+
+      // If not found in User or UserCredential, try Student collection
+      const Student = (await import('../models/Student.js')).default;
+      const studentUser = await Student.findById(userId);
+
+      if (studentUser) {
+        // Update compatible fields in Student
+        const studentUpdate = {};
+        if (filteredData.name) studentUpdate.name = filteredData.name;
+        if (filteredData.email) studentUpdate.email = filteredData.email;
+        if (filteredData.phone) studentUpdate.phone = filteredData.phone;
+        if (filteredData.avatar || filteredData.photo) studentUpdate.avatar = filteredData.avatar || filteredData.photo;
+        if (filteredData.address) studentUpdate.address = filteredData.address;
+        if (filteredData.dateOfBirth) studentUpdate.dateOfBirth = filteredData.dateOfBirth;
+        if (filteredData.gender) studentUpdate.gender = filteredData.gender;
+        if (filteredData.bloodGroup) studentUpdate.bloodGroup = filteredData.bloodGroup;
+
+        if (Object.keys(studentUpdate).length > 0) {
+          await Student.findByIdAndUpdate(userId, { ...studentUpdate, updatedAt: new Date() });
+        }
+
+        return {
+          success: true,
+          message: 'Profile updated successfully',
+          data: { user: { ...studentUser.toObject(), ...filteredData } }
+        };
+      }
+
+      throw new Error('User not found');
     } catch (error) {
       throw new Error(error.message || 'Profile update failed');
     }
@@ -434,7 +601,7 @@ const authService = {
           email: user.email,
           name: user.name,
           role: user.role,
-          tenant_id: user.institutionId || user.schoolId,
+          tenant_id: user.institutionId || user.institutionId,
           profile: {
             address: user.address,
             avatar: user.avatar

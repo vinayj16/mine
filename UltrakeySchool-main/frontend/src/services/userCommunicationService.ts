@@ -39,29 +39,14 @@ const userCommunicationService = {
     const userInstitutionId = currentUser?.institutionId || '';
     let endpoints: string[] = [];
 
-    console.log(`👤 Current user: ${currentUser?.name} (${userRole}) - ID: ${currentUser?.id}`);
-    console.log(`🏫 Institution ID: ${userInstitutionId}`);
+    console.log(`[UserComm] Current user: ${currentUser?.name} (${userRole}) - ID: ${currentUser?.id}`);
+    console.log(`[UserComm] Institution ID: ${userInstitutionId}`);
 
     // Determine endpoints based on user role - only use endpoints that are accessible
     if (userRole === 'superadmin') {
-      // Super admin can see all platform users
-      endpoints = [
-        '/super-admin/users',             // Use super-admin endpoint for all users
-        '/profile/users',                // Fallback to profile/users
-        '/users',                        // Last fallback
-      ];
-    } else if (userRole === 'agent') {
-      // Agents can access profile/users to see all users including Super Admin
-      endpoints = [
-        '/profile/users',                // Primary endpoint for agents
-        '/users',                        // Fallback endpoint
-      ];
+      endpoints = ['/super-admin/users'];
     } else {
-      // Regular users can only see institution members
-      endpoints = [
-        '/profile/users',                 // Primary endpoint for regular users
-        '/users',                        // Fallback endpoint
-      ];
+      endpoints = ['/users'];
     }
 
     const allUsers: CommunicationUser[] = [];

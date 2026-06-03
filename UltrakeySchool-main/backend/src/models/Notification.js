@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const notificationSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: false, // Make optional for global notifications
     index: true
   },
@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['info', 'warning', 'error', 'success', 'new_message', 'message_read', 'user_online', 'user_offline', 'group_invite'],
+    enum: ['info', 'warning', 'error', 'success', 'announcement', 'reminder', 'alert', 'new_message', 'message_read', 'user_online', 'user_offline', 'group_invite'],
     default: 'info',
     index: true
   },
@@ -66,7 +66,7 @@ const notificationSchema = new mongoose.Schema({
   timestamps: true
 });
 
-notificationSchema.index({ schoolId: 1, recipientId: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ institutionId: 1, recipientId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model('Notification', notificationSchema);

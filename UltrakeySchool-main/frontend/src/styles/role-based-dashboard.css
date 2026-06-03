@@ -244,31 +244,29 @@
   outline-offset: 2px;
 }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-  .role-dashboard {
+/* Dark Mode Support - using app's theme toggle */
+[data-bs-theme="dark"] .role-dashboard {
     background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
   }
   
-  .dashboard-header {
+  [data-bs-theme="dark"] .dashboard-header {
     background: #2d3748;
     border-color: #495057;
   }
   
-  .stat-card {
+  [data-bs-theme="dark"] .stat-card {
     background: #2d3748;
     border-color: #495057;
   }
   
-  .dashboard-title {
+  [data-bs-theme="dark"] .dashboard-title {
     color: #ffffff;
   }
   
-  .stat-value {
+  [data-bs-theme="dark"] .stat-value {
     color: #ffffff;
   }
   
-  .stat-label {
+  [data-bs-theme="dark"] .stat-label {
     color: #adb5bd;
   }
-}

@@ -4,23 +4,23 @@ import Fee from '../models/Fee.js';
 import Attendance from '../models/Attendance.js';
 
 class StatisticService {
-  async getStatistic(schoolId, statId) {
+  async getStatistic(institutionId, statId) {
     const stat = await Statistic.findOne({
-      schoolId,
+      institutionId,
       statId,
       isActive: true
     }).sort({ createdAt: -1 }).lean();
 
     if (!stat) {
-      return await this.calculateAndSaveStatistic(schoolId, statId);
+      return await this.calculateAndSaveStatistic(institutionId, statId);
     }
 
     return this.formatStatistic(stat);
   }
 
-  async getAllStatistics(schoolId) {
+  async getAllStatistics(institutionId) {
     const stats = await Statistic.find({
-      schoolId,
+      institutionId,
       isActive: true
     }).sort({ createdAt: -1 }).lean();
 
@@ -34,28 +34,28 @@ class StatisticService {
     return Object.values(grouped).map(this.formatStatistic);
   }
 
-  async calculateAndSaveStatistic(schoolId, statId) {
+  async calculateAndSaveStatistic(institutionId, statId) {
     let statData;
 
     switch (statId) {
       case 'students':
-        statData = await this.calculateStudentStats(schoolId);
+        statData = await this.calculateStudentStats(institutionId);
         break;
       case 'teachers':
-        statData = await this.calculateTeacherStats(schoolId);
+        statData = await this.calculateTeacherStats(institutionId);
         break;
       case 'revenue':
-        statData = await this.calculateRevenueStats(schoolId);
+        statData = await this.calculateRevenueStats(institutionId);
         break;
       case 'attendance':
-        statData = await this.calculateAttendanceStats(schoolId);
+        statData = await this.calculateAttendanceStats(institutionId);
         break;
       default:
         throw new Error('Invalid statId');
     }
 
     const previousStat = await Statistic.findOne({
-      schoolId,
+      institutionId,
       statId,
       isActive: true
     }).sort({ createdAt: -1 }).lean();
@@ -72,7 +72,7 @@ class StatisticService {
     }
 
     const stat = new Statistic({
-      schoolId,
+      institutionId,
       ...statData
     });
 
@@ -80,8 +80,8 @@ class StatisticService {
     return this.formatStatistic(stat.toObject());
   }
 
-  async calculateStudentStats(schoolId) {
-    const students = await User.find({ schoolId, role: 'student' });
+  async calculateStudentStats(institutionId) {
+    const students = await User.find({ institutionId, role: 'student' });
     const active = students.filter(s => s.isActive).length;
     const inactive = students.filter(s => !s.isActive).length;
 
@@ -102,8 +102,8 @@ class StatisticService {
     };
   }
 
-  async calculateTeacherStats(schoolId) {
-    const teachers = await User.find({ schoolId, role: 'teacher' });
+  async calculateTeacherStats(institutionId) {
+    const teachers = await User.find({ institutionId, role: 'teacher' });
     const active = teachers.filter(t => t.isActive).length;
     const inactive = teachers.filter(t => !t.isActive).length;
 
@@ -124,12 +124,12 @@ class StatisticService {
     };
   }
 
-  async calculateRevenueStats(schoolId) {
+  async calculateRevenueStats(institutionId) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const fees = await Fee.find({
-      schoolId,
+      institutionId,
       date: { $gte: startOfMonth },
       isActive: true
     });
@@ -155,12 +155,12 @@ class StatisticService {
     };
   }
 
-  async calculateAttendanceStats(schoolId) {
+  async calculateAttendanceStats(institutionId) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const attendanceRecords = await Attendance.find({
-      schoolId,
+      institutionId,
       date: { $gte: startOfMonth },
       userType: 'student'
     });
@@ -188,13 +188,13 @@ class StatisticService {
     };
   }
 
-  async refreshAllStatistics(schoolId) {
+  async refreshAllStatistics(institutionId) {
     const statIds = ['students', 'teachers', 'revenue', 'attendance'];
     const results = [];
 
     for (const statId of statIds) {
       try {
-        const stat = await this.calculateAndSaveStatistic(schoolId, statId);
+        const stat = await this.calculateAndSaveStatistic(institutionId, statId);
         results.push(stat);
       } catch (error) {
         console.error(`Error refreshing ${statId}:`, error);
@@ -204,9 +204,9 @@ class StatisticService {
     return results;
   }
 
-  async acknowledgeAlert(schoolId, statId, alertId) {
+  async acknowledgeAlert(institutionId, statId, alertId) {
     const stat = await Statistic.findOne({
-      schoolId,
+      institutionId,
       statId,
       isActive: true
     }).sort({ createdAt: -1 });
@@ -226,9 +226,9 @@ class StatisticService {
     return this.formatStatistic(stat.toObject());
   }
 
-  async getStatisticHistory(schoolId, statId, limit = 30) {
+  async getStatisticHistory(institutionId, statId, limit = 30) {
     const stats = await Statistic.find({
-      schoolId,
+      institutionId,
       statId,
       isActive: true
     })
@@ -281,12 +281,12 @@ class StatisticService {
   }
 
   // Frontend-compatible methods
-  async getDashboardData(schoolId, params = {}) {
+  async getDashboardData(institutionId, params = {}) {
     const [students, teachers, attendance, revenue] = await Promise.all([
-      this.calculateStudentStats(schoolId),
-      this.calculateTeacherStats(schoolId),
-      this.calculateAttendanceStats(schoolId),
-      this.calculateRevenueStats(schoolId)
+      this.calculateStudentStats(institutionId),
+      this.calculateTeacherStats(institutionId),
+      this.calculateAttendanceStats(institutionId),
+      this.calculateRevenueStats(institutionId)
     ]);
 
     return {
@@ -297,18 +297,18 @@ class StatisticService {
     };
   }
 
-  async getStudentStats(schoolId, params = {}) {
-    const stats = await this.calculateStudentStats(schoolId);
+  async getStudentStats(institutionId, params = {}) {
+    const stats = await this.calculateStudentStats(institutionId);
     return this.formatStatistic({ ...stats, statId: 'students' });
   }
 
-  async getTeacherStats(schoolId, params = {}) {
-    const stats = await this.calculateTeacherStats(schoolId);
+  async getTeacherStats(institutionId, params = {}) {
+    const stats = await this.calculateTeacherStats(institutionId);
     return this.formatStatistic({ ...stats, statId: 'teachers' });
   }
 
-  async getAttendanceStats(schoolId, params = {}) {
-    const stats = await this.calculateAttendanceStats(schoolId);
+  async getAttendanceStats(institutionId, params = {}) {
+    const stats = await this.calculateAttendanceStats(institutionId);
     return this.formatStatistic({ ...stats, statId: 'attendance' });
   }
 }

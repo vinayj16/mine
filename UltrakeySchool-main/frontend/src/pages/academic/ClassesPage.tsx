@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import classService, { type Class } from '../../services/classService';
 import { classScheduleService, type ClassSchedule, type CreateClassScheduleInput, type ClassScheduleFilters } from '../../services/classScheduleService';
 import { useAuth } from '../../store/authStore';
+import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 const ClassesPage = () => {
   
@@ -24,7 +26,7 @@ const ClassesPage = () => {
   });
 
   const { user } = useAuth();
-  const institutionId = user?.institutionId || user?.schoolId || '';
+  const institutionId = user?.institutionId || user?.institutionId || '';
   const institutionCode = (user as any)?.institutionCode || (user as any)?.instituteCode || '';
 
   // Fetch classes from backend
@@ -41,31 +43,78 @@ const ClassesPage = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching classes for institution:', institutionId);
-      const response = await classService.getAll({
-        page: 1,
-        limit: 100,
-        search: searchTerm || undefined,
-        institutionId: institutionId,
-        institutionCode: institutionCode || undefined
-      });
-      
-      const rawClasses = Array.isArray((response as any).data)
-        ? (response as any).data
-        : Array.isArray((response as any).classes)
-          ? (response as any).classes
-          : Array.isArray(response as any)
-            ? (response as any)
-            : [];
 
-      const classesData = rawClasses.map((c: any) => ({
-          ...c,
-          id: c.id || c._id || c.classId,
-          totalStudents: c.totalStudents ?? c.students ?? 0,
-          subjects: c.subjects || []
-      }));
+      if (user?.role === 'teacher') {
+        const teacherRes = await apiClient.get(`/teachers/${user.id}`);
+        const teacherData = teacherRes.data?.data || teacherRes.data;
+        const assignedClasses = teacherData?.classes || [];
 
-      setClasses(classesData);
+        const seen = new Set<string>();
+        const classList: any[] = [];
+
+        for (const entry of assignedClasses) {
+          const cls = entry.classId;
+          const sec = entry.sectionId;
+          const sub = entry.subjectId;
+          if (!cls) continue;
+          const classId = cls._id || cls.id;
+          const key = `${classId}_${sec?._id || sec?.id || ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          classList.push({
+            id: classId,
+            _id: classId,
+            name: cls.name || cls.grade || 'Unknown',
+            section: sec?.name || '',
+            subjects: [sub?.name || 'General'].filter(Boolean),
+            totalStudents: 0
+          });
+        }
+
+        if (classList.length > 0) {
+          const studentCounts = await Promise.all(
+            classList.map(async (c) => {
+              try {
+                const res = await apiClient.get(`/students/class/${c.id}`, { params: { limit: 1 } });
+                return { id: c.id, count: res.data?.count || res.data?.data?.length || 0 };
+              } catch {
+                return { id: c.id, count: 0 };
+              }
+            })
+          );
+          const countMap = Object.fromEntries(studentCounts.map(s => [s.id, s.count]));
+          classList.forEach(c => { c.totalStudents = countMap[c.id] || 0; });
+        }
+
+        setClasses(classList);
+      } else {
+        console.log('Fetching classes for institution:', institutionId);
+        const response = await classService.getAll({
+          page: 1,
+          limit: 100,
+          search: searchTerm || undefined,
+          institutionId: institutionId,
+          institutionCode: institutionCode || undefined
+        });
+        
+        const rawClasses = Array.isArray((response as any).data)
+          ? (response as any).data
+          : Array.isArray((response as any).classes)
+            ? (response as any).classes
+            : Array.isArray(response as any)
+              ? (response as any)
+              : [];
+
+        const classesData = rawClasses.map((c: any) => ({
+            ...c,
+            id: c.id || c._id || c.classId,
+            totalStudents: c.totalStudents ?? c.students ?? 0,
+            subjects: c.subjects || []
+        }));
+
+        setClasses(classesData);
+      }
     } catch (err: any) {
       console.error('Error fetching classes:', err);
       setError(err.message || 'Failed to fetch classes');
@@ -180,7 +229,7 @@ const ClassesPage = () => {
 
   const handleDelete = async () => {
     if (!selectedClass) return;
-    
+     
     try {
       // Use _id instead of id for MongoDB documents
       const classId = (selectedClass as any)._id || selectedClass.id;
@@ -190,6 +239,27 @@ const ClassesPage = () => {
     } catch (err: any) {
       console.error('Error deleting class:', err);
       setError(err.message || 'Failed to delete class');
+    }
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = filteredClasses.map(cls => ({
+      ID: cls.id || cls._id || '',
+      Class: cls.name,
+      Section: cls.section,
+      'No of Students': cls.totalStudents || 0,
+      'No of Subjects': cls.subjects?.length || 0 
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'classes', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'No of Students', label: 'No of Students' },
+        { key: 'No of Subjects', label: 'No of Subjects' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'classes');
     }
   };
 
@@ -249,12 +319,12 @@ const ClassesPage = () => {
               </button>
               <ul className="dropdown-menu dropdown-menu-end p-3">
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                     <i className="ti ti-file-type-pdf me-1" />Export as PDF
                   </button>
                 </li>
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                     <i className="ti ti-file-type-xls me-1" />Export as Excel
                   </button>
                 </li>
@@ -469,7 +539,7 @@ const ClassesPage = () => {
                         <td>{cls.name}</td>
                         <td>{cls.section}</td>
                         <td>{cls.totalStudents || 0}</td>
-                        <td>{cls.subjects?.length || 0}</td>
+                        <td>{user?.role === 'teacher' && typeof cls.subjects?.[0] === 'string' ? cls.subjects.join(', ') : cls.subjects?.length || 0}</td>
                         <td>
                           <div className="d-flex align-items-center">
                             <div className="dropdown">
@@ -574,133 +644,16 @@ const ClassesPage = () => {
                           id="switch-sm" 
                           defaultChecked 
                         />
-                      </div>
+                        </div>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  className="btn btn-light me-2" 
-                  onClick={() => setShowAddModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Add Class
-                </button>
+                <button type="button" className="btn btn-light" onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Class</button>
               </div>
             </form>
-          </div>
-        </div>
-      </div>
-
-      {/* Edit Class Modal */}
-      {selectedClass && (
-        <div className={`modal fade ${showEditModal ? 'show d-block' : ''}`} style={{ display: showEditModal ? 'block' : 'none' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h4 className="modal-title">Edit Class</h4>
-                <button 
-                  type="button" 
-                  className="btn-close custom-btn-close" 
-                  onClick={() => setShowEditModal(false)}
-                >
-                  <i className="ti ti-x" />
-                </button>
-              </div>
-              <form onSubmit={handleEditClass}>
-                <div className="modal-body">
-                  <div className="row">
-                    <div className="col-md-12">
-                      <div className="mb-3">
-                        <label className="form-label">Class Name</label>
-                        <input 
-                          type="text" 
-                          name="name"
-                          className="form-control" 
-                          defaultValue={selectedClass.name}
-                          required 
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">Section</label>
-                        <select name="section" className="form-select" defaultValue={selectedClass.section} required>
-                          <option value="">Select</option>
-                          <option>A</option>
-                          <option>B</option>
-                          <option>C</option>
-                          <option>D</option>
-                        </select>
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">No of Students</label>
-                        <input 
-                          type="number" 
-                          className="form-control" 
-                          defaultValue={selectedClass.totalStudents}
-                          name="totalStudents"
-                          required 
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">Subjects (comma-separated)</label>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          defaultValue={selectedClass.subjects?.join(', ') || ''}
-                          name="subjects"
-                          placeholder="Math, Science, English"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button 
-                    type="button" 
-                    className="btn btn-light me-2" 
-                    onClick={() => setShowEditModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Save Changes
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      <div className={`modal fade ${showDeleteModal ? 'show d-block' : ''}`} style={{ display: showDeleteModal ? 'block' : 'none' }}>
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-body text-center">
-              <div className="delete-icon">
-                <i className="ti ti-trash-x" />
-              </div>
-              <h4>Confirm Deletion</h4>
-              <p>You want to delete {selectedClass ? `class ${selectedClass.name} - Section ${selectedClass.section}` : 'the selected class'}, this can't be undone once you delete.</p>
-              <div className="d-flex justify-content-center">
-                <button 
-                  className="btn btn-light me-3"
-                  onClick={() => setShowDeleteModal(false)}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn btn-danger"
-                  onClick={handleDelete}
-                >
-                  Yes, Delete
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -738,8 +691,8 @@ const ClassesPage = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="class-detail-info">
-                      <p>No of Subjects</p>
-                      <span>{selectedClass.subjects?.length || 0}</span>
+                      <p>Subjects (You Teach)</p>
+                      <span>{user?.role === 'teacher' && typeof selectedClass.subjects?.[0] === 'string' ? selectedClass.subjects.join(', ') : selectedClass.subjects?.length || 0}</span>
                     </div>
                   </div>
                   <div className="col-md-6">
@@ -749,36 +702,89 @@ const ClassesPage = () => {
                     </div>
                   </div>
                 </div>
+                <div className="text-center mt-3">
+                  <Link to={`/academic/classes/${selectedClass._id}`} className="btn btn-primary btn-sm" onClick={() => setShowViewModal(false)}>
+                    <i className="ti ti-eye me-1"></i>View Full Class Details
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      <div className={`modal fade ${showDeleteModal ? 'show d-block' : ''}`} style={{ display: showDeleteModal ? 'block' : 'none' }}>
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-body text-center">
+              <div className="delete-icon">
+                <i className="ti ti-trash-x" />
+              </div>
+              <h4>Confirm Deletion</h4>
+              <p>You want to delete {selectedClass ? `class ${selectedClass.name} - Section ${selectedClass.section}` : 'the selected class'}, this can't be undone once you delete.</p>
+              <div className="d-flex justify-content-center">
+                <button 
+                  className="btn btn-light me-3"
+                  onClick={() => setShowDeleteModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-danger"
+                  onClick={handleDelete}
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Modal Backdrop */}
       {(showAddModal || showDeleteModal || showViewModal || showEditModal) && (
-        <div 
-          className="modal-backdrop fade show" 
-          style={{ zIndex: 1040 }}
-          onClick={() => {
-            setShowAddModal(false);
-            setShowDeleteModal(false);
-            setShowViewModal(false);
-            setShowEditModal(false);
-          }}
-        />
+        <div className="modal-backdrop fade show" />
       )}
-    
+
     </>
   );
 };
 
 export default ClassesPage;
 
-
 export const ScheduleClassesPage = () => {
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = filteredSchedules.map(schedule => ({
+      ID: schedule._id || '',
+      Class: schedule.className,
+      Section: schedule.section,
+      Subject: schedule.subject,
+      Teacher: schedule.teacher,
+      Room: schedule.room,
+      Day: schedule.day,
+      Time: `${schedule.startTime} - ${schedule.endTime}`,
+      Status: schedule.status.charAt(0).toUpperCase() + schedule.status.slice(1)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'class-schedules', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Subject', label: 'Subject' },
+        { key: 'Teacher', label: 'Teacher' },
+        { key: 'Room', label: 'Room' },
+        { key: 'Day', label: 'Day' },
+        { key: 'Time', label: 'Time' },
+        { key: 'Status', label: 'Status' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'class-schedules');
+    }
+  };
+
   const { user } = useAuth();
-  const institutionId = user?.institutionId || user?.schoolId || '';
+  const institutionId = user?.institutionId || user?.institutionId || '';
 
   // State management
   const [schedules, setSchedules] = useState<ClassSchedule[]>([]);
@@ -949,12 +955,12 @@ export const ScheduleClassesPage = () => {
               </button>
               <ul className="dropdown-menu dropdown-menu-end p-3">
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                     <i className="ti ti-file-type-pdf me-1" />Export as PDF
                   </button>
                 </li>
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                     <i className="ti ti-file-type-xls me-1" />Export as Excel
                   </button>
                 </li>

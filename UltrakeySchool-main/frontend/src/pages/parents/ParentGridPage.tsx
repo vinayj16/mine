@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { toast } from 'react-toastify'
 import apiClient from '../../api/client'
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils'
 
 interface Guardian {
   _id: string
@@ -78,15 +79,15 @@ const ParentGridPage = () => {
   })
   const [submitting, setSubmitting] = useState(false)
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011'
+  // Get institutionId from localStorage
+  const institutionId = localStorage.getItem('institutionId') || ''
 
   const fetchGuardians = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const response = await apiClient.get(`/guardians/schools/${schoolId}`, {
+      const response = await apiClient.get(`/guardians/schools/${institutionId}`, {
         params: { limit: 100 }
       })
 
@@ -190,7 +191,7 @@ const ParentGridPage = () => {
         }] : []
       }
 
-      const response = await apiClient.post(`/guardians/schools/${schoolId}`, guardianData)
+      const response = await apiClient.post(`/guardians/schools/${institutionId}`, guardianData)
 
       if (response.data.success) {
         toast.success('Parent added successfully')
@@ -217,12 +218,35 @@ const ParentGridPage = () => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '-'
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: '2-digit'
     })
   }
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = guardians.map(guardian => ({
+      ID: guardian.guardianId,
+      'Parent Name': `${guardian.firstName} ${guardian.lastName}`,
+      Phone: guardian.phone,
+      Email: guardian.email,
+      Status: guardian.status,
+      'Added On': formatDate(guardian.createdAt)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'parents', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Parent Name', label: 'Parent Name' },
+        { key: 'Phone', label: 'Phone' },
+        { key: 'Email', label: 'Email' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Added On', label: 'Added On' }
+      ], 'Parents Grid');
+    } else {
+      exportToExcel(exportData, 'parents');
+    }
+  };
 
   const getPrimaryChild = (children: Guardian['children']) => {
     const activeChildren = children.filter(c => c.isActive)
@@ -268,13 +292,13 @@ const ParentGridPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>

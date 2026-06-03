@@ -282,7 +282,7 @@ const StudentAdd: React.FC = () => {
                 <Link to="/">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/students">Students</Link>
+                <Link to="/dashboard/admin/students">Students</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Add Student</li>
             </ol>
@@ -407,9 +407,10 @@ const StudentAdd: React.FC = () => {
                     <div className="mb-3">
                       <label className="form-label">Gender</label>
                       <select className="form-select" name="gender" value={formData.gender} onChange={handleInputChange}>
-                        <option>Select</option>
-                        <option>Male</option>
-                        <option>Female</option>
+                        <option value="">Select</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
                       </select>
                     </div>
                   </div>

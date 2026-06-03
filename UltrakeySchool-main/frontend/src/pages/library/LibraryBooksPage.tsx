@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 interface Book {
   _id: string;
@@ -27,6 +28,7 @@ interface Book {
 }
 
 const LibraryBooksPage: React.FC = () => {
+  const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,27 @@ const LibraryBooksPage: React.FC = () => {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [selectAll, setSelectAll] = useState(false);
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'isbn', label: 'ISBN', format: (v) => v || 'N/A' },
+    { key: 'title', label: 'Title' },
+    { key: 'authors', label: 'Author(s)', format: (v) => Array.isArray(v) ? v.join(', ') : v || 'N/A' },
+    { key: 'category', label: 'Category', format: (_, row) => row.category?.name || row.category || 'N/A' },
+    { key: 'publisher', label: 'Publisher', format: (v) => v || 'N/A' },
+    { key: 'totalCopies', label: 'Total Copies', format: (v) => String(v || 0) },
+    { key: 'availableCopies', label: 'Available', format: (v) => String(v || 0) },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = books || [];
+    if (!data.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(data, 'library-books', exportColumns, 'Library Books');
+    } else {
+      exportToExcel(data, 'library-books', exportColumns);
+    }
+  };
 
   const [formData, setFormData] = useState({
     isbn: '',
@@ -63,10 +86,12 @@ const LibraryBooksPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/library/books');
-      
+      const response = await apiClient.get('/library');
+
       if (response.data.success) {
-        setBooks(response.data.data || []);
+        const payload = response.data.data;
+        const bookList = Array.isArray(payload) ? payload : payload?.books || [];
+        setBooks(bookList);
       }
     } catch (error: any) {
       console.error('Error fetching books:', error);
@@ -121,7 +146,7 @@ const LibraryBooksPage: React.FC = () => {
       };
 
       const response = await apiClient.post('/library/books', bookData);
-      
+
       if (response.data.success) {
         toast.success('Book added successfully');
         setShowAddModal(false);
@@ -154,7 +179,7 @@ const LibraryBooksPage: React.FC = () => {
       };
 
       const response = await apiClient.put(`/library/books/${selectedBook._id}`, bookData);
-      
+
       if (response.data.success) {
         toast.success('Book updated successfully');
         setShowEditModal(false);
@@ -173,7 +198,7 @@ const LibraryBooksPage: React.FC = () => {
 
     try {
       const response = await apiClient.delete(`/library/books/${selectedBook._id}`);
-      
+
       if (response.data.success) {
         toast.success('Book deleted successfully');
         setShowDeleteModal(false);
@@ -283,7 +308,7 @@ const LibraryBooksPage: React.FC = () => {
           <button className="btn btn-outline-light bg-white btn-icon me-2" onClick={fetchBooks} title="Refresh">
             <i className="ti ti-refresh"></i>
           </button>
-          <button className="btn btn-info me-2" onClick={() => toast.info('Library Analytics coming soon')}>
+          <button className="btn btn-info me-2" onClick={() => navigate('/dashboard/library')}>
             <i className="ti ti-chart-bar me-2"></i>Analyze
           </button>
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
@@ -329,9 +354,9 @@ const LibraryBooksPage: React.FC = () => {
                     <tr key={book._id}>
                       <td>
                         <div className="form-check">
-                          <input 
-                            type="checkbox" 
-                            className="form-check-input" 
+                          <input
+                            type="checkbox"
+                            className="form-check-input"
                             checked={selectedBooks.includes(book._id)}
                             onChange={() => toggleBookSelection(book._id)}
                           />
@@ -343,7 +368,7 @@ const LibraryBooksPage: React.FC = () => {
                         {book.publisher && <small className="text-muted">{book.publisher}</small>}
                       </td>
                       <td>{book.author}</td>
-                      <td><span className="badge bg-light text-dark">{book.category}</span></td>
+                      <td><span className="badge bg-light text-dark">{typeof book.category === 'object' ? book.category?.name || '-' : book.category}</span></td>
                       <td>{book.totalCopies}</td>
                       <td>{book.availableCopies}</td>
                       <td>
@@ -361,8 +386,8 @@ const LibraryBooksPage: React.FC = () => {
                               </button>
                             </li>
                             <li>
-                              <button 
-                                className="dropdown-item text-danger rounded-1" 
+                              <button
+                                className="dropdown-item text-danger rounded-1"
                                 onClick={() => {
                                   setSelectedBook(book);
                                   setShowDeleteModal(true);
@@ -442,6 +467,10 @@ const LibraryBooksPage: React.FC = () => {
                     <div className="col-md-4 mb-3">
                       <label className="form-label">Price</label>
                       <input type="number" className="form-control" name="price" value={formData.price} onChange={handleInputChange} step="0.01" />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Published Year</label>
+                      <input type="number" className="form-control" name="publishedYear" value={formData.publishedYear} onChange={handleInputChange} min="1900" max={new Date().getFullYear()} />
                     </div>
                     <div className="col-md-4 mb-3">
                       <label className="form-label">Shelf</label>
@@ -535,6 +564,10 @@ const LibraryBooksPage: React.FC = () => {
                     <div className="col-md-4 mb-3">
                       <label className="form-label">Price</label>
                       <input type="number" className="form-control" name="price" value={formData.price} onChange={handleInputChange} step="0.01" />
+                    </div>
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Published Year</label>
+                      <input type="number" className="form-control" name="publishedYear" value={formData.publishedYear} onChange={handleInputChange} min="1900" max={new Date().getFullYear()} />
                     </div>
                     <div className="col-12 mb-3">
                       <label className="form-label">Description</label>

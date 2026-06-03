@@ -1,13 +1,13 @@
+import mongoose from 'mongoose';
 import Teacher from '../models/Teacher.js';
 import TeacherLeave from '../models/TeacherLeave.js';
 import TeacherRoutine from '../models/TeacherRoutine.js';
 import TeacherSalary from '../models/TeacherSalary.js';
-import TeacherLibrary from '../models/TeacherLibrary.js';
 import Attendance from '../models/Attendance.js';
 
 class TeacherService {
-  async getTeacherDetails(teacherId, schoolId) {
-    const teacher = await Teacher.findOne({ _id: teacherId, schoolId, isActive: true })
+  async getTeacherDetails(teacherId, institutionId) {
+    const teacher = await Teacher.findOne({ _id: teacherId, institutionId, isActive: true })
       .populate('departmentId', 'name code')
       .populate('subjects', 'name code')
       .populate('classes.classId', 'name grade')
@@ -21,8 +21,8 @@ class TeacherService {
     return teacher;
   }
 
-  async getTeacherRoutine(teacherId, schoolId, filters = {}) {
-    const query = { teacherId, schoolId, isActive: true };
+  async getTeacherRoutine(teacherId, institutionId, filters = {}) {
+    const query = { teacherId, institutionId, isActive: true };
     
     if (filters.academicYear) query.academicYear = filters.academicYear;
     if (filters.term) query.term = filters.term;
@@ -37,8 +37,11 @@ class TeacherService {
     return routines;
   }
 
-  async getTeacherLeaves(teacherId, schoolId, filters = {}) {
-    const query = { teacherId, schoolId };
+  async getTeacherLeaves(teacherId, institutionId, filters = {}) {
+    const query = { 
+      teacherId: typeof teacherId === 'string' ? new mongoose.Types.ObjectId(teacherId) : teacherId, 
+      institutionId: typeof institutionId === 'string' ? new mongoose.Types.ObjectId(institutionId) : institutionId 
+    };
     
     if (filters.status) query.status = filters.status;
     if (filters.leaveType) query.leaveType = filters.leaveType;
@@ -50,7 +53,7 @@ class TeacherService {
       .sort({ appliedDate: -1 });
     
     const stats = await TeacherLeave.aggregate([
-      { $match: { teacherId: query.teacherId, schoolId: query.schoolId } },
+      { $match: { teacherId: query.teacherId, institutionId: query.institutionId } },
       {
         $group: {
           _id: '$status',
@@ -79,8 +82,8 @@ class TeacherService {
     };
   }
 
-  async applyLeave(teacherId, schoolId, leaveData) {
-    const teacher = await Teacher.findOne({ _id: teacherId, schoolId, isActive: true });
+  async applyLeave(teacherId, institutionId, leaveData) {
+    const teacher = await Teacher.findOne({ _id: teacherId, institutionId, isActive: true });
     
     if (!teacher) {
       throw new Error('Teacher not found');
@@ -91,7 +94,7 @@ class TeacherService {
     const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
     
     const leave = await TeacherLeave.create({
-      schoolId,
+      institutionId,
       teacherId,
       leaveType: leaveData.leaveType,
       startDate,
@@ -104,8 +107,8 @@ class TeacherService {
     return leave;
   }
 
-  async reviewLeave(leaveId, schoolId, reviewData, reviewedBy) {
-    const leave = await TeacherLeave.findOne({ _id: leaveId, schoolId });
+  async reviewLeave(leaveId, institutionId, reviewData, reviewedBy) {
+    const leave = await TeacherLeave.findOne({ _id: leaveId, institutionId });
     
     if (!leave) {
       throw new Error('Leave application not found');
@@ -120,8 +123,8 @@ class TeacherService {
     return leave;
   }
 
-  async getTeacherAttendance(teacherId, schoolId, filters = {}) {
-    const query = { userId: teacherId, schoolId, userType: 'teacher' };
+  async getTeacherAttendance(teacherId, institutionId, filters = {}) {
+    const query = { userId: teacherId, institutionId, userType: 'teacher' };
     
     if (filters.startDate) query.date = { $gte: new Date(filters.startDate) };
     if (filters.endDate) query.date = { ...query.date, $lte: new Date(filters.endDate) };
@@ -158,8 +161,11 @@ class TeacherService {
     };
   }
 
-  async getTeacherSalary(teacherId, schoolId, filters = {}) {
-    const query = { teacherId, schoolId };
+  async getTeacherSalary(teacherId, institutionId, filters = {}) {
+    const query = { 
+      teacherId: typeof teacherId === 'string' ? new mongoose.Types.ObjectId(teacherId) : teacherId, 
+      institutionId: typeof institutionId === 'string' ? new mongoose.Types.ObjectId(institutionId) : institutionId 
+    };
     
     if (filters.month) query.month = parseInt(filters.month);
     if (filters.year) query.year = parseInt(filters.year);
@@ -199,8 +205,8 @@ class TeacherService {
     };
   }
 
-  async createSalary(teacherId, schoolId, salaryData) {
-    const teacher = await Teacher.findOne({ _id: teacherId, schoolId, isActive: true });
+  async createSalary(teacherId, institutionId, salaryData) {
+    const teacher = await Teacher.findOne({ _id: teacherId, institutionId, isActive: true });
     
     if (!teacher) {
       throw new Error('Teacher not found');
@@ -208,7 +214,7 @@ class TeacherService {
     
     const existingSalary = await TeacherSalary.findOne({
       teacherId,
-      schoolId,
+      institutionId,
       month: salaryData.month,
       year: salaryData.year
     });
@@ -218,7 +224,7 @@ class TeacherService {
     }
     
     const salary = await TeacherSalary.create({
-      schoolId,
+      institutionId,
       teacherId,
       ...salaryData
     });
@@ -226,8 +232,8 @@ class TeacherService {
     return salary;
   }
 
-  async updateSalaryStatus(salaryId, schoolId, statusData) {
-    const salary = await TeacherSalary.findOne({ _id: salaryId, schoolId });
+  async updateSalaryStatus(salaryId, institutionId, statusData) {
+    const salary = await TeacherSalary.findOne({ _id: salaryId, institutionId });
     
     if (!salary) {
       throw new Error('Salary record not found');
@@ -244,51 +250,63 @@ class TeacherService {
     return salary;
   }
 
-  async getTeacherLibraryRecords(teacherId, schoolId, filters = {}) {
-    const query = { teacherId, schoolId };
+  async getTeacherLibraryRecords(teacherId, institutionId, filters = {}) {
+    const { BookIssue } = await import('../models/library.js');
     
-    if (filters.status) query.status = filters.status;
+    const query = { user: teacherId };
+    if (filters.status) {
+      const statusMap = {
+        issued: 'Issued',
+        returned: 'Returned',
+        overdue: 'Overdue',
+        lost: 'Lost'
+      };
+      query.status = statusMap[filters.status.toLowerCase()] || filters.status;
+    }
     
-    const records = await TeacherLibrary.find(query)
-      .populate('bookId', 'title author category isbn')
+    const records = await BookIssue.find(query)
+      .populate('book', 'title author category isbn')
       .populate('issuedBy', 'name')
       .populate('returnedTo', 'name')
       .sort({ issueDate: -1 });
-    
-    records.forEach(record => {
-      if (record.status === 'issued') {
-        record.calculateFine();
-      }
+      
+    const mappedRecords = records.map(r => {
+      const record = r.toObject();
+      record.bookId = r.book;
+      record.status = r.status.toLowerCase();
+      record.fineAmount = r.fine || 0;
+      record.finePaid = r.fineStatus === 'Paid';
+      return record;
     });
     
     const stats = {
-      issued: records.filter(r => r.status === 'issued').length,
-      returned: records.filter(r => r.status === 'returned').length,
-      overdue: records.filter(r => r.status === 'overdue').length,
-      lost: records.filter(r => r.status === 'lost').length,
-      totalFine: records.reduce((sum, r) => sum + r.fineAmount, 0),
-      unpaidFine: records.filter(r => !r.finePaid).reduce((sum, r) => sum + r.fineAmount, 0)
+      issued: mappedRecords.filter(r => r.status === 'issued').length,
+      returned: mappedRecords.filter(r => r.status === 'returned').length,
+      overdue: mappedRecords.filter(r => r.status === 'overdue').length,
+      lost: mappedRecords.filter(r => r.status === 'lost').length,
+      totalFine: mappedRecords.reduce((sum, r) => sum + r.fineAmount, 0),
+      unpaidFine: mappedRecords.filter(r => !r.finePaid).reduce((sum, r) => sum + r.fineAmount, 0)
     };
     
     return {
-      records,
+      records: mappedRecords,
       stats
     };
   }
 
-  async getTeacherDashboardData(teacherId, schoolId) {
+  async getTeacherDashboardData(teacherId, institutionId) {
     const currentDate = new Date();
     const currentMonth = currentDate.getMonth() + 1;
     const currentYear = currentDate.getFullYear();
     const thirtyDaysAgo = new Date(currentDate.setDate(currentDate.getDate() - 30));
     
     const [teacher, leaves, attendance, salary, library, routine] = await Promise.all([
-      this.getTeacherDetails(teacherId, schoolId),
-      this.getTeacherLeaves(teacherId, schoolId, { status: 'pending' }),
-      this.getTeacherAttendance(teacherId, schoolId, { startDate: thirtyDaysAgo }),
-      this.getTeacherSalary(teacherId, schoolId, { month: currentMonth, year: currentYear }),
-      this.getTeacherLibraryRecords(teacherId, schoolId, { status: 'issued' }),
-      this.getTeacherRoutine(teacherId, schoolId)
+      this.getTeacherDetails(teacherId, institutionId),
+      this.getTeacherLeaves(teacherId, institutionId, { status: 'pending' }),
+      this.getTeacherAttendance(teacherId, institutionId, { startDate: thirtyDaysAgo }),
+      this.getTeacherSalary(teacherId, institutionId, { month: currentMonth, year: currentYear }),
+      this.getTeacherLibraryRecords(teacherId, institutionId, { status: 'issued' }),
+      this.getTeacherRoutine(teacherId, institutionId)
     ]);
     
     return {
@@ -306,8 +324,8 @@ class TeacherService {
     };
   }
 
-  async getTeacherSidebarData(teacherId, schoolId) {
-    const teacher = await Teacher.findOne({ _id: teacherId, schoolId, isActive: true })
+  async getTeacherSidebarData(teacherId, institutionId) {
+    const teacher = await Teacher.findOne({ _id: teacherId, institutionId, isActive: true })
       .populate('departmentId', 'name code')
       .populate('subjects', 'name code')
       .populate('classes.classId', 'name grade')

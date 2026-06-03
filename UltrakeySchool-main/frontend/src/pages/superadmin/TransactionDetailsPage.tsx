@@ -6,7 +6,7 @@ import apiClient from '../../api/client';
 interface Transaction {
   _id: string;
   transactionId: string;
-  schoolId: {
+  institutionId: {
     _id: string;
     name: string;
     code?: string;
@@ -58,7 +58,7 @@ const TransactionDetailsPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get(`/transactions/${transactionId}`);
+      const response = await apiClient.get(`/super-admin/transactions/${transactionId}`);
 
       if (response.data.success) {
         setTransaction(response.data.data);
@@ -96,15 +96,12 @@ const TransactionDetailsPage: React.FC = () => {
     return iconConfig[method.toLowerCase()] || 'ti ti-credit-card';
   };
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
-    if (currency === 'INR' || currency === '₹') {
-      return `₹${amount.toLocaleString('en-IN')}`;
-    }
-    return `$${amount.toLocaleString('en-US')}`;
+  const formatCurrency = (amount: number, currency: string = 'INR') => {
+    return `₹${amount.toLocaleString('en-IN')}`;
   };
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleString('en-US', {
+    return new Date(date).toLocaleString('en-IN', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -210,9 +207,9 @@ const TransactionDetailsPage: React.FC = () => {
                   <div className="mb-3">
                     <label className="form-label text-muted">School</label>
                     <div>
-                      <div className="fw-medium">{transaction.schoolId.name}</div>
-                      {transaction.schoolId.code && (
-                        <small className="text-muted">Code: {transaction.schoolId.code}</small>
+                      <div className="fw-medium">{transaction.institutionId.name}</div>
+                      {transaction.institutionId.code && (
+                        <small className="text-muted">Code: {transaction.institutionId.code}</small>
                       )}
                     </div>
                   </div>
@@ -357,7 +354,7 @@ const TransactionDetailsPage: React.FC = () => {
                   </Link>
                 )}
                 <Link 
-                  to={`/super-admin/schools/${transaction.schoolId._id}`}
+                  to={`/super-admin/schools/${transaction.institutionId._id}`}
                   className="btn btn-outline-primary"
                 >
                   <i className="ti ti-building me-2"></i>

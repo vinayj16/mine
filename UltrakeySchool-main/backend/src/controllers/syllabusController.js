@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 
 // Validation constants
 const VALID_STATUSES = ['draft', 'active', 'completed', 'archived', 'inactive'];
-const VALID_TERMS = ['term1', 'term2', 'term3', 'annual', 'semester1', 'semester2'];
+const VALID_TERMS = ['1', '2', '3', 'term1', 'term2', 'term3', 'annual', 'semester1', 'semester2'];
 const VALID_SORT_ORDERS = ['asc', 'desc'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 const MAX_TITLE_LENGTH = 200;
@@ -66,15 +66,15 @@ const createSyllabus = async (req, res) => {
   try {
     logger.info('Creating syllabus');
     
-    const { schoolId } = req.params;
+    const institutionId = req.params.institutionId || req.user?.institutionId || req.user?.institutionId || req.user?.institution;
     const { title, description, classId, subjectId, academicYear, term, startDate, endDate, topics, status } = req.body;
     
     // Validation - make more lenient
     const errors = [];
     
-    // Don't require strict ObjectId for schoolId
-    // const schoolIdError = validateObjectId(schoolId, 'School ID');
-    // if (schoolIdError) errors.push(schoolIdError);
+    // Don't require strict ObjectId for institutionId
+    // const institutionIdError = validateObjectId(institutionId, 'School ID');
+    // if (institutionIdError) errors.push(institutionIdError);
     
     if (!title || title.trim().length === 0) {
       errors.push('Title is required');
@@ -140,7 +140,7 @@ const createSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.createSyllabus(schoolId, req.body);
+    const syllabus = await syllabusService.createSyllabus(institutionId, req.body);
     
     logger.info('Syllabus created successfully:', { syllabusId: syllabus._id, title });
     return createdResponse(res, syllabus, 'Syllabus created successfully');
@@ -155,14 +155,14 @@ const getSyllabi = async (req, res) => {
   try {
     logger.info('Fetching syllabi');
     
-    const { schoolId } = req.params;
+    const institutionId = req.params.institutionId || req.user?.institutionId || req.user?.institutionId || req.user?.institution;
     const { classId, subjectId, academicYear, term, status, search, page, limit, sortBy, sortOrder } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
@@ -218,7 +218,7 @@ const getSyllabi = async (req, res) => {
       sortOrder: sortOrder || 'desc'
     };
     
-    const result = await syllabusService.getSyllabi(schoolId, filters, options);
+    const result = await syllabusService.getSyllabi(institutionId, filters, options);
     
     logger.info('Syllabi fetched successfully');
     return successResponse(res, {
@@ -236,13 +236,13 @@ const getSyllabusById = async (req, res) => {
   try {
     logger.info('Fetching syllabus by ID');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -251,7 +251,7 @@ const getSyllabusById = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.getSyllabusById(syllabusId, schoolId);
+    const syllabus = await syllabusService.getSyllabusById(syllabusId, institutionId);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -270,14 +270,14 @@ const updateSyllabus = async (req, res) => {
   try {
     logger.info('Updating syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { title, description, academicYear, term, startDate, endDate, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -326,7 +326,7 @@ const updateSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.updateSyllabus(syllabusId, schoolId, req.body);
+    const syllabus = await syllabusService.updateSyllabus(syllabusId, institutionId, req.body);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -345,13 +345,13 @@ const deleteSyllabus = async (req, res) => {
   try {
     logger.info('Deleting syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -360,7 +360,7 @@ const deleteSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    await syllabusService.deleteSyllabus(syllabusId, schoolId);
+    await syllabusService.deleteSyllabus(syllabusId, institutionId);
     
     logger.info('Syllabus deleted successfully:', { syllabusId });
     return successResponse(res, null, 'Syllabus deleted successfully');
@@ -375,14 +375,14 @@ const getSyllabusByClass = async (req, res) => {
   try {
     logger.info('Fetching syllabus by class');
     
-    const { schoolId, classId } = req.params;
+    const { institutionId, classId } = req.params;
     const { academicYear, term } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const classIdError = validateObjectId(classId, 'Class ID');
     if (classIdError) errors.push(classIdError);
@@ -400,7 +400,7 @@ const getSyllabusByClass = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabi = await syllabusService.getSyllabusByClass(schoolId, classId, academicYear, term);
+    const syllabi = await syllabusService.getSyllabusByClass(institutionId, classId, academicYear, term);
     
     logger.info('Syllabus by class fetched successfully:', { classId, count: syllabi.length });
     return successResponse(res, syllabi, 'Syllabi retrieved successfully');
@@ -415,14 +415,14 @@ const markTopicComplete = async (req, res) => {
   try {
     logger.info('Marking topic complete');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { topicId, isCompleted } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -444,7 +444,7 @@ const markTopicComplete = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.markTopicComplete(syllabusId, schoolId, topicId, isCompleted);
+    const syllabus = await syllabusService.markTopicComplete(syllabusId, institutionId, topicId, isCompleted);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -464,14 +464,14 @@ const getSyllabusBySubject = async (req, res) => {
   try {
     logger.info('Fetching syllabus by subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     const { academicYear, term } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -489,7 +489,7 @@ const getSyllabusBySubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabi = await syllabusService.getSyllabusBySubject(schoolId, subjectId, academicYear, term);
+    const syllabi = await syllabusService.getSyllabusBySubject(institutionId, subjectId, academicYear, term);
     
     logger.info('Syllabus by subject fetched successfully:', { subjectId, count: syllabi.length });
     return successResponse(res, syllabi, 'Syllabi retrieved successfully');
@@ -504,14 +504,14 @@ const addTopic = async (req, res) => {
   try {
     logger.info('Adding topic to syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { name, description, duration, order, learningObjectives } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -538,7 +538,7 @@ const addTopic = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.addTopic(syllabusId, schoolId, req.body);
+    const syllabus = await syllabusService.addTopic(syllabusId, institutionId, req.body);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -557,14 +557,14 @@ const updateTopic = async (req, res) => {
   try {
     logger.info('Updating topic');
     
-    const { schoolId, syllabusId, topicId } = req.params;
+    const { institutionId, syllabusId, topicId } = req.params;
     const { name, description, duration } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -592,7 +592,7 @@ const updateTopic = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.updateTopic(syllabusId, schoolId, topicId, req.body);
+    const syllabus = await syllabusService.updateTopic(syllabusId, institutionId, topicId, req.body);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus or topic not found');
@@ -611,13 +611,13 @@ const deleteTopic = async (req, res) => {
   try {
     logger.info('Deleting topic');
     
-    const { schoolId, syllabusId, topicId } = req.params;
+    const { institutionId, syllabusId, topicId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -629,7 +629,7 @@ const deleteTopic = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.deleteTopic(syllabusId, schoolId, topicId);
+    const syllabus = await syllabusService.deleteTopic(syllabusId, institutionId, topicId);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus or topic not found');
@@ -648,14 +648,14 @@ const updateStatus = async (req, res) => {
   try {
     logger.info('Updating syllabus status');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -670,7 +670,7 @@ const updateStatus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.updateStatus(syllabusId, schoolId, status);
+    const syllabus = await syllabusService.updateStatus(syllabusId, institutionId, status);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -689,13 +689,13 @@ const getSyllabusProgress = async (req, res) => {
   try {
     logger.info('Fetching syllabus progress');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -704,7 +704,7 @@ const getSyllabusProgress = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const progress = await syllabusService.getSyllabusProgress(syllabusId, schoolId);
+    const progress = await syllabusService.getSyllabusProgress(syllabusId, institutionId);
     
     if (!progress) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -723,14 +723,14 @@ const cloneSyllabus = async (req, res) => {
   try {
     logger.info('Cloning syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { academicYear, classId, subjectId } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -754,7 +754,7 @@ const cloneSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const newSyllabus = await syllabusService.cloneSyllabus(syllabusId, schoolId, req.body);
+    const newSyllabus = await syllabusService.cloneSyllabus(syllabusId, institutionId, req.body);
     
     if (!newSyllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -773,14 +773,14 @@ const bulkUpdateStatus = async (req, res) => {
   try {
     logger.info('Bulk updating syllabus status');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { syllabusIds, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!syllabusIds || !Array.isArray(syllabusIds)) {
       errors.push('Syllabus IDs must be an array');
@@ -808,7 +808,7 @@ const bulkUpdateStatus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await syllabusService.bulkUpdateStatus(schoolId, syllabusIds, status);
+    const result = await syllabusService.bulkUpdateStatus(institutionId, syllabusIds, status);
     
     logger.info('Syllabus status bulk updated successfully:', { count: result.modifiedCount, status });
     return successResponse(res, result, 'Syllabi status updated successfully');
@@ -823,14 +823,14 @@ const bulkDeleteSyllabi = async (req, res) => {
   try {
     logger.info('Bulk deleting syllabi');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { syllabusIds } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!syllabusIds || !Array.isArray(syllabusIds)) {
       errors.push('Syllabus IDs must be an array');
@@ -852,7 +852,7 @@ const bulkDeleteSyllabi = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await syllabusService.bulkDeleteSyllabi(schoolId, syllabusIds);
+    const result = await syllabusService.bulkDeleteSyllabi(institutionId, syllabusIds);
     
     logger.info('Syllabi bulk deleted successfully:', { count: result.deletedCount });
     return successResponse(res, { deletedCount: result.deletedCount }, 'Syllabi deleted successfully');
@@ -867,14 +867,14 @@ const exportSyllabi = async (req, res) => {
   try {
     logger.info('Exporting syllabi');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, classId, subjectId, academicYear, term, status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
@@ -909,7 +909,7 @@ const exportSyllabi = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await syllabusService.exportSyllabi(schoolId, {
+    const exportData = await syllabusService.exportSyllabi(institutionId, {
       format: format.toLowerCase(),
       classId,
       subjectId,
@@ -931,14 +931,14 @@ const getSyllabusStatistics = async (req, res) => {
   try {
     logger.info('Fetching syllabus statistics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { academicYear, classId, subjectId } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (academicYear) {
       const academicYearError = validateAcademicYear(academicYear);
@@ -959,7 +959,7 @@ const getSyllabusStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const statistics = await syllabusService.getSyllabusStatistics(schoolId, { academicYear, classId, subjectId });
+    const statistics = await syllabusService.getSyllabusStatistics(institutionId, { academicYear, classId, subjectId });
     
     logger.info('Syllabus statistics fetched successfully');
     return successResponse(res, statistics, 'Statistics retrieved successfully');
@@ -974,14 +974,14 @@ const getCompletionAnalytics = async (req, res) => {
   try {
     logger.info('Fetching completion analytics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { academicYear, classId, subjectId, groupBy } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (academicYear) {
       const academicYearError = validateAcademicYear(academicYear);
@@ -1006,7 +1006,7 @@ const getCompletionAnalytics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const analytics = await syllabusService.getCompletionAnalytics(schoolId, {
+    const analytics = await syllabusService.getCompletionAnalytics(institutionId, {
       academicYear,
       classId,
       subjectId,
@@ -1026,14 +1026,14 @@ const searchSyllabi = async (req, res) => {
   try {
     logger.info('Searching syllabi');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { q } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!q || q.trim().length === 0) {
       errors.push('Search query is required');
@@ -1045,7 +1045,7 @@ const searchSyllabi = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabi = await syllabusService.searchSyllabi(schoolId, q);
+    const syllabi = await syllabusService.searchSyllabi(institutionId, q);
     
     logger.info('Syllabi searched successfully:', { query: q, count: syllabi.length });
     return successResponse(res, syllabi, 'Search results retrieved successfully');
@@ -1060,14 +1060,14 @@ const reorderTopics = async (req, res) => {
   try {
     logger.info('Reordering topics');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     const { topicOrders } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -1098,7 +1098,7 @@ const reorderTopics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.reorderTopics(syllabusId, schoolId, topicOrders);
+    const syllabus = await syllabusService.reorderTopics(syllabusId, institutionId, topicOrders);
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -1117,13 +1117,13 @@ const archiveSyllabus = async (req, res) => {
   try {
     logger.info('Archiving syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -1132,7 +1132,7 @@ const archiveSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.updateStatus(syllabusId, schoolId, 'archived');
+    const syllabus = await syllabusService.updateStatus(syllabusId, institutionId, 'archived');
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');
@@ -1151,13 +1151,13 @@ const restoreSyllabus = async (req, res) => {
   try {
     logger.info('Restoring archived syllabus');
     
-    const { schoolId, syllabusId } = req.params;
+    const { institutionId, syllabusId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const syllabusIdError = validateObjectId(syllabusId, 'Syllabus ID');
     if (syllabusIdError) errors.push(syllabusIdError);
@@ -1166,7 +1166,7 @@ const restoreSyllabus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const syllabus = await syllabusService.updateStatus(syllabusId, schoolId, 'active');
+    const syllabus = await syllabusService.updateStatus(syllabusId, institutionId, 'active');
     
     if (!syllabus) {
       return notFoundResponse(res, 'Syllabus not found');

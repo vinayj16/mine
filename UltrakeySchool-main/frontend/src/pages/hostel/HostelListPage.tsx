@@ -39,7 +39,11 @@ const HostelListPage: React.FC = () => {
       setError(null);
       const response = await apiClient.get('/hostel/hostels');
       if (response.data.success) {
-        setHostels(response.data.data?.hostels || response.data.data || []);
+        const hostelData = response.data.data?.hostels || response.data.data || [];
+        setHostels(hostelData.map((h: any) => ({
+          ...h,
+          address: typeof h.address === 'object' && h.address ? [h.address.street, h.address.city, h.address.state, h.address.country, h.address.postalCode].filter(Boolean).join(', ') : h.address
+        })));
       } else {
         setError(response.data.error?.message || response.data.message || 'Failed to load hostels');
       }

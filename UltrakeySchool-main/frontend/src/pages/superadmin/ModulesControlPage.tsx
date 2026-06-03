@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react'
+import { toast } from 'react-toastify';
+import apiClient from '../../api/client';
 
 const DEMO_CATEGORIES = [
   {
@@ -244,7 +246,7 @@ const AddModuleModal: React.FC<{
   })
 
   const handleAdd = () => {
-    if (!form.name.trim()) return alert('Please enter a module name')
+    if (!form.name.trim()) return toast.warn('Please enter a module name')
     const module: Module = {
       id: Date.now().toString(), name: form.name, category: form.category,
       enabled: false, description: form.description, icon: form.icon,
@@ -269,7 +271,7 @@ const AddModuleModal: React.FC<{
             <div className="row mb-3">
               <div className="col-md-6">
                 <label className="form-label fw-semibold">Module Name <span className="text-danger">*</span></label>
-                <input className="form-control" placeholder="e.g. Scholarship Management" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+                <input className="form-control" placeholder="e.g. Module Name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
               </div>
               <div className="col-md-6">
                 <label className="form-label fw-semibold">Category</label>
@@ -417,7 +419,7 @@ const ModulesControlPage: React.FC = () => {
           if (mod.id !== moduleId || mod.mandatory) return mod
           if (!mod.enabled && mod.dependencyModules?.length) {
             const ok = mod.dependencyModules.every(depId => prev.some(c => c.modules.some(m => m.id === depId && m.enabled)))
-            if (!ok) { alert('Enable required dependencies first!'); return mod }
+            if (!ok) { toast.warn('Enable required dependencies first!'); return mod }
           }
           return {
             ...mod,
@@ -463,6 +465,42 @@ const ModulesControlPage: React.FC = () => {
       cat.id === categoryId ? { ...cat, modules: [...cat.modules, module] } : cat
     ))
     setShowAddModal(false)
+  }
+
+  const handleSaveConfiguration = async () => {
+    try {
+      const configData = {
+        categories: categories.map(cat => ({
+          id: cat.id,
+          modules: cat.modules.map(mod => ({
+            id: mod.id,
+            enabled: mod.enabled,
+            features: mod.features.map(f => ({ id: f.id, enabled: f.enabled }))
+          }))
+        }))
+      }
+      const response = await apiClient.post('/superadmin/modules', configData)
+      if (response.data.success) {
+        toast.success('Module configuration saved successfully!')
+      }
+    } catch (error: any) {
+      console.error('Failed to save module configuration:', error)
+      toast.error(error.response?.data?.message || 'Failed to save module configuration')
+    }
+  }
+
+  const handleResetToDefault = async () => {
+    try {
+      const response = await apiClient.post('/superadmin/modules/reset')
+      if (response.data.success) {
+        toast.success('Modules reset to default successfully!')
+        // Reload the data
+        setCategories(DEMO_CATEGORIES)
+      }
+    } catch (error: any) {
+      console.error('Failed to reset modules:', error)
+      toast.error(error.response?.data?.message || 'Failed to reset modules to default')
+    }
   }
 
   // Drag and drop handlers
@@ -542,10 +580,10 @@ const ModulesControlPage: React.FC = () => {
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
             <i className="ti ti-plus me-2"></i>Add Module
           </button>
-          <button className="btn btn-success" onClick={() => alert('Module configuration saved successfully!')}>
+          <button className="btn btn-success" onClick={handleSaveConfiguration}>
             <i className="ti ti-device-floppy me-2"></i>Save Configuration
           </button>
-          <button className="btn btn-outline-primary">
+          <button className="btn btn-outline-primary" onClick={handleResetToDefault}>
             <i className="ti ti-refresh me-2"></i>Reset to Default
           </button>
         </div>

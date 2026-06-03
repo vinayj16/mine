@@ -14,7 +14,7 @@ class ChatService {
 
   async createGlobalConversation(participants, isGroup = false, title = null) {
     // For global conversations (agents and superadmin), don't require institutionCode
-    console.log('🌍 Creating global conversation in service:', { participants, isGroup, title });
+    console.log('[ChatService] Creating global conversation:', { participants, isGroup, title });
     const conversation = await Conversation.create({ 
       participants, 
       isGroup, 
@@ -22,17 +22,37 @@ class ChatService {
       isGlobal: true,
       institutionCode: undefined
     });
-    console.log('✅ Global conversation created in service:', conversation);
+    console.log('[ChatService] Global conversation created:', conversation);
     return conversation;
   }
 
   async getConversations(institutionCode, userId) {
-    return await Conversation.find({
+    const convs = await Conversation.find({
       $or: [
         { institutionCode, 'participants.userId': userId, isActive: true },
         { isGlobal: true, 'participants.userId': userId, isActive: true }
       ]
-    }).sort({ updatedAt: -1 });
+    }).sort({ updatedAt: -1 }).lean();
+    
+    // Fix any malformed lastMessage fields that might be strings instead of objects
+    return convs.map(conv => {
+      if (conv.lastMessage && typeof conv.lastMessage === 'string') {
+        // If lastMessage is a string, convert it to a proper object
+        return {
+          ...conv,
+          lastMessage: {
+            message: conv.lastMessage,
+            senderId: '',
+            senderName: '',
+            messageType: 'text',
+            sentAt: new Date(),
+            deliveredAt: undefined,
+            readAt: undefined
+          }
+        };
+      }
+      return conv;
+    });
   }
 
   async getAgentConversations(userId) {

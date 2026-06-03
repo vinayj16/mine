@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import emailService, { type Email } from "../../services/emailService";
 import crossAppCommunicationService from '../../services/crossApplicationCommunicationService';
 import applicationPersistenceService from '../../services/applicationPersistenceService';
+import ConfirmModal from "../../components/common/ConfirmModal";
 
 // User interface - adjust based on your auth system
 interface User {
@@ -25,6 +26,7 @@ const EmailPage: React.FC = () => {
   const [, setUser] = useState<User | null>(null);
   const [, setVisibleUsers] = useState<any[]>([]);
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [composeData, setComposeData] = useState({
     to: '',
     cc: '',
@@ -389,9 +391,10 @@ const EmailPage: React.FC = () => {
   };
 
   const handleEmptyTrash = async () => {
-    if (!window.confirm('Are you sure you want to permanently delete all emails in trash?')) {
-      return;
-    }
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
       setLoading(true);
       await emailService.emptyTrash(userId);
@@ -402,6 +405,7 @@ const EmailPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+    setShowDeleteModal(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -744,6 +748,8 @@ const EmailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={handleDeleteConfirm} message="Are you sure you want to permanently delete all emails in trash?" />
 
       {selectedEmail && (
         <div 

@@ -1,8 +1,3 @@
-/**
- * Multi-tenant Middleware
- * Provides tenant isolation for multi-institution deployments
- */
-
 import mongoose from 'mongoose';
 import { forbiddenResponse, unauthorizedResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';

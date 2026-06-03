@@ -204,8 +204,8 @@ const uploadExportFile = async (request, payload) => {
 const DATA_FETCHERS = {
   personal: async (request, filters) => {
     const baseQuery = {};
-    if (request.schoolId) {
-      baseQuery.schoolId = request.schoolId;
+    if (request.institutionId) {
+      baseQuery.institutionId = request.institutionId;
     }
     const query = applyFilters(baseQuery, filters, ['classId', 'sectionId', 'status', 'academicYear']);
     return Student.find(query)
@@ -215,8 +215,8 @@ const DATA_FETCHERS = {
   },
   academic: async (request, filters) => {
     const baseQuery = {};
-    if (request.schoolId) {
-      baseQuery.schoolId = request.schoolId;
+    if (request.institutionId) {
+      baseQuery.institutionId = request.institutionId;
     }
     const query = applyFilters(baseQuery, filters, ['classId', 'academicYear', 'term', 'status']);
     return StudentResult.find(query)
@@ -226,8 +226,8 @@ const DATA_FETCHERS = {
   },
   financial: async (request, filters) => {
     const baseQuery = {};
-    if (request.schoolId) {
-      baseQuery.schoolId = request.schoolId;
+    if (request.institutionId) {
+      baseQuery.institutionId = request.institutionId;
     }
     const query = applyFilters(baseQuery, filters, ['status', 'feeType', 'academicYear', 'month', 'year']);
     return Fee.find(query)
@@ -253,8 +253,8 @@ const DATA_FETCHERS = {
   },
   communication: async (request, filters) => {
     const baseQuery = {};
-    if (request.schoolId) {
-      baseQuery.schoolId = request.schoolId;
+    if (request.institutionId) {
+      baseQuery.institutionId = request.institutionId;
     }
     const query = applyFilters(baseQuery, filters, ['type', 'isRead']);
     return Notification.find(query)

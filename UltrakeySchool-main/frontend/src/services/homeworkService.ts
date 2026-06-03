@@ -71,10 +71,12 @@ export interface HomeworkFilters {
   endDate?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  institutionId?: string;
 }
 
 export interface PaginatedHomeworkResponse {
-  homeworks: Homework[];
+  homeworks?: Homework[];
+  homeWorks?: Homework[];
   total: number;
   page: number;
   limit: number;
@@ -89,15 +91,16 @@ export const homeworkService = {
     if (params?.limit) queryParams.limit = String(params.limit);
     if (params?.search) queryParams.search = params.search;
     if (params?.classId) queryParams.classId = params.classId;
-    if (params?.subject) queryParams.subject = params.subject;
+    if (params?.subject) queryParams.subjectId = params.subject;
     if (params?.teacherId) queryParams.teacherId = params.teacherId;
     if (params?.status) queryParams.status = params.status;
     if (params?.startDate) queryParams.startDate = params.startDate;
     if (params?.endDate) queryParams.endDate = params.endDate;
     if (params?.sortBy) queryParams.sortBy = params.sortBy;
     if (params?.sortOrder) queryParams.sortOrder = params.sortOrder;
+    if (params?.institutionId) queryParams.institutionId = params.institutionId;
     
-    const response: ApiResponse<PaginatedHomeworkResponse> = await apiService.get(
+    const response: ApiResponse<any> = await apiService.get(
       API_ENDPOINTS.HOMEWORK.LIST,
       queryParams
     );
@@ -106,7 +109,14 @@ export const homeworkService = {
       throw new Error(response.message || 'Failed to fetch homework');
     }
     
-    return response.data;
+    const data = response.data;
+    return {
+      homeworks: data.homeWorks || data.homeworks || [],
+      total: data.total || data.pagination?.total || 0,
+      page: data.page || data.pagination?.page || 1,
+      limit: data.limit || data.pagination?.limit || 20,
+      totalPages: data.totalPages || data.pagination?.pages || 0
+    };
   },
 
   async getById(id: string): Promise<Homework> {
@@ -122,9 +132,10 @@ export const homeworkService = {
   },
 
   async create(data: CreateHomeworkInput): Promise<Homework> {
+    const { subject, ...rest } = data;
     const response: ApiResponse<Homework> = await apiService.post(
       API_ENDPOINTS.HOMEWORK.CREATE,
-      data
+      { ...rest, subjectId: subject }
     );
     
     if (!response.success || !response.data) {
@@ -135,9 +146,10 @@ export const homeworkService = {
   },
 
   async update(id: string, data: UpdateHomeworkInput): Promise<Homework> {
+    const { subject, ...rest } = data;
     const response: ApiResponse<Homework> = await apiService.put(
       API_ENDPOINTS.HOMEWORK.UPDATE(id),
-      data
+      { ...rest, subjectId: subject }
     );
     
     if (!response.success || !response.data) {

@@ -1,17 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { apiClient } from '../../../api/client';
-
-interface Module {
-  id: string;
-  name: string;
-  key: string;
-  enabled: boolean;
-  description: string;
-  icon: string;
-  category: string;
-}
+import { useAuthStore } from '../../../store/authStore';
+import authService from '../../../api/authService';
+import uploadService from '../../../services/uploadService';
 
 interface InstitutionProfile {
   name: string;
@@ -25,7 +18,12 @@ interface InstitutionProfile {
   country: string;
   postalCode: string;
   website: string;
-  logo?: string;
+}
+
+interface UserProfileData {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 interface LocalizationSettings {
@@ -35,6 +33,13 @@ interface LocalizationSettings {
   dateFormat: string;
   timeFormat: '12h' | '24h';
   language: string;
+}
+
+interface SecuritySettings {
+  sessionTimeout: number;
+  passwordExpiry: number;
+  ipWhitelist: string[];
+  loginAttempts: number;
 }
 
 interface NotificationSettings {
@@ -49,13 +54,6 @@ interface NotificationSettings {
   announcements: boolean;
 }
 
-interface SecuritySettings {
-  sessionTimeout: number;
-  passwordExpiry: number;
-  ipWhitelist: string[];
-  loginAttempts: number;
-}
-
 interface EmailConfig {
   enabled: boolean;
   provider: 'smtp' | 'phpMailer' | 'google';
@@ -66,6 +64,7 @@ interface EmailConfig {
   encryption: 'tls' | 'ssl' | 'none';
   fromEmail: string;
   fromName: string;
+  supportEmail: string;
 }
 
 interface SmsConfig {
@@ -81,6 +80,10 @@ interface PaymentGateway {
   merchantId: string;
   apiKey: string;
   environment: 'test' | 'live';
+  razorpay?: {
+    keyId: string;
+    keySecret: string;
+  };
 }
 
 interface TaxSetting {
@@ -98,41 +101,48 @@ interface StorageSetting {
 
 const InstitutionSettingsPage: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('modules');
+  const [saving, setSaving] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('profile');
   const institutionId = localStorage.getItem('institutionId') || '';
+  const { user } = useAuthStore() as any;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // Sync activeTab with URL path
   useEffect(() => {
     const path = location.pathname;
-    const pathParts = path.split('/');
-    const lastPart = pathParts[pathParts.length - 1];
-    
-    // Map URL path to tab
+    const lastPart = path.split('/').pop() || '';
     const pathToTab: Record<string, string> = {
-      'settings': 'modules',
-      'modules': 'modules',
+      'settings': 'profile',   // index case: /dashboard/main/settings → show profile
       'profile': 'profile',
-      'security': 'security',
+      'general': 'settings',   // /dashboard/main/settings/general → show settings
       'notifications': 'notifications',
-      'company': 'company',
-      'localization': 'localization',
-      'email': 'email',
-      'sms': 'sms',
-      'payment': 'payment',
-      'tax': 'tax',
-      'school': 'school',
-      'storage': 'storage'
+      'company': 'settings',
+      'localization': 'settings',
+      'email': 'settings',
+      'sms': 'settings',
+      'payment': 'settings',
+      'tax': 'settings',
+      'school': 'settings',
+      'storage': 'settings'
     };
-    
     if (pathToTab[lastPart]) {
       setActiveTab(pathToTab[lastPart]);
     }
   }, [location.pathname]);
 
-  const [modules, setModules] = useState<Module[]>([]);
+  // Profile photo
+  const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || user?.profilePhoto || '');
+
+  // Profile state (user)
+  const [userProfile, setUserProfile] = useState<UserProfileData>({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  // Institution profile state
   const [profile, setProfile] = useState<InstitutionProfile>({
     name: '',
     code: '',
@@ -146,26 +156,17 @@ const InstitutionSettingsPage: React.FC = () => {
     postalCode: '',
     website: ''
   });
+
+  // Settings state
   const [security, setSecurity] = useState<SecuritySettings>({
     sessionTimeout: 30,
     passwordExpiry: 90,
     ipWhitelist: [],
     loginAttempts: 5
   });
-  const [notifications, setNotifications] = useState<NotificationSettings>({
-    emailNotifications: true,
-    smsNotifications: true,
-    pushNotifications: true,
-    studentAdmission: true,
-    feePayment: true,
-    examSchedule: true,
-    attendance: true,
-    homework: true,
-    announcements: true
-  });
   const [localization, setLocalization] = useState<LocalizationSettings>({
-    currency: 'USD',
-    currencySymbol: '$',
+    currency: 'INR',
+    currencySymbol: '₹',
     timezone: 'UTC',
     dateFormat: 'DD/MM/YYYY',
     timeFormat: '12h',
@@ -180,7 +181,8 @@ const InstitutionSettingsPage: React.FC = () => {
     password: '',
     encryption: 'tls',
     fromEmail: '',
-    fromName: ''
+    fromName: '',
+    supportEmail: ''
   });
   const [smsConfig, setSmsConfig] = useState<SmsConfig>({
     enabled: false,
@@ -207,6 +209,20 @@ const InstitutionSettingsPage: React.FC = () => {
     allowedTypes: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx']
   });
 
+  // Notification state
+  const [notifications, setNotifications] = useState<NotificationSettings>({
+    emailNotifications: true,
+    smsNotifications: true,
+    pushNotifications: true,
+    studentAdmission: true,
+    feePayment: true,
+    examSchedule: true,
+    attendance: true,
+    homework: true,
+    announcements: true
+  });
+
+
   useEffect(() => {
     fetchAllSettings();
   }, [institutionId]);
@@ -215,7 +231,6 @@ const InstitutionSettingsPage: React.FC = () => {
     try {
       setLoading(true);
       await Promise.all([
-        fetchModules(),
         fetchProfile(),
         fetchSecurity(),
         fetchNotifications(),
@@ -230,19 +245,6 @@ const InstitutionSettingsPage: React.FC = () => {
       console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchModules = async () => {
-    try {
-      const response = await apiClient.get(`/institution/${institutionId}/modules`);
-      if (response.data?.success && response.data?.data) {
-        setModules(response.data.data);
-      } else {
-        setModules(getDefaultModules());
-      }
-    } catch {
-      setModules(getDefaultModules());
     }
   };
 
@@ -294,7 +296,6 @@ const InstitutionSettingsPage: React.FC = () => {
     try {
       const response = await apiClient.get(`/institution/${institutionId}/email-config`);
       if (response.data?.success && response.data?.data) {
-        // Ensure all properties have default values to prevent controlled input issues
         setEmailConfig({
           enabled: response.data.data.enabled || false,
           provider: response.data.data.provider || 'smtp',
@@ -316,7 +317,6 @@ const InstitutionSettingsPage: React.FC = () => {
     try {
       const response = await apiClient.get(`/institution/${institutionId}/sms-config`);
       if (response.data?.success && response.data?.data) {
-        // Ensure all properties have default values to prevent controlled input issues
         setSmsConfig({
           enabled: response.data.data.enabled || false,
           provider: response.data.data.provider || '',
@@ -333,13 +333,17 @@ const InstitutionSettingsPage: React.FC = () => {
     try {
       const response = await apiClient.get(`/institution/${institutionId}/payment-gateway`);
       if (response.data?.success && response.data?.data) {
-        // Ensure all properties have default values to prevent controlled input issues
+        const data = response.data.data;
         setPaymentGateway({
-          enabled: response.data.data.enabled || false,
-          provider: response.data.data.provider || '',
-          apiKey: response.data.data.apiKey || '',
-          merchantId: response.data.data.merchantId || '',
-          environment: response.data.data.environment || 'test'
+          enabled: data.enabled || false,
+          provider: data.provider || '',
+          apiKey: data.apiKey || '',
+          merchantId: data.merchantId || '',
+          environment: data.environment || 'test',
+          razorpay: {
+            keyId: data.razorpay?.keyId || '',
+            keySecret: data.razorpay?.keySecret || ''
+          }
         });
       }
     } catch {
@@ -362,7 +366,6 @@ const InstitutionSettingsPage: React.FC = () => {
     try {
       const response = await apiClient.get(`/institution/${institutionId}/storage`);
       if (response.data?.success && response.data?.data) {
-        // Ensure allowedTypes is always present
         setStorage({
           ...response.data.data,
           allowedTypes: response.data.data.allowedTypes || ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx']
@@ -373,482 +376,594 @@ const InstitutionSettingsPage: React.FC = () => {
     }
   };
 
-  const getDefaultModules = (): Module[] => [
-    { id: '1', name: 'Student Management', key: 'student_management', enabled: true, description: 'Manage student records, admissions, and profiles', icon: 'ti-users', category: 'academic' },
-    { id: '2', name: 'Teacher Management', key: 'teacher_management', enabled: true, description: 'Manage teacher profiles, assignments, and attendance', icon: 'ti-user', category: 'academic' },
-    { id: '3', name: 'Academic Management', key: 'academic_management', enabled: true, description: 'Classes, subjects, timetables, and syllabi', icon: 'ti-book', category: 'academic' },
-    { id: '4', name: 'Examination', key: 'examination', enabled: true, description: 'Exams, schedules, and result management', icon: 'ti-clipboard-list', category: 'academic' },
-    { id: '5', name: 'Attendance', key: 'attendance', enabled: true, description: 'Track student and staff attendance', icon: 'ti-calendar', category: 'academic' },
-    { id: '6', name: 'Fee Management', key: 'fee_management', enabled: true, description: 'Fee collection, invoices, and payment tracking', icon: 'ti-credit-card', category: 'finance' },
-    { id: '7', name: 'Library', key: 'library', enabled: true, description: 'Book management and issue tracking', icon: 'ti-bookmark', category: 'academic' },
-    { id: '8', name: 'Hostel', key: 'hostel', enabled: false, description: 'Hostel room allocation and management', icon: 'ti-home', category: 'infrastructure' },
-    { id: '9', name: 'Transport', key: 'transport', enabled: false, description: 'Vehicle and route management', icon: 'ti-bus', category: 'infrastructure' },
-    { id: '10', name: 'HRM', key: 'hrm', enabled: false, description: 'Staff management, payroll, and leave tracking', icon: 'ti-id-badge', category: 'hr' },
-    { id: '11', name: 'Reports', key: 'reports', enabled: true, description: 'Generate various analytical reports', icon: 'ti-chart-bar', category: 'analytics' },
-    { id: '12', name: 'Announcements', key: 'announcements', enabled: true, description: 'Send notices and notifications', icon: 'ti-bell', category: 'communication' },
-    { id: '13', name: 'Chat & Messaging', key: 'messaging', enabled: true, description: 'Internal messaging system', icon: 'ti-message', category: 'communication' },
-    { id: '14', name: 'Parent Portal', key: 'parent_portal', enabled: true, description: 'Parent access to student information', icon: 'ti-users', category: 'communication' },
-    { id: '15', name: 'Online Admission', key: 'online_admission', enabled: false, description: 'Accept online admission applications', icon: 'ti-world', category: 'admission' }
-  ];
-
   const saveSettings = async (type: string, data: any) => {
+    const key = type;
     try {
-      setSaving(true);
+      setSaving(key);
       const response = await apiClient.put(`/institution/${institutionId}/${type}`, data);
       if (response.data?.success) {
-        toast.success(`${type.replace('-', ' ')} settings saved successfully`);
+        toast.success(`Settings saved successfully`);
       } else {
         toast.error(response.data?.message || 'Failed to save settings');
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || `Failed to save ${type} settings`);
+      toast.error(error.response?.data?.message || `Failed to save settings`);
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
-  const toggleModule = async (moduleId: string) => {
-    const updatedModules = modules.map(m => 
-      m.id === moduleId ? { ...m, enabled: !m.enabled } : m
-    );
-    setModules(updatedModules);
-    await saveSettings('modules', { modules: updatedModules });
+  // ─── Profile Tab ────────────────────────────────────────────────────────
+
+  const handleUpdateProfile = async () => {
+    try {
+      setSaving('profile');
+      const response = await apiClient.put(`/institution/${institutionId}/profile`, profile);
+      if (response.data?.success) {
+        toast.success('Institution profile updated successfully');
+      } else {
+        toast.error(response.data?.message || 'Failed to update profile');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to update profile');
+    } finally {
+      setSaving(null);
+    }
   };
 
-  const handleSaveProfile = async () => {
-    await saveSettings('profile', profile);
+  const handleChangePassword = async () => {
+    if (!userProfile.currentPassword) {
+      toast.error('Please enter your current password');
+      return;
+    }
+    if (!userProfile.newPassword) {
+      toast.error('Please enter a new password');
+      return;
+    }
+    if (userProfile.newPassword !== userProfile.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (userProfile.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (userProfile.currentPassword === userProfile.newPassword) {
+      toast.error('New password must be different from current password');
+      return;
+    }
+
+    try {
+      setSaving('password');
+      await authService.changePassword({
+        currentPassword: userProfile.currentPassword,
+        newPassword: userProfile.newPassword
+      });
+      toast.success('Password changed successfully');
+      setUserProfile(prev => ({
+        ...prev,
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      }));
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to change password');
+    } finally {
+      setSaving(null);
+    }
   };
 
-  const handleSaveSecurity = async () => {
-    await saveSettings('security', security);
+  // ─── Settings Tab ────────────────────────────────────────────────────────
+
+  const handleSaveSettings = async (section: string, data: any) => {
+    const endpointMap: Record<string, string> = {
+      security: 'security',
+      localization: 'localization',
+      email: 'email-config',
+      sms: 'sms-config',
+      payment: 'payment-gateway',
+      tax: 'tax-settings',
+      storage: 'storage'
+    };
+    await saveSettings(endpointMap[section] || section, data);
   };
+
+  // ─── Notifications Tab ──────────────────────────────────────────────────
 
   const handleSaveNotifications = async () => {
     await saveSettings('notifications', notifications);
   };
 
-  const handleSaveLocalization = async () => {
-    await saveSettings('localization', localization);
+  // ─── Tabs ───────────────────────────────────────────────────────────────
+
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: 'ti ti-user' },
+    { id: 'settings', label: 'Settings', icon: 'ti ti-settings' },
+    { id: 'notifications', label: 'Notifications', icon: 'ti ti-bell' }
+  ];
+
+  const getTabLink = (tabId: string) => {
+    if (tabId === 'settings') return `/dashboard/main/settings/general`;
+    return `/dashboard/main/settings/${tabId}`;
   };
 
-  const handleSaveEmailConfig = async () => {
-    await saveSettings('email-config', emailConfig);
-  };
+  // ─── Profile Photo Upload ──────────────────────────────────────────────
 
-  const handleSaveSmsConfig = async () => {
-    await saveSettings('sms-config', smsConfig);
-  };
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const handleSavePaymentGateway = async () => {
-    await saveSettings('payment-gateway', paymentGateway);
-  };
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
 
-  const handleSaveTaxSettings = async () => {
-    await saveSettings('tax-settings', taxSettings);
-  };
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
 
-  const handleSaveStorage = async () => {
-    await saveSettings('storage', storage);
-  };
-
-  const requestPermission = async (moduleKey: string) => {
     try {
-      const response = await apiClient.post('/superadmin/module-requests', {
-        institutionId,
-        moduleKey,
-        requestedBy: localStorage.getItem('userId')
-      });
-      if (response.data?.success) {
-        toast.success('Permission request sent to superadmin');
+      setUploadingPhoto(true);
+      const result = await uploadService.uploadSingle(file, { folder: 'profiles' });
+      if (result?.success && result?.file?.url) {
+        setAvatarUrl(result.file.url);
+        // Update user avatar via profile API
+        await apiClient.put(`/institution/${institutionId}/profile`, {
+          ...profile,
+          logo: result.file.url,
+          avatar: result.file.url
+        });
+        toast.success('Profile photo updated successfully');
+      } else if (result?.file?.url) {
+        setAvatarUrl(result.file.url);
+        toast.success('Profile photo updated successfully');
+      } else {
+        toast.error('Failed to upload photo');
       }
-    } catch {
-      toast.error('Failed to request permission');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const tabs = [
-    { id: 'modules', label: 'Module Activation', icon: 'ti-apps' },
-    { id: 'profile', label: 'Profile', icon: 'ti-user' },
-    { id: 'security', label: 'Security', icon: 'ti-lock' },
-    { id: 'notifications', label: 'Notifications', icon: 'ti-bell' },
-    { id: 'localization', label: 'Localization', icon: 'ti-world' },
-    { id: 'company', label: 'Company Info', icon: 'ti-building' },
-    { id: 'email', label: 'Email Config', icon: 'ti-mail' },
-    { id: 'sms', label: 'SMS Config', icon: 'ti-comment' },
-    { id: 'payment', label: 'Payment Gateway', icon: 'ti-credit-card' },
-    { id: 'tax', label: 'Tax Settings', icon: 'ti-receipt' },
-    { id: 'school', label: 'School Settings', icon: 'ti-school' },
-    { id: 'storage', label: 'Storage', icon: 'ti-server' }
-  ];
-
-  const renderModulesTab = () => {
-  // Ensure modules is always an array
-  const safeModules = Array.isArray(modules) ? modules : [];
-  
-  return (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Module Activation</h5>
-          <p className="text-muted mb-0">Enable or disable modules for your institution</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => saveSettings('modules', { modules })} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
-      
-      <div className="row">
-        {safeModules.filter(m => m.category === 'academic').length > 0 && (
-          <div className="col-12 mb-4">
-            <h6 className="text-muted mb-3">Academic Modules</h6>
-            <div className="row">
-              {safeModules.filter(m => m.category === 'academic').map(module => (
-                <div className="col-xl-4 col-lg-6 mb-3" key={module.id}>
-                  <div className="card h-100">
-                    <div className="card-body">
-                      <div className="d-flex align-items-start justify-content-between">
-                        <div className="d-flex">
-                          <div className="avatar avatar-lg bg-light rounded me-3">
-                            <i className={`ti ${module.icon} fs-4 text-primary`}></i>
-                          </div>
-                          <div>
-                            <h6 className="mb-1">{module.name}</h6>
-                            <p className="text-muted small mb-0">{module.description}</p>
-                          </div>
-                        </div>
-                        <div className="form-check form-switch">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={module.enabled}
-                            onChange={() => toggleModule(module.id)}
-                          />
-                        </div>
-                      </div>
-                      {!module.enabled && (
-                        <button 
-                          className="btn btn-sm btn-outline-primary mt-2"
-                          onClick={() => requestPermission(module.key)}
-                        >
-                          Request Permission
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {safeModules.filter(m => m.category === 'finance').length > 0 && (
-          <div className="col-12 mb-4">
-            <h6 className="text-muted mb-3">Finance Modules</h6>
-            <div className="row">
-              {safeModules.filter(m => m.category === 'finance').map(module => (
-                <div className="col-xl-4 col-lg-6 mb-3" key={module.id}>
-                  <div className="card h-100">
-                    <div className="card-body">
-                      <div className="d-flex align-items-start justify-content-between">
-                        <div className="d-flex">
-                          <div className="avatar avatar-lg bg-light rounded me-3">
-                            <i className={`ti ${module.icon} fs-4 text-success`}></i>
-                          </div>
-                          <div>
-                            <h6 className="mb-1">{module.name}</h6>
-                            <p className="text-muted small mb-0">{module.description}</p>
-                          </div>
-                        </div>
-                        <div className="form-check form-switch">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={module.enabled}
-                            onChange={() => toggleModule(module.id)}
-                          />
-                        </div>
-                      </div>
-                      {!module.enabled && (
-                        <button 
-                          className="btn btn-sm btn-outline-primary mt-2"
-                          onClick={() => requestPermission(module.key)}
-                        >
-                          Request Permission
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {safeModules.filter(m => m.category === 'hr' || m.category === 'infrastructure').length > 0 && (
-          <div className="col-12 mb-4">
-            <h6 className="text-muted mb-3">Infrastructure & HR</h6>
-            <div className="row">
-              {safeModules.filter(m => m.category === 'hr' || m.category === 'infrastructure').map(module => (
-                <div className="col-xl-4 col-lg-6 mb-3" key={module.id}>
-                  <div className="card h-100">
-                    <div className="card-body">
-                      <div className="d-flex align-items-start justify-content-between">
-                        <div className="d-flex">
-                          <div className="avatar avatar-lg bg-light rounded me-3">
-                            <i className={`ti ${module.icon} fs-4 text-warning`}></i>
-                          </div>
-                          <div>
-                            <h6 className="mb-1">{module.name}</h6>
-                            <p className="text-muted small mb-0">{module.description}</p>
-                          </div>
-                        </div>
-                        <div className="form-check form-switch">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={module.enabled}
-                            onChange={() => toggleModule(module.id)}
-                          />
-                        </div>
-                      </div>
-                      {!module.enabled && (
-                        <button 
-                          className="btn btn-sm btn-outline-primary mt-2"
-                          onClick={() => requestPermission(module.key)}
-                        >
-                          Request Permission
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {safeModules.filter(m => m.category === 'communication' || m.category === 'admission' || m.category === 'analytics').length > 0 && (
-          <div className="col-12">
-            <h6 className="text-muted mb-3">Communication & Other</h6>
-            <div className="row">
-              {safeModules.filter(m => m.category === 'communication' || m.category === 'admission' || m.category === 'analytics').map(module => (
-                <div className="col-xl-4 col-lg-6 mb-3" key={module.id}>
-                  <div className="card h-100">
-                    <div className="card-body">
-                      <div className="d-flex align-items-start justify-content-between">
-                        <div className="d-flex">
-                          <div className="avatar avatar-lg bg-light rounded me-3">
-                            <i className={`ti ${module.icon} fs-4 text-info`}></i>
-                          </div>
-                          <div>
-                            <h6 className="mb-1">{module.name}</h6>
-                            <p className="text-muted small mb-0">{module.description}</p>
-                          </div>
-                        </div>
-                        <div className="form-check form-switch">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={module.enabled}
-                            onChange={() => toggleModule(module.id)}
-                          />
-                        </div>
-                      </div>
-                      {!module.enabled && (
-                        <button 
-                          className="btn btn-sm btn-outline-primary mt-2"
-                          onClick={() => requestPermission(module.key)}
-                        >
-                          Request Permission
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-  };
+  // ─── Render Profile Tab ─────────────────────────────────────────────────
 
   const renderProfileTab = () => (
     <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Institution Profile</h5>
-          <p className="text-muted mb-0">Manage your institution profile information</p>
+      {/* Profile Header */}
+      <div className="card mb-4" style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
+        <div className="card-body py-4">
+          <div className="d-flex align-items-center">
+            <div
+              className="d-flex align-items-center justify-content-center me-3"
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                fontSize: '1.6rem',
+                color: 'white',
+              }}
+            >
+              <i className="ti ti-user"></i>
+            </div>
+            <div>
+              <h5 className="mb-1 text-white">Profile Settings</h5>
+              <p className="mb-0" style={{ opacity: 0.85, fontSize: '0.9rem' }}>
+                Manage your institution profile, admin details, and account security
+              </p>
+            </div>
+          </div>
         </div>
-        <button className="btn btn-primary" onClick={handleSaveProfile} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Profile'}
-        </button>
       </div>
-      
-      <div className="card">
+
+      {/* Admin User Profile Card */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="d-flex align-items-center">
+            {/* Profile Photo */}
+            <div className="position-relative me-4" style={{ width: 100, height: 100, flexShrink: 0 }}>
+              <div
+                style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '3px solid #e2e8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: '#f1f5f9',
+                  cursor: 'pointer',
+                  position: 'relative',
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                title="Click to change photo"
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Profile"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '2.5rem',
+                      fontWeight: 700,
+                      color: '#6366f1',
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    }}
+                  >
+                    {user?.name?.charAt(0)?.toUpperCase() || 'A'}
+                  </div>
+                )}
+                {/* Camera overlay */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    right: 0,
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    backgroundColor: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    border: '2px solid white',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  <i className="ti ti-camera"></i>
+                </div>
+                {uploadingPhoto && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(0,0,0,0.4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                    }}
+                  >
+                    <div className="spinner-border spinner-border-sm" role="status" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handlePhotoUpload}
+              />
+            </div>
+
+            {/* Admin Details */}
+            <div>
+              <h4 className="mb-1">{user?.name || 'Admin User'}</h4>
+              <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <span className="badge bg-primary">{user?.role || 'institution_admin'}</span>
+                <div style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                  <i className="ti ti-mail me-1"></i>{user?.email || '—'}
+                </div>
+              </div>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                <i className="ti ti-building me-1"></i>{profile.name || 'Your Institution'} · {profile.code || ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Institution Logo */}
+      <div className="card mb-4">
+        <div className="card-header">
+          <h6 className="mb-0">Institution Logo</h6>
+        </div>
+        <div className="card-body">
+          <div className="d-flex align-items-center gap-4">
+            <div className="position-relative">
+              {profile.logo ? (
+                <img
+                  src={profile.logo}
+                  alt="Institution Logo"
+                  className="rounded border"
+                  style={{ width: '120px', height: '120px', objectFit: 'contain' }}
+                />
+              ) : (
+                <div
+                  className="rounded border bg-light d-flex align-items-center justify-content-center"
+                  style={{ width: '120px', height: '120px' }}
+                >
+                  <i className="ti ti-building fs-3 text-muted"></i>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="btn btn-outline-primary btn-sm">
+                <i className="ti ti-upload me-1"></i>Upload Logo
+                <input
+                  type="file"
+                  className="d-none"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const result = await uploadService.uploadSingle(file, { folder: `institution_${institutionId}` });
+                      const logoUrl = result?.file?.url || result?.url || '';
+                      if (logoUrl) {
+                        await apiClient.post(`/institution/${institutionId}/logo`, { logo: logoUrl });
+                        setProfile(prev => ({ ...prev, logo: logoUrl }));
+                        toast.success('Logo uploaded successfully');
+                      }
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.message || 'Failed to upload logo');
+                    }
+                  }}
+                />
+              </label>
+              <p className="text-muted small mb-0 mt-1">Recommended: 200x200px, PNG or JPG</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Institution Profile */}
+      <div className="card mb-4">
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Institution Profile</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleUpdateProfile}
+            disabled={saving === 'profile'}
+          >
+            {saving === 'profile' ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
         <div className="card-body">
           <div className="row">
             <div className="col-md-6 mb-3">
               <label className="form-label">Institution Name</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.name}
-                onChange={(e) => setProfile({...profile, name: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Institution Code</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.code}
-                onChange={(e) => setProfile({...profile, code: e.target.value})}
                 disabled
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Email</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 className="form-control"
                 value={profile.email}
-                onChange={(e) => setProfile({...profile, email: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, email: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Phone</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.phone}
-                onChange={(e) => setProfile({...profile, phone: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
               />
             </div>
             <div className="col-12 mb-3">
               <label className="form-label">Address</label>
-              <textarea 
+              <textarea
                 className="form-control"
                 rows={2}
                 value={profile.address}
-                onChange={(e) => setProfile({...profile, address: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, address: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">City</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.city}
-                onChange={(e) => setProfile({...profile, city: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, city: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">State</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.state}
-                onChange={(e) => setProfile({...profile, state: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, state: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Country</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.country}
-                onChange={(e) => setProfile({...profile, country: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, country: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Postal Code</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={profile.postalCode}
-                onChange={(e) => setProfile({...profile, postalCode: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, postalCode: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Website</label>
-              <input 
-                type="url" 
+              <input
+                type="url"
                 className="form-control"
                 value={profile.website}
-                onChange={(e) => setProfile({...profile, website: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, website: e.target.value })}
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="card">
+        <div className="card-header">
+          <h6 className="mb-0">Change Password</h6>
+        </div>
+        <div className="card-body">
+          <div className="row">
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Current Password</label>
+              <input
+                type="password"
+                className="form-control"
+                value={userProfile.currentPassword}
+                onChange={(e) => setUserProfile({ ...userProfile, currentPassword: e.target.value })}
+                placeholder="Enter current password"
+              />
+            </div>
+            <div className="col-md-4 mb-3">
+              <label className="form-label">New Password</label>
+              <input
+                type="password"
+                className="form-control"
+                value={userProfile.newPassword}
+                onChange={(e) => setUserProfile({ ...userProfile, newPassword: e.target.value })}
+                placeholder="Enter new password"
+              />
+            </div>
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Confirm New Password</label>
+              <input
+                type="password"
+                className="form-control"
+                value={userProfile.confirmPassword}
+                onChange={(e) => setUserProfile({ ...userProfile, confirmPassword: e.target.value })}
+                placeholder="Confirm new password"
+              />
+            </div>
+          </div>
+          <button
+            className="btn btn-warning"
+            onClick={handleChangePassword}
+            disabled={saving === 'password'}
+          >
+            {saving === 'password' ? 'Changing...' : 'Change Password'}
+          </button>
         </div>
       </div>
     </div>
   );
 
-  const renderSecurityTab = () => (
+  // ─── Render Settings Tab ────────────────────────────────────────────────
+
+  const renderSettingsTab = () => (
     <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Security Settings</h5>
-          <p className="text-muted mb-0">Configure security settings for your institution</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveSecurity} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
-      <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Authentication</h6>
-        </div>
-        <div className="card-body">
-          <div className="row mt-3">
-            <div className="col-md-6">
-              <label className="form-label">Session Timeout (minutes)</label>
-              <input 
-                type="number" 
-                className="form-control"
-                value={security.sessionTimeout}
-                onChange={(e) => setSecurity({...security, sessionTimeout: parseInt(e.target.value)})}
-              />
+      {/* Settings Header */}
+      <div className="card mb-4 bg-gradient-primary text-white" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div className="card-body py-4">
+          <div className="d-flex align-items-center">
+            <div
+              className="d-flex align-items-center justify-content-center me-3"
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                fontSize: '1.6rem',
+                color: 'white',
+              }}
+            >
+              <i className="ti ti-settings"></i>
             </div>
-            <div className="col-md-6">
-              <label className="form-label">Password Expiry (days)</label>
-              <input 
-                type="number" 
-                className="form-control"
-                value={security.passwordExpiry}
-                onChange={(e) => setSecurity({...security, passwordExpiry: parseInt(e.target.value)})}
-              />
+            <div>
+              <h5 className="mb-1 text-white">System Configuration</h5>
+              <p className="mb-0" style={{ opacity: 0.85, fontSize: '0.9rem' }}>
+                Manage security, localization, email, SMS, payment gateway, and storage settings for your institution
+              </p>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Security */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Login Security</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Security</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('security', security)}
+            disabled={saving === 'security'}
+          >
+            {saving === 'security' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="row">
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Max Login Attempts</label>
-              <input 
-                type="number" 
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Session Timeout (minutes)</label>
+              <input
+                type="number"
                 className="form-control"
-                value={security.loginAttempts}
-                onChange={(e) => setSecurity({...security, loginAttempts: parseInt(e.target.value)})}
+                value={security.sessionTimeout}
+                onChange={(e) => setSecurity({ ...security, sessionTimeout: parseInt(e.target.value) || 30 })}
               />
             </div>
-            <div className="col-md-6 mb-3">
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Password Expiry (days)</label>
+              <input
+                type="number"
+                className="form-control"
+                value={security.passwordExpiry}
+                onChange={(e) => setSecurity({ ...security, passwordExpiry: parseInt(e.target.value) || 90 })}
+              />
+            </div>
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Max Login Attempts</label>
+              <input
+                type="number"
+                className="form-control"
+                value={security.loginAttempts}
+                onChange={(e) => setSecurity({ ...security, loginAttempts: parseInt(e.target.value) || 5 })}
+              />
+            </div>
+            <div className="col-12 mb-3">
               <label className="form-label">IP Whitelist (comma separated)</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={Array.isArray(security.ipWhitelist) ? security.ipWhitelist.join(', ') : ''}
                 onChange={(e) => setSecurity({
-                  ...security, 
+                  ...security,
                   ipWhitelist: e.target.value.split(',').map(ip => ip.trim()).filter(ip => ip)
                 })}
                 placeholder="192.168.1.1, 10.0.0.1"
@@ -857,157 +972,50 @@ const InstitutionSettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderNotificationsTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Notification Settings</h5>
-          <p className="text-muted mb-0">Configure notification preferences</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveNotifications} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
+      {/* Localization */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Notification Channels</h6>
-        </div>
-        <div className="card-body">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h6 className="mb-1">Email Notifications</h6>
-              <p className="text-muted mb-0">Receive notifications via email</p>
-            </div>
-            <div className="form-check form-switch">
-              <input 
-                className="form-check-input"
-                type="checkbox"
-                checked={notifications.emailNotifications}
-                onChange={(e) => setNotifications({...notifications, emailNotifications: e.target.checked})}
-              />
-            </div>
-          </div>
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h6 className="mb-1">SMS Notifications</h6>
-              <p className="text-muted mb-0">Receive notifications via SMS</p>
-            </div>
-            <div className="form-check form-switch">
-              <input 
-                className="form-check-input"
-                type="checkbox"
-                checked={notifications.smsNotifications}
-                onChange={(e) => setNotifications({...notifications, smsNotifications: e.target.checked})}
-              />
-            </div>
-          </div>
-          <div className="d-flex align-items-center justify-content-between">
-            <div>
-              <h6 className="mb-1">Push Notifications</h6>
-              <p className="text-muted mb-0">Receive push notifications</p>
-            </div>
-            <div className="form-check form-switch">
-              <input 
-                className="form-check-input"
-                type="checkbox"
-                checked={notifications.pushNotifications}
-                onChange={(e) => setNotifications({...notifications, pushNotifications: e.target.checked})}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">Notification Types</h6>
-        </div>
-        <div className="card-body">
-          {[
-            { key: 'studentAdmission', label: 'Student Admission', desc: 'Notify on new student admissions' },
-            { key: 'feePayment', label: 'Fee Payment', desc: 'Notify on fee payments and due dates' },
-            { key: 'examSchedule', label: 'Exam Schedule', desc: 'Notify on exam schedule changes' },
-            { key: 'attendance', label: 'Attendance', desc: 'Notify on attendance records' },
-            { key: 'homework', label: 'Homework', desc: 'Notify on homework assignments' },
-            { key: 'announcements', label: 'Announcements', desc: 'Notify on general announcements' }
-          ].map(item => (
-            <div key={item.key} className="d-flex align-items-center justify-content-between mb-3">
-              <div>
-                <h6 className="mb-1">{item.label}</h6>
-                <p className="text-muted mb-0">{item.desc}</p>
-              </div>
-              <div className="form-check form-switch">
-                <input 
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={notifications[item.key as keyof NotificationSettings] as boolean}
-                  onChange={(e) => setNotifications({
-                    ...notifications, 
-                    [item.key]: e.target.checked
-                  })}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderLocalizationTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Localization Settings</h5>
-          <p className="text-muted mb-0">Configure regional and language settings</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveLocalization} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
-      <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Currency & Time</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Localization</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('localization', localization)}
+            disabled={saving === 'localization'}
+          >
+            {saving === 'localization' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="row">
             <div className="col-md-4 mb-3">
               <label className="form-label">Currency</label>
-              <select 
+              <select
                 className="form-select"
                 value={localization.currency}
-                onChange={(e) => setLocalization({...localization, currency: e.target.value})}
+                onChange={(e) => setLocalization({ ...localization, currency: e.target.value })}
               >
-                <option value="USD">USD - US Dollar</option>
                 <option value="EUR">EUR - Euro</option>
                 <option value="GBP">GBP - British Pound</option>
                 <option value="INR">INR - Indian Rupee</option>
                 <option value="AUD">AUD - Australian Dollar</option>
                 <option value="CAD">CAD - Canadian Dollar</option>
-                <option value="SGD">SGD - Singapore Dollar</option>
-                <option value="MYR">MYR - Malaysian Ringgit</option>
               </select>
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Currency Symbol</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={localization.currencySymbol}
-                onChange={(e) => setLocalization({...localization, currencySymbol: e.target.value})}
+                onChange={(e) => setLocalization({ ...localization, currencySymbol: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Timezone</label>
-              <select 
+              <select
                 className="form-select"
                 value={localization.timezone}
-                onChange={(e) => setLocalization({...localization, timezone: e.target.value})}
+                onChange={(e) => setLocalization({ ...localization, timezone: e.target.value })}
               >
                 <option value="UTC">UTC</option>
                 <option value="America/New_York">Eastern Time (ET)</option>
@@ -1016,27 +1024,16 @@ const InstitutionSettingsPage: React.FC = () => {
                 <option value="America/Los_Angeles">Pacific Time (PT)</option>
                 <option value="Asia/Kolkata">India (IST)</option>
                 <option value="Asia/Singapore">Singapore (SGT)</option>
-                <option value="Asia/Kuala_Lumpur">Malaysia (MYT)</option>
                 <option value="Europe/London">UK (GMT)</option>
                 <option value="Europe/Paris">Europe (CET)</option>
               </select>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">Date & Language</h6>
-        </div>
-        <div className="card-body">
-          <div className="row">
             <div className="col-md-4 mb-3">
               <label className="form-label">Date Format</label>
-              <select 
+              <select
                 className="form-select"
                 value={localization.dateFormat}
-                onChange={(e) => setLocalization({...localization, dateFormat: e.target.value})}
+                onChange={(e) => setLocalization({ ...localization, dateFormat: e.target.value })}
               >
                 <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                 <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -1046,10 +1043,10 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Time Format</label>
-              <select 
+              <select
                 className="form-select"
                 value={localization.timeFormat}
-                onChange={(e) => setLocalization({...localization, timeFormat: e.target.value as '12h' | '24h'})}
+                onChange={(e) => setLocalization({ ...localization, timeFormat: e.target.value as '12h' | '24h' })}
               >
                 <option value="12h">12 Hour</option>
                 <option value="24h">24 Hour</option>
@@ -1057,10 +1054,10 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Language</label>
-              <select 
+              <select
                 className="form-select"
                 value={localization.language}
-                onChange={(e) => setLocalization({...localization, language: e.target.value})}
+                onChange={(e) => setLocalization({ ...localization, language: e.target.value })}
               >
                 <option value="en">English</option>
                 <option value="hi">Hindi</option>
@@ -1075,116 +1072,82 @@ const InstitutionSettingsPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderCompanyTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Company Information</h5>
-          <p className="text-muted mb-0">Manage company details and branding</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveProfile} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
-      
+      {/* Tax Settings */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Basic Information</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Tax Settings</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('tax', taxSettings)}
+            disabled={saving === 'tax'}
+          >
+            {saving === 'tax' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="mb-1">Enable Tax</h6>
+              <p className="text-muted mb-0">Apply tax to fee calculations</p>
+            </div>
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                checked={taxSettings.enabled}
+                onChange={(e) => setTaxSettings({ ...taxSettings, enabled: e.target.checked })}
+              />
+            </div>
+          </div>
           <div className="row">
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Company Name</label>
-              <input 
-                type="text" 
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Tax Name</label>
+              <input
+                type="text"
                 className="form-control"
-                value={profile.name}
-                onChange={(e) => setProfile({...profile, name: e.target.value})}
+                value={taxSettings.name}
+                onChange={(e) => setTaxSettings({ ...taxSettings, name: e.target.value })}
+                placeholder="GST"
               />
             </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Registration Number</label>
-              <input 
-                type="text" 
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Tax Rate (%)</label>
+              <input
+                type="number"
                 className="form-control"
-                value={profile.code}
-                disabled
+                value={taxSettings.rate}
+                onChange={(e) => setTaxSettings({ ...taxSettings, rate: parseFloat(e.target.value) || 0 })}
+                min="0"
+                max="100"
+                step="0.01"
               />
             </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Email</label>
-              <input 
-                type="email" 
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Tax Number</label>
+              <input
+                type="text"
                 className="form-control"
-                value={profile.email}
-                onChange={(e) => setProfile({...profile, email: e.target.value})}
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Phone</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.phone}
-                onChange={(e) => setProfile({...profile, phone: e.target.value})}
-              />
-            </div>
-            <div className="col-12 mb-3">
-              <label className="form-label">Address</label>
-              <textarea 
-                className="form-control"
-                rows={3}
-                value={profile.address}
-                onChange={(e) => setProfile({...profile, address: e.target.value})}
+                value={taxSettings.number}
+                onChange={(e) => setTaxSettings({ ...taxSettings, number: e.target.value })}
+                placeholder="GSTIN123456"
               />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">Branding</h6>
-        </div>
-        <div className="card-body">
-          <div className="row">
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Website URL</label>
-              <input 
-                type="url" 
-                className="form-control"
-                value={profile.website}
-                onChange={(e) => setProfile({...profile, website: e.target.value})}
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Logo</label>
-              <input type="file" className="form-control" accept="image/*" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderEmailConfigTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Email Configuration</h5>
-          <p className="text-muted mb-0">Configure email provider settings</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveEmailConfig} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Configuration'}
-        </button>
-      </div>
-      
+      {/* Email Configuration */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Provider Selection</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Email Configuration</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('email', emailConfig)}
+            disabled={saving === 'email'}
+          >
+            {saving === 'email' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="d-flex align-items-center justify-content-between mb-3">
@@ -1193,78 +1156,70 @@ const InstitutionSettingsPage: React.FC = () => {
               <p className="text-muted mb-0">Send emails to users</p>
             </div>
             <div className="form-check form-switch">
-              <input 
+              <input
                 className="form-check-input"
                 type="checkbox"
                 checked={emailConfig.enabled}
-                onChange={(e) => setEmailConfig({...emailConfig, enabled: e.target.checked})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, enabled: e.target.checked })}
               />
             </div>
           </div>
-          <div className="mb-3">
-            <label className="form-label">Email Provider</label>
-            <select 
-              className="form-select"
-              value={emailConfig.provider}
-              onChange={(e) => setEmailConfig({...emailConfig, provider: e.target.value as 'smtp' | 'phpMailer' | 'google'})}
-            >
-              <option value="smtp">SMTP</option>
-              <option value="phpMailer">PHP Mailer</option>
-              <option value="google">Google Gmail</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">SMTP Settings</h6>
-        </div>
-        <div className="card-body">
           <div className="row">
-            <div className="col-md-8 mb-3">
+            <div className="col-md-4 mb-3">
+              <label className="form-label">Provider</label>
+              <select
+                className="form-select"
+                value={emailConfig.provider}
+                onChange={(e) => setEmailConfig({ ...emailConfig, provider: e.target.value as 'smtp' | 'phpMailer' | 'google' })}
+              >
+                <option value="smtp">SMTP</option>
+                <option value="phpMailer">PHP Mailer</option>
+                <option value="google">Google Gmail</option>
+              </select>
+            </div>
+            <div className="col-md-4 mb-3">
               <label className="form-label">SMTP Host</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={emailConfig.host}
-                onChange={(e) => setEmailConfig({...emailConfig, host: e.target.value})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, host: e.target.value })}
                 placeholder="smtp.gmail.com"
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Port</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 className="form-control"
                 value={emailConfig.port}
-                onChange={(e) => setEmailConfig({...emailConfig, port: parseInt(e.target.value)})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, port: parseInt(e.target.value, 10) || 587 })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Username</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={emailConfig.username}
-                onChange={(e) => setEmailConfig({...emailConfig, username: e.target.value})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, username: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Password</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 className="form-control"
                 value={emailConfig.password || ''}
-                onChange={(e) => setEmailConfig({...emailConfig, password: e.target.value})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, password: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">Encryption</label>
-              <select 
+              <select
                 className="form-select"
                 value={emailConfig.encryption}
-                onChange={(e) => setEmailConfig({...emailConfig, encryption: e.target.value as 'tls' | 'ssl' | 'none'})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, encryption: e.target.value as 'tls' | 'ssl' | 'none' })}
               >
                 <option value="tls">TLS</option>
                 <option value="ssl">SSL</option>
@@ -1273,66 +1228,73 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">From Email</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 className="form-control"
                 value={emailConfig.fromEmail}
-                onChange={(e) => setEmailConfig({...emailConfig, fromEmail: e.target.value})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, fromEmail: e.target.value })}
               />
             </div>
             <div className="col-md-4 mb-3">
               <label className="form-label">From Name</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={emailConfig.fromName}
-                onChange={(e) => setEmailConfig({...emailConfig, fromName: e.target.value})}
+                onChange={(e) => setEmailConfig({ ...emailConfig, fromName: e.target.value })}
               />
+            </div>
+            <div className="col-md-4 mb-3">
+              <label className="form-label">
+                Support Email <i className="ti ti-info-circle" data-bs-toggle="tooltip" title="Used for payment confirmations and support replies"></i>
+              </label>
+              <input
+                type="email"
+                className="form-control"
+                placeholder="support@yourschool.com"
+                value={emailConfig.supportEmail}
+                onChange={(e) => setEmailConfig({ ...emailConfig, supportEmail: e.target.value })}
+              />
+              <small className="text-muted">This email appears as the support/reply-to address in all outgoing emails</small>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderSmsConfigTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">SMS Configuration</h5>
-          <p className="text-muted mb-0">Configure SMS provider settings</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveSmsConfig} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Configuration'}
-        </button>
-      </div>
-      
+      {/* SMS Configuration */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">SMS Settings</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">SMS Configuration</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('sms', smsConfig)}
+            disabled={saving === 'sms'}
+          >
+            {saving === 'sms' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="d-flex align-items-center justify-content-between mb-3">
             <div>
               <h6 className="mb-1">Enable SMS</h6>
-              <p className="text-muted mb-0">Send SMS to users</p>
+              <p className="text-muted mb-0">Send SMS notifications to users</p>
             </div>
             <div className="form-check form-switch">
-              <input 
+              <input
                 className="form-check-input"
                 type="checkbox"
                 checked={smsConfig.enabled}
-                onChange={(e) => setSmsConfig({...smsConfig, enabled: e.target.checked})}
+                onChange={(e) => setSmsConfig({ ...smsConfig, enabled: e.target.checked })}
               />
             </div>
           </div>
           <div className="row">
             <div className="col-md-6 mb-3">
               <label className="form-label">SMS Provider</label>
-              <select 
+              <select
                 className="form-select"
                 value={smsConfig.provider}
-                onChange={(e) => setSmsConfig({...smsConfig, provider: e.target.value})}
+                onChange={(e) => setSmsConfig({ ...smsConfig, provider: e.target.value })}
               >
                 <option value="">Select Provider</option>
                 <option value="twilio">Twilio</option>
@@ -1343,44 +1305,38 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Sender ID</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={smsConfig.senderId}
-                onChange={(e) => setSmsConfig({...smsConfig, senderId: e.target.value})}
+                onChange={(e) => setSmsConfig({ ...smsConfig, senderId: e.target.value })}
                 placeholder="SCHOOL"
               />
             </div>
             <div className="col-12 mb-3">
               <label className="form-label">API Key</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 className="form-control"
                 value={smsConfig.apiKey || ''}
-                onChange={(e) => setSmsConfig({...smsConfig, apiKey: e.target.value})}
+                onChange={(e) => setSmsConfig({ ...smsConfig, apiKey: e.target.value })}
               />
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderPaymentGatewayTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Payment Gateway</h5>
-          <p className="text-muted mb-0">Configure payment processor settings</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSavePaymentGateway} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Configuration'}
-        </button>
-      </div>
-      
+      {/* Payment Gateway */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Gateway Settings</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Payment Gateway</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('payment', paymentGateway)}
+            disabled={saving === 'payment'}
+          >
+            {saving === 'payment' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="d-flex align-items-center justify-content-between mb-3">
@@ -1389,21 +1345,21 @@ const InstitutionSettingsPage: React.FC = () => {
               <p className="text-muted mb-0">Accept online payments</p>
             </div>
             <div className="form-check form-switch">
-              <input 
+              <input
                 className="form-check-input"
                 type="checkbox"
                 checked={paymentGateway.enabled}
-                onChange={(e) => setPaymentGateway({...paymentGateway, enabled: e.target.checked})}
+                onChange={(e) => setPaymentGateway({ ...paymentGateway, enabled: e.target.checked })}
               />
             </div>
           </div>
           <div className="row">
             <div className="col-md-6 mb-3">
-              <label className="form-label">Payment Provider</label>
-              <select 
+              <label className="form-label">Provider</label>
+              <select
                 className="form-select"
                 value={paymentGateway.provider}
-                onChange={(e) => setPaymentGateway({...paymentGateway, provider: e.target.value})}
+                onChange={(e) => setPaymentGateway({ ...paymentGateway, provider: e.target.value })}
               >
                 <option value="stripe">Stripe</option>
                 <option value="razorpay">Razorpay</option>
@@ -1413,10 +1369,10 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Environment</label>
-              <select 
+              <select
                 className="form-select"
                 value={paymentGateway.environment}
-                onChange={(e) => setPaymentGateway({...paymentGateway, environment: e.target.value as 'test' | 'live'})}
+                onChange={(e) => setPaymentGateway({ ...paymentGateway, environment: e.target.value as 'test' | 'live' })}
               >
                 <option value="test">Test Mode</option>
                 <option value="live">Live Mode</option>
@@ -1424,250 +1380,104 @@ const InstitutionSettingsPage: React.FC = () => {
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">Merchant ID</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={paymentGateway.merchantId}
-                onChange={(e) => setPaymentGateway({...paymentGateway, merchantId: e.target.value})}
+                onChange={(e) => setPaymentGateway({ ...paymentGateway, merchantId: e.target.value })}
               />
             </div>
             <div className="col-md-6 mb-3">
               <label className="form-label">API Key</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 className="form-control"
                 value={paymentGateway.apiKey || ''}
-                onChange={(e) => setPaymentGateway({...paymentGateway, apiKey: e.target.value})}
+                onChange={(e) => setPaymentGateway({ ...paymentGateway, apiKey: e.target.value })}
               />
             </div>
+            {paymentGateway.provider === 'razorpay' && (
+              <>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">
+                    Razorpay Key ID <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="rzp_live_xxxxxxxx"
+                    value={paymentGateway.razorpay?.keyId || ''}
+                    onChange={(e) => setPaymentGateway({
+                      ...paymentGateway,
+                      razorpay: { ...paymentGateway.razorpay, keyId: e.target.value }
+                    })}
+                  />
+                  <small className="text-muted">From Razorpay Dashboard → Settings → API Keys</small>
+                </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">
+                    Razorpay Key Secret <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    placeholder="Enter key secret"
+                    value={paymentGateway.razorpay?.keySecret || ''}
+                    onChange={(e) => setPaymentGateway({
+                      ...paymentGateway,
+                      razorpay: { ...paymentGateway.razorpay, keySecret: e.target.value }
+                    })}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderTaxSettingsTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Tax Settings</h5>
-          <p className="text-muted mb-0">Configure tax rates for fees</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveTaxSettings} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">Tax Configuration</h6>
-        </div>
-        <div className="card-body">
-          <div className="d-flex align-items-center justify-content-between mb-3">
-            <div>
-              <h6 className="mb-1">Enable Tax</h6>
-              <p className="text-muted mb-0">Apply tax to fee calculations</p>
-            </div>
-            <div className="form-check form-switch">
-              <input 
-                className="form-check-input"
-                type="checkbox"
-                checked={taxSettings.enabled}
-                onChange={(e) => setTaxSettings({...taxSettings, enabled: e.target.checked})}
-              />
-            </div>
-          </div>
-          <div className="row">
-            <div className="col-md-4 mb-3">
-              <label className="form-label">Tax Name</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={taxSettings.name}
-                onChange={(e) => setTaxSettings({...taxSettings, name: e.target.value})}
-                placeholder="GST"
-              />
-            </div>
-            <div className="col-md-4 mb-3">
-              <label className="form-label">Tax Rate (%)</label>
-              <input 
-                type="number" 
-                className="form-control"
-                value={taxSettings.rate}
-                onChange={(e) => setTaxSettings({...taxSettings, rate: parseFloat(e.target.value)})}
-                min="0"
-                max="100"
-                step="0.01"
-              />
-            </div>
-            <div className="col-md-4 mb-3">
-              <label className="form-label">Tax Number</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={taxSettings.number}
-                onChange={(e) => setTaxSettings({...taxSettings, number: e.target.value})}
-                placeholder="TAX123456"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSchoolSettingsTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">School Settings</h5>
-          <p className="text-muted mb-0">Configure school-specific settings</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveProfile} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
+      {/* Storage Settings */}
       <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Basic Information</h6>
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Storage Settings</h6>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => handleSaveSettings('storage', storage)}
+            disabled={saving === 'storage'}
+          >
+            {saving === 'storage' ? 'Saving...' : 'Save'}
+          </button>
         </div>
         <div className="card-body">
           <div className="row">
             <div className="col-md-6 mb-3">
-              <label className="form-label">School Name</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.name}
-                onChange={(e) => setProfile({...profile, name: e.target.value})}
-              />
+              <label className="form-label">Storage Provider</label>
+              <select
+                className="form-select"
+                value={storage.provider}
+                onChange={(e) => setStorage({ ...storage, provider: e.target.value as 'local' | 's3' | 'google-drive' })}
+              >
+                <option value="local">Local Storage</option>
+                <option value="s3">Amazon S3</option>
+                <option value="google-drive">Google Drive</option>
+              </select>
             </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">School Code</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.code}
-                disabled
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Email</label>
-              <input 
-                type="email" 
-                className="form-control"
-                value={profile.email}
-                onChange={(e) => setProfile({...profile, email: e.target.value})}
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">Phone</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.phone}
-                onChange={(e) => setProfile({...profile, phone: e.target.value})}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h6 className="mb-0">Address</h6>
-        </div>
-        <div className="card-body">
-          <div className="row">
-            <div className="col-12 mb-3">
-              <label className="form-label">Address</label>
-              <textarea 
-                className="form-control"
-                rows={2}
-                value={profile.address}
-                onChange={(e) => setProfile({...profile, address: e.target.value})}
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">City</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.city}
-                onChange={(e) => setProfile({...profile, city: e.target.value})}
-              />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label">State</label>
-              <input 
-                type="text" 
-                className="form-control"
-                value={profile.state}
-                onChange={(e) => setProfile({...profile, state: e.target.value})}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderStorageTab = () => (
-    <div>
-      <div className="d-flex align-items-center justify-content-between mb-4">
-        <div>
-          <h5 className="mb-1">Storage Settings</h5>
-          <p className="text-muted mb-0">Configure file storage options</p>
-        </div>
-        <button className="btn btn-primary" onClick={handleSaveStorage} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-      
-      <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">Storage Provider</h6>
-        </div>
-        <div className="card-body">
-          <div className="mb-3">
-            <label className="form-label">Storage Type</label>
-            <select 
-              className="form-select"
-              value={storage.provider}
-              onChange={(e) => setStorage({...storage, provider: e.target.value as 'local' | 's3' | 'google-drive'})}
-            >
-              <option value="local">Local Storage</option>
-              <option value="s3">Amazon S3</option>
-              <option value="google-drive">Google Drive</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="card mb-4">
-        <div className="card-header">
-          <h6 className="mb-0">File Upload Settings</h6>
-        </div>
-        <div className="card-body">
-          <div className="row">
             <div className="col-md-6 mb-3">
               <label className="form-label">Max File Size (MB)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 className="form-control"
                 value={storage.maxFileSize}
-                onChange={(e) => setStorage({...storage, maxFileSize: parseInt(e.target.value)})}
+                onChange={(e) => setStorage({ ...storage, maxFileSize: parseInt(e.target.value) || 10 })}
               />
             </div>
             <div className="col-12 mb-3">
               <label className="form-label">Allowed File Types (comma separated)</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 className="form-control"
                 value={storage.allowedTypes?.join(', ') || ''}
                 onChange={(e) => setStorage({
-                  ...storage, 
+                  ...storage,
                   allowedTypes: e.target.value.split(',').map(t => t.trim().toLowerCase()).filter(t => t)
                 })}
                 placeholder="jpg, jpeg, png, pdf, doc, docx"
@@ -1679,21 +1489,142 @@ const InstitutionSettingsPage: React.FC = () => {
     </div>
   );
 
+  // ─── Render Notifications Tab ───────────────────────────────────────────
+
+  const renderNotificationsTab = () => (
+    <div>
+      {/* Notifications Header */}
+      <div className="card mb-4" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' }}>
+        <div className="card-body py-4">
+          <div className="d-flex align-items-center justify-content-between">
+            <div className="d-flex align-items-center">
+              <div
+                className="d-flex align-items-center justify-content-center me-3"
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 12,
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  fontSize: '1.6rem',
+                  color: 'white',
+                }}
+              >
+                <i className="ti ti-bell"></i>
+              </div>
+              <div>
+                <h5 className="mb-1 text-white">Notification Settings</h5>
+                <p className="mb-0" style={{ opacity: 0.85, fontSize: '0.9rem' }}>
+                  Configure notification preferences for your institution
+                </p>
+              </div>
+            </div>
+            <button
+              className="btn btn-light"
+              onClick={handleSaveNotifications}
+              disabled={saving === 'notifications'}
+            >
+              {saving === 'notifications' ? 'Saving...' : 'Save All'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="card-header">
+          <h6 className="mb-0">Notification Channels</h6>
+        </div>
+        <div className="card-body">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="mb-1">Email Notifications</h6>
+              <p className="text-muted mb-0">Receive notifications via email</p>
+            </div>
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                checked={notifications.emailNotifications}
+                onChange={(e) => setNotifications({ ...notifications, emailNotifications: e.target.checked })}
+              />
+            </div>
+          </div>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="mb-1">SMS Notifications</h6>
+              <p className="text-muted mb-0">Receive notifications via SMS</p>
+            </div>
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                checked={notifications.smsNotifications}
+                onChange={(e) => setNotifications({ ...notifications, smsNotifications: e.target.checked })}
+              />
+            </div>
+          </div>
+          <div className="d-flex align-items-center justify-content-between">
+            <div>
+              <h6 className="mb-1">Push Notifications</h6>
+              <p className="text-muted mb-0">Receive push notifications in-browser</p>
+            </div>
+            <div className="form-check form-switch">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                checked={notifications.pushNotifications}
+                onChange={(e) => setNotifications({ ...notifications, pushNotifications: e.target.checked })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h6 className="mb-0">Notification Types</h6>
+        </div>
+        <div className="card-body">
+          {[
+            { key: 'studentAdmission', label: 'Student Admission', desc: 'Notify on new student admissions and registrations' },
+            { key: 'feePayment', label: 'Fee Payment', desc: 'Notify on fee payments, due dates, and receipts' },
+            { key: 'examSchedule', label: 'Exam Schedule', desc: 'Notify on exam schedule changes and results' },
+            { key: 'attendance', label: 'Attendance', desc: 'Notify on attendance records and alerts' },
+            { key: 'homework', label: 'Homework', desc: 'Notify on homework assignments and submissions' },
+            { key: 'announcements', label: 'Announcements', desc: 'Notify on general announcements and notices' }
+          ].map(item => (
+            <div key={item.key} className="d-flex align-items-center justify-content-between mb-3">
+              <div>
+                <h6 className="mb-1">{item.label}</h6>
+                <p className="text-muted mb-0">{item.desc}</p>
+              </div>
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={notifications[item.key as keyof NotificationSettings] as boolean}
+                  onChange={(e) => setNotifications({
+                    ...notifications,
+                    [item.key]: e.target.checked
+                  })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'modules': return renderModulesTab();
-      case 'profile': return renderProfileTab();
-      case 'security': return renderSecurityTab();
-      case 'notifications': return renderNotificationsTab();
-      case 'localization': return renderLocalizationTab();
-      case 'company': return renderCompanyTab();
-      case 'email': return renderEmailConfigTab();
-      case 'sms': return renderSmsConfigTab();
-      case 'payment': return renderPaymentGatewayTab();
-      case 'tax': return renderTaxSettingsTab();
-      case 'school': return renderSchoolSettingsTab();
-      case 'storage': return renderStorageTab();
-      default: return renderModulesTab();
+      case 'profile':
+        return renderProfileTab();
+      case 'settings':
+        return renderSettingsTab();
+      case 'notifications':
+        return renderNotificationsTab();
+      default:
+        return renderProfileTab();
     }
   };
 
@@ -1709,13 +1640,15 @@ const InstitutionSettingsPage: React.FC = () => {
 
   return (
     <div className="content bg-white">
-      <div className="d-md-flex d-block align-items-center justify-content-between border-bottom pb-3">
+      <div className="d-md-flex d-block align-items-center justify-content-between border-bottom pb-3 mb-4">
         <div className="my-auto mb-2">
-          <h3 className="page-title mb-1">Institution Settings</h3>
+          <h3 className="page-title mb-1">
+            {activeTab === 'settings' ? 'System Configuration' : activeTab === 'profile' ? 'Profile Settings' : 'Notification Settings'}
+          </h3>
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/institution">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Settings</li>
             </ol>
@@ -1723,7 +1656,7 @@ const InstitutionSettingsPage: React.FC = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <button 
+            <button
               className="btn btn-outline-light bg-white btn-icon"
               onClick={fetchAllSettings}
               title="Refresh"
@@ -1732,6 +1665,24 @@ const InstitutionSettingsPage: React.FC = () => {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="mb-4">
+        <ul className="nav nav-tabs nav-tabs-line">
+          {tabs.map(tab => (
+            <li className="nav-item" key={tab.id}>
+              <Link
+                className={`nav-link ${activeTab === tab.id ? 'active' : ''}`}
+                to={getTabLink(tab.id)}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <i className={tab.icon} style={{ marginRight: '0.4rem' }}></i>
+                {tab.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="row">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface FeesType {
   _id: string;
@@ -42,11 +43,10 @@ const FeesTypePage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.get('/finance/fees');
+      const response = await apiClient.get('/finance/fee-types');
       
-      if (response.data.success && response.data.data) {
-        const data = response.data.data.feeStructures || response.data.data;
-        // Ensure data is always an array
+      if (response.data.success) {
+        const data = response.data.data;
         setFeesTypes(Array.isArray(data) ? data : []);
       }
     } catch (err: any) {
@@ -91,7 +91,7 @@ const FeesTypePage: React.FC = () => {
       
       if (selectedType) {
         // Update existing fee type
-        const response = await apiClient.put(`/finance/fees/${selectedType._id}`, payload);
+        const response = await apiClient.put(`/finance/fee-types/${selectedType._id}`, payload);
         
         if (response.data.success) {
           toast.success('Fee type updated successfully');
@@ -100,7 +100,7 @@ const FeesTypePage: React.FC = () => {
         }
       } else {
         // Add new fee type
-        const response = await apiClient.post('/finance/fees', payload);
+        const response = await apiClient.post('/finance/fee-types', payload);
         
         if (response.data.success) {
           toast.success('Fee type created successfully');
@@ -132,7 +132,7 @@ const FeesTypePage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.delete(`/finance/fees/${selectedType._id}`);
+      const response = await apiClient.delete(`/finance/fee-types/${selectedType._id}`);
       
       if (response.data.success) {
         toast.success('Fee type deleted successfully');
@@ -171,6 +171,27 @@ const FeesTypePage: React.FC = () => {
       </div>
     );
   }
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = (Array.isArray(feesTypes) ? feesTypes : []).map(ft => ({
+      ID: ft._id?.slice(-6) || 'N/A',
+      Name: ft.name || 'N/A',
+      Code: ft.code || ft.name?.toLowerCase().replace(/\s+/g, '-') || 'N/A',
+      Description: ft.description || 'No description',
+      Status: ft.isActive ? 'Active' : 'Inactive'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'fees-types', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Name', label: 'Name' },
+        { key: 'Code', label: 'Code' },
+        { key: 'Description', label: 'Description' },
+        { key: 'Status', label: 'Status' }
+      ], 'Fees Type');
+    } else {
+      exportToExcel(exportData, 'fees-types');
+    }
+  };
 
   return (
     <>
@@ -219,12 +240,12 @@ const FeesTypePage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>

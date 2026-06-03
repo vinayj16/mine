@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const studentHostelSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -65,7 +65,7 @@ const studentHostelSchema = new mongoose.Schema({
   timestamps: true
 });
 
-studentHostelSchema.index({ schoolId: 1, studentId: 1 });
+studentHostelSchema.index({ institutionId: 1, studentId: 1 });
 studentHostelSchema.index({ hostelId: 1, status: 1 });
 
 const StudentHostel = mongoose.model('StudentHostel', studentHostelSchema);

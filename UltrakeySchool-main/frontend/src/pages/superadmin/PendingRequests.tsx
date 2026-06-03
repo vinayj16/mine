@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
 import { institutionRegistrationService } from '../../services';
 
 interface AccountRequest {
@@ -220,13 +221,13 @@ const PendingRequests: React.FC = () => {
                       </td>
                       <td>
                         <div>
-                          {new Date(request.submittedAt).toLocaleDateString('en-US', { 
+                          {new Date(request.submittedAt).toLocaleDateString('en-IN', { 
                             month: 'short', 
                             day: 'numeric', 
                             year: 'numeric' 
                           })}
                           <div className="text-muted small">
-                            {new Date(request.submittedAt).toLocaleTimeString('en-US', { 
+                            {new Date(request.submittedAt).toLocaleTimeString('en-IN', { 
                               hour: '2-digit', 
                               minute: '2-digit' 
                             })}
@@ -260,13 +261,13 @@ const PendingRequests: React.FC = () => {
                           </div>
                         )}
                         {request.status === 'approved' && (
-                          <button className="btn btn-sm btn-outline-primary">
+                          <button className="btn btn-sm btn-outline-primary" onClick={() => toast.info(`Viewing details for ${request.fullName || request.email}`)}>
                             <i className="ti ti-eye me-1"></i>
                             View Details
                           </button>
                         )}
                         {request.status === 'rejected' && (
-                          <button className="btn btn-sm btn-outline-secondary">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => toast.info(`Reason: ${request.rejectionReason || 'No reason provided'}`)}>
                             <i className="ti ti-eye me-1"></i>
                             View Reason
                           </button>

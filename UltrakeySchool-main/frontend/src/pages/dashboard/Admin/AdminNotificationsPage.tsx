@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
+import apiClient from '../../../api/client';
+import { toast } from 'react-toastify';
 
 interface NotificationData {
   overview: {
@@ -41,6 +44,32 @@ const AdminNotificationsPage: React.FC = () => {
   const [selectedSection, setSelectedSection] = useState<string>('overview');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = notificationData?.notifications || [];
+    const exportData = data.map(n => ({
+      Title: n.title,
+      Message: n.message,
+      Type: n.type.charAt(0).toUpperCase() + n.type.slice(1),
+      Recipients: n.recipients,
+      'Sent Date': n.sentDate,
+      Status: n.status.charAt(0).toUpperCase() + n.status.slice(1),
+      'Read Rate': n.totalRecipients > 0 ? `${Math.round((n.readCount / n.totalRecipients) * 100)}%` : 'N/A'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'notifications', [
+        { key: 'Title', label: 'Title' },
+        { key: 'Message', label: 'Message' },
+        { key: 'Type', label: 'Type' },
+        { key: 'Recipients', label: 'Recipients' },
+        { key: 'Sent Date', label: 'Sent Date' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Read Rate', label: 'Read Rate' }
+      ], 'Notification History');
+    } else {
+      exportToExcel(exportData, 'notifications');
+    }
+  };
+
   useEffect(() => {
     fetchNotificationData();
   }, []);
@@ -48,15 +77,34 @@ const AdminNotificationsPage: React.FC = () => {
   const fetchNotificationData = async () => {
     try {
       setLoading(true);
-      // Set sample data for now
+      const res = await apiClient.get('/notifications', { params: { limit: 50 } });
+      const notifs: any[] = Array.isArray(res.data?.data)
+        ? res.data.data
+        : res.data?.data?.notifications || res.data?.notifications || [];
+
+      const today = new Date().toDateString();
+      const sentToday = notifs.filter((n: any) => new Date(n.createdAt).toDateString() === today).length;
+      const unread = notifs.filter((n: any) => !n.isRead && n.status !== 'read').length;
+      const scheduled = notifs.filter((n: any) => n.status === 'scheduled').length;
+
       setNotificationData({
         overview: {
-          totalNotifications: 0,
-          unreadNotifications: 0,
-          sentToday: 0,
-          scheduledNotifications: 0
+          totalNotifications: notifs.length,
+          unreadNotifications: unread,
+          sentToday,
+          scheduledNotifications: scheduled,
         },
-        notifications: [],
+        notifications: notifs.map((n: any) => ({
+          id: n._id || n.id,
+          title: n.title || n.subject || 'Notification',
+          message: n.message || n.body || n.content || '',
+          type: (n.type || 'info') as 'info' | 'success' | 'warning' | 'error',
+          recipients: n.recipients || n.recipientType || 'All Users',
+          sentDate: n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-IN') : '-',
+          status: (n.status === 'scheduled' ? 'scheduled' : n.status === 'draft' ? 'draft' : 'sent') as 'sent' | 'scheduled' | 'draft',
+          readCount: n.readCount || 0,
+          totalRecipients: n.totalRecipients || 1,
+        })),
         notificationSettings: {
           emailNotifications: true,
           pushNotifications: true,
@@ -64,7 +112,7 @@ const AdminNotificationsPage: React.FC = () => {
           inAppNotifications: true,
           dailyDigest: false,
           weeklyReport: true,
-          urgentAlerts: true
+          urgentAlerts: true,
         },
         notificationTypes: [
           { type: 'Academic Updates', enabled: true, recipients: 'All Users' },
@@ -72,20 +120,61 @@ const AdminNotificationsPage: React.FC = () => {
           { type: 'Exam Schedules', enabled: true, recipients: 'Students & Teachers' },
           { type: 'Attendance Alerts', enabled: true, recipients: 'Parents' },
           { type: 'System Maintenance', enabled: true, recipients: 'All Users' },
-          { type: 'Holiday Announcements', enabled: true, recipients: 'All Users' }
-        ]
+          { type: 'Holiday Announcements', enabled: true, recipients: 'All Users' },
+        ],
       });
     } catch (error) {
       console.error('Error fetching notification data:', error);
+      // Keep defaults on error
+      setNotificationData({
+        overview: { totalNotifications: 0, unreadNotifications: 0, sentToday: 0, scheduledNotifications: 0 },
+        notifications: [],
+        notificationSettings: { emailNotifications: true, pushNotifications: true, smsNotifications: false, inAppNotifications: true, dailyDigest: false, weeklyReport: true, urgentAlerts: true },
+        notificationTypes: [
+          { type: 'Academic Updates', enabled: true, recipients: 'All Users' },
+          { type: 'Fee Reminders', enabled: true, recipients: 'Parents' },
+          { type: 'Exam Schedules', enabled: true, recipients: 'Students & Teachers' },
+          { type: 'Attendance Alerts', enabled: true, recipients: 'Parents' },
+          { type: 'System Maintenance', enabled: true, recipients: 'All Users' },
+          { type: 'Holiday Announcements', enabled: true, recipients: 'All Users' },
+        ],
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendNotification = (e: React.FormEvent) => {
+  const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle notification sending logic
-    console.log('Sending notification...');
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+    const recipientType = (formData.get('recipients') as string) || 'all';
+    
+    // Convert recipient type to actual user IDs (backend will resolve by role)
+    const payload: Record<string, any> = {
+      title: formData.get('title'),
+      message: formData.get('message'),
+      type: formData.get('type') || 'info',
+      priority: formData.get('priority') || 'medium',
+      channels: ['in-app'],
+      recipientIds: [],
+      metadata: { recipientType }
+    };
+
+    // If a specific user ID is provided, use it; otherwise backend handles by role
+    const specificRecipient = formData.get('recipientId');
+    if (specificRecipient) {
+      payload.recipientIds = [specificRecipient];
+    }
+
+    try {
+      await apiClient.post('/notifications', payload);
+      toast.success('Notification sent successfully');
+      fetchNotificationData();
+      form.reset();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to send notification');
+    }
   };
 
   const filteredNotifications = notificationData?.notifications.filter(notification => 
@@ -308,7 +397,7 @@ const AdminNotificationsPage: React.FC = () => {
                     <div className="col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Notification Type</label>
-                        <select className="form-select" required>
+                        <select className="form-select" name="type" required>
                           <option value="">Select Type</option>
                           <option value="info">Information</option>
                           <option value="success">Success</option>
@@ -319,8 +408,21 @@ const AdminNotificationsPage: React.FC = () => {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
+                        <label className="form-label">Priority</label>
+                        <select className="form-select" name="priority">
+                          <option value="medium">Medium</option>
+                          <option value="low">Low</option>
+                          <option value="high">High</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="col-md-6">
+                      <div className="mb-3">
                         <label className="form-label">Recipients</label>
-                        <select className="form-select" required>
+                        <select className="form-select" name="recipients" required>
                           <option value="">Select Recipients</option>
                           <option value="all">All Users</option>
                           <option value="students">Students</option>
@@ -331,52 +433,20 @@ const AdminNotificationsPage: React.FC = () => {
                         </select>
                       </div>
                     </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Specific User ID (optional)</label>
+                        <input type="text" className="form-control" name="recipientId" placeholder="Send to specific user" />
+                      </div>
+                    </div>
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Title</label>
-                    <input type="text" className="form-control" placeholder="Enter notification title" required />
+                    <input type="text" className="form-control" name="title" placeholder="Enter notification title" required />
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Message</label>
-                    <textarea className="form-control" rows={4} placeholder="Enter notification message" required></textarea>
-                  </div>
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Send Method</label>
-                        <div className="form-check">
-                          <input className="form-check-input" type="checkbox" id="emailNotif" defaultChecked />
-                          <label className="form-check-label" htmlFor="emailNotif">
-                            Email Notification
-                          </label>
-                        </div>
-                        <div className="form-check">
-                          <input className="form-check-input" type="checkbox" id="pushNotif" defaultChecked />
-                          <label className="form-check-label" htmlFor="pushNotif">
-                            Push Notification
-                          </label>
-                        </div>
-                        <div className="form-check">
-                          <input className="form-check-input" type="checkbox" id="smsNotif" />
-                          <label className="form-check-label" htmlFor="smsNotif">
-                            SMS Notification
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label">Schedule</label>
-                        <select className="form-select">
-                          <option value="now">Send Now</option>
-                          <option value="schedule">Schedule for Later</option>
-                        </select>
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">Schedule Date & Time</label>
-                        <input type="datetime-local" className="form-control" />
-                      </div>
-                    </div>
+                    <textarea className="form-control" name="message" rows={4} placeholder="Enter notification message" required></textarea>
                   </div>
                   <div className="d-flex justify-content-end gap-2">
                     <button type="button" className="btn btn-secondary">Cancel</button>
@@ -405,7 +475,7 @@ const AdminNotificationsPage: React.FC = () => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
-                  <button className="btn btn-primary btn-sm">
+                  <button className="btn btn-primary btn-sm" onClick={() => handleExport('pdf')}>
                     <i className="ti ti-download me-1"></i>Export
                   </button>
                 </div>

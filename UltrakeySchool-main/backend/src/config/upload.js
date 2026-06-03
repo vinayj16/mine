@@ -1,7 +1,3 @@
-/**
- * File Upload Configuration
- * Handles file uploads with validation and storage
- */
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -65,11 +61,11 @@ const storage = multer.diskStorage({
   destination: (req, _file, cb) => {
     const folder = req.body.folder || 'general';
     const folderPath = path.join(uploadDir, folder);
-    
+
     if (!fs.existsSync(folderPath)) {
       fs.mkdirSync(folderPath, { recursive: true });
     }
-    
+
     cb(null, folderPath);
   },
   filename: (_req, file, cb) => {
@@ -84,19 +80,19 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
   const fileType = req.body.fileType || 'DOCUMENT';
   const allowedConfig = getAllowedTypes(fileType);
-  
+
   if (!allowedConfig) {
     return cb(new Error(`Invalid file type category: ${fileType}`));
   }
-  
+
   const ext = path.extname(file.originalname).toLowerCase().substring(1);
   const isExtensionAllowed = allowedConfig.extensions.includes(ext);
   const isMimeTypeAllowed = allowedConfig.mimeTypes.includes(file.mimetype);
-  
+
   if (isExtensionAllowed && isMimeTypeAllowed) {
     return cb(null, true);
   }
-  
+
   cb(new Error(`Invalid file type. Allowed: ${allowedConfig.extensions.join(', ')}`));
 };
 
@@ -119,11 +115,11 @@ export const uploadImage = multer({
     const ext = path.extname(file.originalname).toLowerCase().substring(1);
     const isExtensionAllowed = FILE_TYPES.IMAGE.extensions.includes(ext);
     const isMimeTypeAllowed = FILE_TYPES.IMAGE.mimeTypes.includes(file.mimetype);
-    
+
     if (isExtensionAllowed && isMimeTypeAllowed) {
       return cb(null, true);
     }
-    
+
     cb(new Error(`Only image files are allowed: ${FILE_TYPES.IMAGE.extensions.join(', ')}`));
   },
 });
@@ -138,11 +134,11 @@ export const uploadDocument = multer({
     const ext = path.extname(file.originalname).toLowerCase().substring(1);
     const isExtensionAllowed = FILE_TYPES.DOCUMENT.extensions.includes(ext);
     const isMimeTypeAllowed = FILE_TYPES.DOCUMENT.mimeTypes.includes(file.mimetype);
-    
+
     if (isExtensionAllowed && isMimeTypeAllowed) {
       return cb(null, true);
     }
-    
+
     cb(new Error(`Only document files are allowed: ${FILE_TYPES.DOCUMENT.extensions.join(', ')}`));
   },
 });

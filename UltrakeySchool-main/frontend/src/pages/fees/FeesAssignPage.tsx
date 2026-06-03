@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface FeesAssign {
   _id: string;
@@ -48,10 +49,10 @@ const FeesAssignPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.get('/fees');
+      const response = await apiClient.get('/finance/fee-assignments');
       
       if (response.data.success && response.data.data) {
-        setFeesList(response.data.data);
+        setFeesList(Array.isArray(response.data.data) ? response.data.data : []);
       }
     } catch (err: any) {
       console.error('Error fetching fees assignments:', err);
@@ -90,7 +91,7 @@ const FeesAssignPage: React.FC = () => {
       
       if (selectedFees) {
         // Update existing fees
-        const response = await apiClient.put(`/fees/${selectedFees._id}`, payload);
+        const response = await apiClient.put(`/finance/fee-assignments/${selectedFees._id}`, payload);
         
         if (response.data.success) {
           toast.success('Fee assignment updated successfully');
@@ -99,7 +100,7 @@ const FeesAssignPage: React.FC = () => {
         }
       } else {
         // Add new fees
-        const response = await apiClient.post('/fees', payload);
+        const response = await apiClient.post('/finance/fee-assignments', payload);
         
         if (response.data.success) {
           toast.success('Fee assignment created successfully');
@@ -149,7 +150,7 @@ const FeesAssignPage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.delete(`/fees/${selectedFees._id}`);
+      const response = await apiClient.delete(`/finance/fee-assignments/${selectedFees._id}`);
       
       if (response.data.success) {
         toast.success('Fee assignment deleted successfully');
@@ -197,6 +198,33 @@ const FeesAssignPage: React.FC = () => {
     );
   }
 
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = feesList.map((fees, index) => ({
+      'S. No': index + 1,
+      'Fees Group': fees.feesGroup || 'N/A',
+      'Fees Type': fees.feesType || 'N/A',
+      Class: fees.class || 'N/A',
+      Section: fees.section || 'N/A',
+      'Amount (₹)': fees.amount?.toLocaleString() || 0,
+      Gender: fees.gender || 'N/A',
+      Category: fees.category || 'N/A'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'fees-assignments', [
+        { key: 'S. No', label: 'S. No' },
+        { key: 'Fees Group', label: 'Fees Group' },
+        { key: 'Fees Type', label: 'Fees Type' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Amount (₹)', label: 'Amount (₹)' },
+        { key: 'Gender', label: 'Gender' },
+        { key: 'Category', label: 'Category' }
+      ], 'Assign Fees');
+    } else {
+      exportToExcel(exportData, 'fees-assignments');
+    }
+  };
+
   return (
     <>
       {/* Page Header */}
@@ -236,14 +264,14 @@ const FeesAssignPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <a href="#!" className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                </a>
+                </button>
               </li>
               <li>
-                <a href="#!" className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                </a>
+                </button>
               </li>
             </ul>
           </div>
@@ -383,7 +411,7 @@ const FeesAssignPage: React.FC = () => {
                   <th>Fees Type</th>
                   <th>Class</th>
                   <th>Section</th>
-                  <th>Amount ($)</th>
+                  <th>Amount (₹)</th>
                   <th>Gender</th>
                   <th>Category</th>
                   <th>Action</th>
@@ -542,7 +570,7 @@ const FeesAssignPage: React.FC = () => {
                     </div>
                     <div className="col-md-6">
                       <div className="mb-3">
-                        <label className="form-label">Amount ($)</label>
+                        <label className="form-label">Amount (₹)</label>
                         <input 
                           type="number" 
                           className="form-control" 

@@ -3,7 +3,18 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { examScheduleService } from '../../services/examScheduleService';
+import { classService, type Class } from '../../services/classService';
+import { subjectService, type Subject } from '../../services/subjectService';
 import type { ExamSchedule } from '../../services/examScheduleService';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+
+const institutionExamNames: Record<string, string[]> = {
+  School: ['Unit Test', 'Mid Term', 'Final Exam', 'Weekly Test', 'Monthly Test', 'Chapter Wise Test'],
+  Inter: ['Quarterly', 'Half Yearly', 'Pre-Final', 'Annual', 'IPE'],
+  Degree: ['Internal Assessment 1', 'Internal Assessment 2', 'Semester End', 'University Exam'],
+  Engineering: ['Mid Sem 1', 'Mid Sem 2', 'End Sem', 'Internal Test'],
+  default: ['Week Test', 'Monthly Test', 'Chapter Wise Test', 'Unit Test']
+};
 
 const ExamSchedulePage: React.FC = () => {
   const [schedules, setSchedules] = useState<ExamSchedule[]>([]);
@@ -13,7 +24,18 @@ const ExamSchedulePage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [loadingSubjects, setLoadingSubjects] = useState(false);
+
+  const [institutionType, setInstitutionType] = useState('default');
+  const [institutionId, setInstitutionId] = useState('');
+
   const [newSchedule, setNewSchedule] = useState({
+    classId: '',
+    className: '',
+    section: '',
     subject: '',
     examDate: '',
     startTime: '',
@@ -22,28 +44,124 @@ const ExamSchedulePage: React.FC = () => {
     roomNo: '',
     maxMarks: 100,
     minMarks: 35,
-    className: 'I',
-    section: 'A',
-    examName: 'Week Test'
+    examName: ''
   });
 
   const [editSchedule, setEditSchedule] = useState<ExamSchedule | null>(null);
 
   useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    let instType = 'default';
+    let instId = localStorage.getItem('institutionId') || '';
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        if (user?.institutionData?.type) {
+          instType = user.institutionData.type;
+        }
+        if (user?.institutionId || user?.institution) {
+          instId = user.institutionId || user.institution || instId;
+        }
+      } catch (e) {
+        console.warn('Failed to parse user data:', e);
+      }
+    }
+    setInstitutionType(instType);
+    setInstitutionId(instId);
     fetchSchedules();
+    // Load classes first, then subjects (so fallback 2 in fetchSubjects has access to loaded classes)
+    fetchClasses(instId).then(loadedClasses => {
+      fetchSubjects(instId, loadedClasses);
+    });
   }, []);
 
   const fetchSchedules = async () => {
     try {
       setLoading(true);
-      const response = await examScheduleService.getAll({ page: 1, limit: 100 });
-      setSchedules(response.data);
+      const result = await examScheduleService.getAll({ page: 1, limit: 100 });
+      setSchedules(result?.data || result || []);
     } catch (error) {
       console.error('Error fetching exam schedules:', error);
       toast.error('Failed to load exam schedules');
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchClasses = async (instId: string): Promise<Class[]> => {
+    try {
+      setLoadingClasses(true);
+      const response = await classService.getAll({ institutionId: instId, limit: 100 });
+      const fetchedClasses = response?.data || [];
+      setClasses(fetchedClasses);
+      return fetchedClasses;
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      return [];
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+
+  const fetchSubjects = async (instId: string, loadedClasses: Class[] = []) => {
+    try {
+      setLoadingSubjects(true);
+      // Primary fetch with institutionId
+      const response = await subjectService.getAll({ institutionId: instId, limit: 100 });
+      const fetched = response?.subjects || [];
+      if (fetched.length) {
+        setSubjects(fetched);
+        return;
+      }
+      
+      // Fallback 1: try fetching with just the localStorage institutionId (in case parameter was wrong)
+      const lsId = localStorage.getItem('institutionId');
+      if (lsId && lsId !== instId) {
+        const fb1 = await subjectService.getAll({ institutionId: lsId, limit: 100 });
+        const fb1Subjects = fb1?.subjects || [];
+        if (fb1Subjects.length) {
+          setSubjects(fb1Subjects);
+          return;
+        }
+      }
+      
+      // Fallback 2: try the class-specific subjects endpoint using the first class
+      // (loadedClasses is passed in to avoid race condition with fetchClasses)
+      if (loadedClasses.length > 0) {
+        const firstClassId = loadedClasses[0]._id || loadedClasses[0].id;
+        if (firstClassId) {
+          try {
+            const byClassResponse = await subjectService.getByClass(firstClassId);
+            if (byClassResponse && byClassResponse.length) {
+              setSubjects(byClassResponse);
+              return;
+            }
+          } catch (fallbackError) {
+            console.warn('Fallback subject fetch failed:', fallbackError);
+          }
+        }
+      }
+      
+      toast.warning('No subjects found. Please add subjects first from the Subjects page.');
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+      toast.error('Failed to load subjects. Check your connection or add subjects first.');
+    } finally {
+      setLoadingSubjects(false);
+    }
+  };
+
+  const examNameOptions = institutionExamNames[institutionType] || institutionExamNames.default;
+
+  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = e.target.value;
+    const selectedClass = classes.find(c => (c._id || c.id) === selectedId);
+    setNewSchedule(prev => ({
+      ...prev,
+      classId: selectedId,
+      className: selectedClass?.name || '',
+      section: selectedClass?.section || ''
+    }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -69,8 +187,10 @@ const ExamSchedulePage: React.FC = () => {
 
     try {
       await examScheduleService.create({
-        institutionId: localStorage.getItem('schoolId') || '',
-        classId: newSchedule.className,
+        institutionId,
+        classId: newSchedule.classId || undefined,
+        className: newSchedule.className,
+        section: newSchedule.section,
         subject: newSchedule.subject,
         examName: newSchedule.examName,
         examDate: newSchedule.examDate,
@@ -79,7 +199,8 @@ const ExamSchedulePage: React.FC = () => {
         duration: newSchedule.duration,
         roomNo: newSchedule.roomNo,
         maxMarks: newSchedule.maxMarks,
-        minMarks: newSchedule.minMarks
+        minMarks: newSchedule.minMarks,
+        academicYear: new Date().getFullYear() + '/' + (new Date().getFullYear() + 1)
       });
 
       toast.success('Exam schedule created successfully');
@@ -135,6 +256,9 @@ const ExamSchedulePage: React.FC = () => {
 
   const resetForm = () => {
     setNewSchedule({
+      classId: '',
+      className: '',
+      section: '',
       subject: '',
       examDate: '',
       startTime: '',
@@ -143,23 +267,26 @@ const ExamSchedulePage: React.FC = () => {
       roomNo: '',
       maxMarks: 100,
       minMarks: 35,
-      className: 'I',
-      section: 'A',
-      examName: 'Week Test'
+      examName: ''
     });
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export as ${type.toUpperCase()} - Feature coming soon`);
+    if (!schedules.length) { toast.error('No data to export'); return; }
+    const exportData = schedules.map(s => ({ Subject: s.subject, Date: s.examDate, Start: s.startTime, End: s.endTime, Duration: s.duration, Room: s.roomNo, MaxMarks: s.maxMarks, MinMarks: s.minMarks }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'exam-schedules', [
+        { key: 'Subject', label: 'Subject' }, { key: 'Date', label: 'Exam Date' }, { key: 'Start', label: 'Start Time' }, { key: 'End', label: 'End Time' }, { key: 'Duration', label: 'Duration' }, { key: 'Room', label: 'Room No' }, { key: 'MaxMarks', label: 'Max Marks' }, { key: 'MinMarks', label: 'Min Marks' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'exam-schedules');
+    }
   };
 
   const timeOptions = [
     '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', 
     '11:30 AM', '12:00 PM', '12:30 PM', '01:00 PM', '01:30 PM', '02:00 PM'
   ];
-
-  const subjectOptions = ['English', 'Spanish', 'Mathematics', 'Physics', 'Chemistry', 'Biology'];
-  const roomOptions = ['101', '102', '103', '104', '105', '201', '202', '203'];
 
   return (
     <>
@@ -246,83 +373,9 @@ const ExamSchedulePage: React.FC = () => {
                 type="text" 
                 className="form-control date-range bookingrange" 
                 placeholder="Select"
-                value="Academic Year : 2024 / 2025"
+                value={'Academic Year : ' + (new Date().getFullYear()) + ' / ' + (new Date().getFullYear() + 1)}
                 readOnly
               />
-            </div>
-            <div className="dropdown mb-3 me-2">
-              <button 
-                className="btn btn-outline-light bg-white dropdown-toggle"
-                data-bs-toggle="dropdown"
-              >
-                <i className="ti ti-filter me-2"></i>Filter
-              </button>
-              <div className="dropdown-menu drop-width">
-                <form onSubmit={(e) => e.preventDefault()}>
-                  <div className="d-flex align-items-center border-bottom p-3">
-                    <h4>Filter</h4>
-                  </div>
-                  <div className="p-3 border-bottom pb-0">
-                    <div className="row">
-                      <div className="col-md-12">
-                        <div className="mb-3">
-                          <label className="form-label">Class</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                            <option>I</option>
-                            <option>II</option>
-                            <option>III</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-12">
-                        <div className="mb-3">
-                          <label className="form-label">Exam Date</label>
-                          <input type="date" className="form-control" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-3 d-flex align-items-center justify-content-end">
-                    <button type="button" className="btn btn-light me-3">
-                      Reset
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      Apply
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-            <div className="dropdown mb-3">
-              <button 
-                className="btn btn-outline-light bg-white dropdown-toggle"
-                data-bs-toggle="dropdown"
-              >
-                <i className="ti ti-sort-ascending-2 me-2"></i>Sort by A-Z
-              </button>
-              <ul className="dropdown-menu p-3">
-                <li>
-                  <button className="dropdown-item rounded-1 active">
-                    Ascending
-                  </button>
-                </li>
-                <li>
-                  <button className="dropdown-item rounded-1">
-                    Descending
-                  </button>
-                </li>
-                <li>
-                  <button className="dropdown-item rounded-1">
-                    Recently Viewed
-                  </button>
-                </li>
-                <li>
-                  <button className="dropdown-item rounded-1">
-                    Recently Added
-                  </button>
-                </li>
-              </ul>
             </div>
           </div>
         </div>
@@ -344,7 +397,9 @@ const ExamSchedulePage: React.FC = () => {
                         <input className="form-check-input" type="checkbox" id="select-all" />
                       </div>
                     </th>
+                    <th>Class</th>
                     <th>Subject</th>
+                    <th>Exam Name</th>
                     <th>Exam Date</th>
                     <th>Start Time</th>
                     <th>End Time</th>
@@ -364,12 +419,14 @@ const ExamSchedulePage: React.FC = () => {
                             <input className="form-check-input" type="checkbox" />
                           </div>
                         </td>
+                        <td>{schedule.className || '-'}</td>
                         <td>
                           <Link to="#" className="link-primary">
                             {schedule.subject}
                           </Link>
                         </td>
-                        <td>{schedule.examDate}</td>
+                        <td>{schedule.examName}</td>
+                        <td>{new Date(schedule.examDate).toLocaleDateString()}</td>
                         <td>{schedule.startTime}</td>
                         <td>{schedule.endTime}</td>
                         <td>{schedule.duration}</td>
@@ -415,7 +472,7 @@ const ExamSchedulePage: React.FC = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={10} className="text-center py-4">
+                      <td colSpan={12} className="text-center py-4">
                         No exam schedules found
                       </td>
                     </tr>
@@ -455,30 +512,37 @@ const ExamSchedulePage: React.FC = () => {
                     <div className="col-md-4">
                       <div className="mb-3">
                         <label className="form-label">Class</label>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          placeholder="Enter Class"
-                          name="className"
-                          value={newSchedule.className}
-                          onChange={handleInputChange}
+                        <select 
+                          className="form-select"
+                          name="classId"
+                          value={newSchedule.classId}
+                          onChange={handleClassChange}
                           required
-                        />
+                        >
+                          <option value="">Select Class</option>
+                          {loadingClasses ? (
+                            <option disabled>Loading...</option>
+                          ) : (
+                            classes.map(cls => (
+                              <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                                {cls.name} - {cls.section}
+                              </option>
+                            ))
+                          )}
+                        </select>
                       </div>
                     </div>
                     <div className="col-md-4">
                       <div className="mb-3">
                         <label className="form-label">Section</label>
-                        <select 
-                          className="form-select"
+                        <input 
+                          type="text"
+                          className="form-control"
                           name="section"
                           value={newSchedule.section}
-                          onChange={handleInputChange}
-                        >
-                          <option value="A">A</option>
-                          <option value="B">B</option>
-                          <option value="C">C</option>
-                        </select>
+                          readOnly
+                          placeholder="Auto from class"
+                        />
                       </div>
                     </div>
                     <div className="col-md-4">
@@ -489,11 +553,12 @@ const ExamSchedulePage: React.FC = () => {
                           name="examName"
                           value={newSchedule.examName}
                           onChange={handleInputChange}
+                          required
                         >
-                          <option value="Week Test">Week Test</option>
-                          <option value="Monthly Test">Monthly Test</option>
-                          <option value="Chapter Wise Test">Chapter Wise Test</option>
-                          <option value="Unit Test">Unit Test</option>
+                          <option value="">Select</option>
+                          {examNameOptions.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -508,9 +573,13 @@ const ExamSchedulePage: React.FC = () => {
                           required
                         >
                           <option value="">Select</option>
-                          {subjectOptions.map(subject => (
-                            <option key={subject} value={subject}>{subject}</option>
-                          ))}
+                          {loadingSubjects ? (
+                            <option disabled>Loading...</option>
+                          ) : (
+                            subjects.map(sub => (
+                              <option key={sub._id} value={sub.name}>{sub.name}</option>
+                            ))
+                          )}
                         </select>
                       </div>
                     </div>
@@ -581,18 +650,15 @@ const ExamSchedulePage: React.FC = () => {
                     <div className="col-md-4">
                       <div className="mb-3">
                         <label className="form-label">Room No</label>
-                        <select 
-                          className="form-select"
+                        <input 
+                          type="text"
+                          className="form-control"
                           name="roomNo"
                           value={newSchedule.roomNo}
                           onChange={handleInputChange}
+                          placeholder="Enter room number"
                           required
-                        >
-                          <option value="">Select</option>
-                          {roomOptions.map(room => (
-                            <option key={room} value={room}>{room}</option>
-                          ))}
-                        </select>
+                        />
                       </div>
                     </div>
                     <div className="col-md-4">
@@ -679,8 +745,9 @@ const ExamSchedulePage: React.FC = () => {
                           onChange={handleEditInputChange}
                           required
                         >
-                          {subjectOptions.map(subject => (
-                            <option key={`edit-${subject}`} value={subject}>{subject}</option>
+                          <option value="">Select</option>
+                          {subjects.map(sub => (
+                            <option key={sub._id} value={sub.name}>{sub.name}</option>
                           ))}
                         </select>
                       </div>
@@ -750,17 +817,14 @@ const ExamSchedulePage: React.FC = () => {
                     <div className="col-md-4">
                       <div className="mb-3">
                         <label className="form-label">Room No</label>
-                        <select 
-                          className="form-select"
+                        <input
+                          type="text"
+                          className="form-control"
                           name="roomNo"
                           value={editSchedule.roomNo}
                           onChange={handleEditInputChange}
                           required
-                        >
-                          {roomOptions.map(room => (
-                            <option key={`edit-${room}`} value={room}>{room}</option>
-                          ))}
-                        </select>
+                        />
                       </div>
                     </div>
                     <div className="col-md-4">

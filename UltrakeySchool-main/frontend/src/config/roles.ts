@@ -1,8 +1,3 @@
-/**
- * Unified Role Configuration for EduManage Pro
- * Defines user roles, their permissions, and access levels
- */
-
 export type UserRole = 'super_admin' | 'institution_admin' | 'admin' | 'teacher' | 'student' | 'parent' | 'accountant' | 'hr' | 'librarian' | 'transport_manager' | 'hostel_warden' | 'principal' | 'agent' | 'staff_member';
 
 export interface Role {

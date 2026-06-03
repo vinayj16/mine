@@ -37,7 +37,7 @@ const getApiBaseUrl = (): string => {
     return appendApiVersion(baseUrl, apiVersion);
   }
 
-  return 'http://localhost:5000/api/v1';
+  return '/api/v1';
 };
 
 const API_CONFIG = {
@@ -101,10 +101,19 @@ api.interceptors.response.use(
             { refreshToken }
           );
 
-          const { accessToken } = response.data.data;
+          const payload = response.data?.data || response.data;
+          const accessToken = payload?.accessToken;
+          const newRefreshToken = payload?.refreshToken;
+
+          if (!accessToken) {
+            throw new Error('No access token in refresh response');
+          }
 
           // Store new access token
           localStorage.setItem('accessToken', accessToken);
+          if (newRefreshToken) {
+            localStorage.setItem('refreshToken', newRefreshToken);
+          }
 
           // Update original request with new token
           if (originalRequest.headers) {
@@ -115,22 +124,46 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch {
-        // Refresh failed - redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        
-        window.location.href = '/login';
+        // Refresh failed — keep existing tokens so user is never auto-logged out
+        console.warn('[API] Token refresh failed, existing tokens preserved');
       }
     }
 
     // Handle 403 Forbidden
     if (error.response?.status === 403) {
-      // Access forbidden
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Access denied. Please check your permissions.';
+      console.warn('[API] 403 Forbidden:', msg);
+    }
+
+    // Handle 503 Maintenance Mode
+    if (error.response?.status === 503) {
+      const body = error.response?.data;
+      if (body?.data?.maintenance) {
+        window.dispatchEvent(new CustomEvent('app:maintenance', {
+          detail: { message: body.data.message || 'System is under maintenance.' }
+        }));
+      }
+      const msg = body?.message || 'Service temporarily unavailable. Please try again later.';
+      console.warn('[API] 503 Maintenance:', msg);
     }
 
     // Handle 500 Internal Server Error
     if (error.response?.status === 500) {
-      // Server error
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'Server error. Please try again later.';
+      console.error('[API] 500 Server Error:', msg);
+    }
+
+    // Handle 400 Bad Request
+    if (error.response?.status === 400) {
+      const details = error.response?.data?.error?.details;
+      const msg = details?.[0]?.message || error.response?.data?.error?.message || error.response?.data?.message || 'Bad request. Please check your input.';
+      console.warn('[API] 400 Bad Request:', msg);
+    }
+
+    // Handle 404 Not Found
+    if (error.response?.status === 404) {
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || 'The requested resource was not found.';
+      console.warn('[API] 404 Not Found:', msg);
     }
 
     return Promise.reject(error);

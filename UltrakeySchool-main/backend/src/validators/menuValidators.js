@@ -23,8 +23,8 @@ export const userIdValidator = [
     .isMongoId().withMessage('Invalid user ID')
 ];
 
-export const schoolIdQueryValidator = [
-  query('schoolId')
+export const institutionIdQueryValidator = [
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];
@@ -44,7 +44,7 @@ export const createDefaultMenuValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  body('schoolId')
+  body('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];
@@ -64,7 +64,7 @@ export const updateMenuValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  query('schoolId')
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID'),
   body('menuSections')
@@ -96,7 +96,7 @@ export const addCustomMenuItemValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  query('schoolId')
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID'),
   body('label')
@@ -134,7 +134,7 @@ export const removeCustomMenuItemValidator = [
   param('menuItemPath')
     .notEmpty().withMessage('Menu item path is required')
     .isString().withMessage('Menu item path must be a string'),
-  query('schoolId')
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];
@@ -154,7 +154,7 @@ export const hideShowMenuItemValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  body('schoolId')
+  body('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID'),
   body('menuItemPath')
@@ -177,7 +177,7 @@ export const reorderMenuValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  body('schoolId')
+  body('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID'),
   body('sectionOrders')
@@ -200,7 +200,7 @@ export const addQuickActionValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  query('schoolId')
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID'),
   body('id')
@@ -238,7 +238,7 @@ export const removeQuickActionValidator = [
   param('actionId')
     .notEmpty().withMessage('Action ID is required')
     .isString().withMessage('Action ID must be a string'),
-  query('schoolId')
+  query('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];
@@ -258,7 +258,7 @@ export const resetMenuValidator = [
       'transport_manager',
       'hostel_warden'
     ]).withMessage('Invalid role ID'),
-  body('schoolId')
+  body('institutionId')
     .optional()
     .isMongoId().withMessage('Invalid school ID')
 ];

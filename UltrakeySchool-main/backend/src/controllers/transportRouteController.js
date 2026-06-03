@@ -43,43 +43,53 @@ const validateCoordinates = (lat, lng) => {
 const getAllRoutes = async (req, res) => {
   try {
     logger.info('Fetching all transport routes');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    // Get institutionId from user or query params - support multiple roles
+    let institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
+
+    // For transport_manager or other roles, use the user's institution
+    if (!institutionId && req.user?.institution) {
+      institutionId = req.user.institution;
+    }
+
     const { status, name, page, limit, sortBy, sortOrder } = req.query;
-    
-    // Validation
+
+    // Don't require validation if we have data in the system
+    // Validation - skip if not provided (allow read access)
     const errors = [];
-    
-    const institutionIdError = validateObjectId(institutionId, 'Institution ID');
-    if (institutionIdError) errors.push(institutionIdError);
-    
+
+    if (!institutionId) {
+      // For superadmin or when no institution, get all routes
+      logger.info('No institutionId provided, fetching all routes');
+    }
+
     if (status && !VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     if (name && name.length > MAX_NAME_LENGTH) {
       errors.push('Name must not exceed ' + MAX_NAME_LENGTH + ' characters');
     }
-    
+
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
-    
+
     if (pageNum < 1) {
       errors.push('Page must be greater than 0');
     }
-    
+
     if (limitNum < 1 || limitNum > 100) {
       errors.push('Limit must be between 1 and 100');
     }
-    
+
     if (sortOrder && !VALID_SORT_ORDERS.includes(sortOrder)) {
       errors.push('Invalid sort order. Must be one of: ' + VALID_SORT_ORDERS.join(', '));
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const filters = {
       status,
       name,
@@ -88,11 +98,13 @@ const getAllRoutes = async (req, res) => {
       sortBy: sortBy || 'createdAt',
       sortOrder: sortOrder || 'desc'
     };
-    
-    const result = await transportRouteService.getAllRoutes(institutionId, filters);
-    
-    logger.info('Transport routes fetched successfully:', { institutionId, count: result.data?.length || 0 });
-    return successResponse(res, result, 'Transport routes retrieved successfully');
+
+    let result = await transportRouteService.getAllRoutes(institutionId, filters);
+    const finalDataArray = Array.isArray(result) ? result : (result?.data || []);
+    const finalPagination = Array.isArray(result) ? null : result?.pagination;
+
+    logger.info('Transport routes fetched successfully:', { institutionId, count: finalDataArray.length });
+    return successResponse(res, finalDataArray, 'Transport routes retrieved successfully', finalPagination);
   } catch (error) {
     logger.error('Error fetching transport routes:', error);
     return errorResponse(res, error.message);
@@ -102,29 +114,29 @@ const getAllRoutes = async (req, res) => {
 const getRouteById = async (req, res) => {
   try {
     logger.info('Fetching transport route by ID');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { id } = req.params;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.getRouteById(id, institutionId);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route fetched successfully:', { id });
     return successResponse(res, route, 'Transport route retrieved successfully');
   } catch (error) {
@@ -136,34 +148,50 @@ const getRouteById = async (req, res) => {
 const createRoute = async (req, res) => {
   try {
     logger.info('Creating transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    // Get institutionId from user (supports multiple roles)
+    let institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
+
+    // For transport_manager or other roles, use the user's institution
+    if (!institutionId && req.user?.institution) {
+      institutionId = req.user.institution;
+    }
+
+    // For transport_manager role, get from user.institutionId
+    if (!institutionId && req.user?.role === 'transport_manager') {
+      institutionId = req.user.institutionId || req.user.institution;
+    }
+
     const { name, routeNumber, startPoint, endPoint, stops, distance, estimatedDuration, status, description } = req.body;
-    
-    // Validation
+
+    // Validation - skip strict ObjectId validation for transport_manager
     const errors = [];
-    
-    const institutionIdError = validateObjectId(institutionId, 'Institution ID');
-    if (institutionIdError) errors.push(institutionIdError);
-    
+
+    if (!institutionId) {
+      errors.push('Institution ID is required');
+    } else if (!mongoose.Types.ObjectId.isValid(institutionId)) {
+      // Allow for transport_manager - use the string directly
+      logger.warn('Non-ObjectId institutionId received:', institutionId);
+    }
+
     if (!name || name.trim().length === 0) {
       errors.push('Route name is required');
     } else if (name.length > MAX_NAME_LENGTH) {
       errors.push('Route name must not exceed ' + MAX_NAME_LENGTH + ' characters');
     }
-    
+
     if (routeNumber && routeNumber.length > MAX_ROUTE_NUMBER_LENGTH) {
       errors.push('Route number must not exceed ' + MAX_ROUTE_NUMBER_LENGTH + ' characters');
     }
-    
+
     if (!startPoint || startPoint.trim().length === 0) {
       errors.push('Start point is required');
     }
-    
+
     if (!endPoint || endPoint.trim().length === 0) {
       errors.push('End point is required');
     }
-    
+
     if (stops && Array.isArray(stops)) {
       stops.forEach((stop, index) => {
         if (stop.coordinates) {
@@ -174,35 +202,35 @@ const createRoute = async (req, res) => {
         }
       });
     }
-    
+
     if (distance !== undefined) {
       const dist = parseFloat(distance);
       if (isNaN(dist) || dist < 0) {
         errors.push('Distance must be a positive number');
       }
     }
-    
+
     if (estimatedDuration !== undefined) {
       const duration = parseInt(estimatedDuration);
       if (isNaN(duration) || duration < 0) {
         errors.push('Estimated duration must be a positive number');
       }
     }
-    
+
     if (status && !VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     if (description && description.length > MAX_DESCRIPTION_LENGTH) {
       errors.push('Description must not exceed ' + MAX_DESCRIPTION_LENGTH + ' characters');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.createRoute(institutionId, req.body);
-    
+
     logger.info('Transport route created successfully:', { routeId: route._id });
     return createdResponse(res, route, 'Route created successfully');
   } catch (error) {
@@ -214,28 +242,28 @@ const createRoute = async (req, res) => {
 const updateRoute = async (req, res) => {
   try {
     logger.info('Updating transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id } = req.params;
     const { name, routeNumber, stops, distance, estimatedDuration, status, description } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (name && name.length > MAX_NAME_LENGTH) {
       errors.push('Route name must not exceed ' + MAX_NAME_LENGTH + ' characters');
     }
-    
+
     if (routeNumber && routeNumber.length > MAX_ROUTE_NUMBER_LENGTH) {
       errors.push('Route number must not exceed ' + MAX_ROUTE_NUMBER_LENGTH + ' characters');
     }
-    
+
     if (stops && Array.isArray(stops)) {
       stops.forEach((stop, index) => {
         if (stop.coordinates) {
@@ -246,39 +274,39 @@ const updateRoute = async (req, res) => {
         }
       });
     }
-    
+
     if (distance !== undefined) {
       const dist = parseFloat(distance);
       if (isNaN(dist) || dist < 0) {
         errors.push('Distance must be a positive number');
       }
     }
-    
+
     if (estimatedDuration !== undefined) {
       const duration = parseInt(estimatedDuration);
       if (isNaN(duration) || duration < 0) {
         errors.push('Estimated duration must be a positive number');
       }
     }
-    
+
     if (status && !VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     if (description && description.length > MAX_DESCRIPTION_LENGTH) {
       errors.push('Description must not exceed ' + MAX_DESCRIPTION_LENGTH + ' characters');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.updateRoute(id, institutionId, req.body);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route updated successfully:', { id });
     return successResponse(res, route, 'Route updated successfully');
   } catch (error) {
@@ -290,29 +318,29 @@ const updateRoute = async (req, res) => {
 const deleteRoute = async (req, res) => {
   try {
     logger.info('Deleting transport route');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { id } = req.params;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.deleteRoute(id, institutionId);
-    
+
     if (!result) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route deleted successfully:', { id });
     return successResponse(res, null, 'Route deleted successfully');
   } catch (error) {
@@ -324,16 +352,16 @@ const deleteRoute = async (req, res) => {
 const bulkDeleteRoutes = async (req, res) => {
   try {
     logger.info('Bulk deleting transport routes');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { ids } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       errors.push('Route IDs array is required and must not be empty');
     } else {
@@ -345,13 +373,13 @@ const bulkDeleteRoutes = async (req, res) => {
         }
       }
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.bulkDeleteRoutes(ids, institutionId);
-    
+
     logger.info('Transport routes bulk deleted successfully:', { count: result.modifiedCount || result.deletedCount || 0 });
     return successResponse(res, result, result.modifiedCount + ' route(s) deleted successfully');
   } catch (error) {
@@ -363,36 +391,36 @@ const bulkDeleteRoutes = async (req, res) => {
 const getActiveRoutes = async (req, res) => {
   try {
     logger.info('Fetching active transport routes');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { page, limit } = req.query;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
-    
+
     if (pageNum < 1) {
       errors.push('Page must be greater than 0');
     }
-    
+
     if (limitNum < 1 || limitNum > 100) {
       errors.push('Limit must be between 1 and 100');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.getActiveRoutes(institutionId, {
       page: pageNum,
       limit: limitNum
     });
-    
+
     logger.info('Active transport routes fetched successfully');
     return successResponse(res, result, 'Active routes retrieved successfully');
   } catch (error) {
@@ -405,43 +433,43 @@ const getActiveRoutes = async (req, res) => {
 const getRoutesByStatus = async (req, res) => {
   try {
     logger.info('Fetching transport routes by status');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { status } = req.params;
     const { page, limit } = req.query;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (!status) {
       errors.push('Status is required');
     } else if (!VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
-    
+
     if (pageNum < 1) {
       errors.push('Page must be greater than 0');
     }
-    
+
     if (limitNum < 1 || limitNum > 100) {
       errors.push('Limit must be between 1 and 100');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.getRoutesByStatus(status, institutionId, {
       page: pageNum,
       limit: limitNum
     });
-    
+
     logger.info('Transport routes by status fetched successfully:', { status });
     return successResponse(res, result, 'Routes retrieved successfully');
   } catch (error) {
@@ -453,36 +481,36 @@ const getRoutesByStatus = async (req, res) => {
 const updateRouteStatus = async (req, res) => {
   try {
     logger.info('Updating transport route status');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id } = req.params;
     const { status } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (!status) {
       errors.push('Status is required');
     } else if (!VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.updateRouteStatus(id, institutionId, status);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route status updated successfully:', { id, status });
     return successResponse(res, route, 'Route status updated successfully');
   } catch (error) {
@@ -494,42 +522,42 @@ const updateRouteStatus = async (req, res) => {
 const searchRoutes = async (req, res) => {
   try {
     logger.info('Searching transport routes');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { q, page, limit } = req.query;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (!q || q.trim().length === 0) {
       errors.push('Search query is required');
     } else if (q.length > 200) {
       errors.push('Search query must not exceed 200 characters');
     }
-    
+
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
-    
+
     if (pageNum < 1) {
       errors.push('Page must be greater than 0');
     }
-    
+
     if (limitNum < 1 || limitNum > 100) {
       errors.push('Limit must be between 1 and 100');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.searchRoutes(institutionId, q, {
       page: pageNum,
       limit: limitNum
     });
-    
+
     logger.info('Transport routes searched successfully:', { query: q });
     return successResponse(res, result, 'Search results retrieved successfully');
   } catch (error) {
@@ -541,21 +569,21 @@ const searchRoutes = async (req, res) => {
 const getRouteStatistics = async (req, res) => {
   try {
     logger.info('Fetching transport route statistics');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const stats = await transportRouteService.getRouteStatistics(institutionId);
-    
+
     logger.info('Transport route statistics fetched successfully');
     return successResponse(res, stats, 'Route statistics retrieved successfully');
   } catch (error) {
@@ -567,29 +595,29 @@ const getRouteStatistics = async (req, res) => {
 const getRouteAnalytics = async (req, res) => {
   try {
     logger.info('Fetching transport route analytics');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
-    const { groupBy } = req.query;
-    
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
+    const { period, startDate, endDate } = req.query;
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const validGroupBy = ['status', 'distance', 'duration', 'stops'];
     const groupByValue = groupBy || 'status';
-    
+
     if (!validGroupBy.includes(groupByValue)) {
       errors.push('Invalid groupBy. Must be one of: ' + validGroupBy.join(', '));
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const analytics = await transportRouteService.getRouteAnalytics(institutionId, groupByValue);
-    
+
     logger.info('Transport route analytics fetched successfully');
     return successResponse(res, analytics, 'Route analytics retrieved successfully');
   } catch (error) {
@@ -601,35 +629,35 @@ const getRouteAnalytics = async (req, res) => {
 const exportRoutes = async (req, res) => {
   try {
     logger.info('Exporting transport routes');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { format, status } = req.query;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
     } else if (!VALID_EXPORT_FORMATS.includes(format.toLowerCase())) {
       errors.push('Invalid export format. Must be one of: ' + VALID_EXPORT_FORMATS.join(', '));
     }
-    
+
     if (status && !VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const exportData = await transportRouteService.exportRoutes(institutionId, {
       format: format.toLowerCase(),
       status
     });
-    
+
     logger.info('Transport routes exported successfully:', { format });
     return successResponse(res, exportData, 'Routes exported successfully');
   } catch (error) {
@@ -641,16 +669,16 @@ const exportRoutes = async (req, res) => {
 const bulkUpdateRoutes = async (req, res) => {
   try {
     logger.info('Bulk updating transport routes');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { ids, updates } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       errors.push('Route IDs array is required and must not be empty');
     } else {
@@ -662,21 +690,21 @@ const bulkUpdateRoutes = async (req, res) => {
         }
       }
     }
-    
+
     if (!updates || typeof updates !== 'object') {
       errors.push('Updates object is required');
     } else {
       if (updates.status && !VALID_STATUSES.includes(updates.status)) {
         errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
       }
-      
+
       if (updates.distance !== undefined) {
         const dist = parseFloat(updates.distance);
         if (isNaN(dist) || dist < 0) {
           errors.push('Distance must be a positive number');
         }
       }
-      
+
       if (updates.estimatedDuration !== undefined) {
         const duration = parseInt(updates.estimatedDuration);
         if (isNaN(duration) || duration < 0) {
@@ -684,13 +712,13 @@ const bulkUpdateRoutes = async (req, res) => {
         }
       }
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const result = await transportRouteService.bulkUpdateRoutes(ids, institutionId, updates);
-    
+
     logger.info('Transport routes bulk updated successfully:', { count: result.modifiedCount || 0 });
     return successResponse(res, result, result.modifiedCount + ' route(s) updated successfully');
   } catch (error) {
@@ -702,48 +730,48 @@ const bulkUpdateRoutes = async (req, res) => {
 const addStopToRoute = async (req, res) => {
   try {
     logger.info('Adding stop to transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id } = req.params;
     const { name, coordinates, arrivalTime, departureTime, sequence } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (!name || name.trim().length === 0) {
       errors.push('Stop name is required');
     }
-    
+
     if (coordinates) {
       const coordErrors = validateCoordinates(coordinates.latitude, coordinates.longitude);
       if (coordErrors.length > 0) {
         errors.push.apply(errors, coordErrors);
       }
     }
-    
+
     if (sequence !== undefined) {
       const seq = parseInt(sequence);
       if (isNaN(seq) || seq < 0) {
         errors.push('Sequence must be a positive number');
       }
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.addStopToRoute(id, institutionId, req.body);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Stop added to transport route successfully:', { id, stopName: name });
     return successResponse(res, route, 'Stop added to route successfully');
   } catch (error) {
@@ -755,32 +783,32 @@ const addStopToRoute = async (req, res) => {
 const removeStopFromRoute = async (req, res) => {
   try {
     logger.info('Removing stop from transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { id, stopId } = req.params;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     const stopIdError = validateObjectId(stopId, 'Stop ID');
     if (stopIdError) errors.push(stopIdError);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.removeStopFromRoute(id, stopId, institutionId);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route or stop not found');
     }
-    
+
     logger.info('Stop removed from transport route successfully:', { id, stopId });
     return successResponse(res, route, 'Stop removed from route successfully');
   } catch (error) {
@@ -791,52 +819,52 @@ const removeStopFromRoute = async (req, res) => {
 
 const updateRouteStop = async (req, res) => {
   try {
-    logger.info('Updating transport route stop');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    logger.info('Updating stop in transport route');
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id, stopId } = req.params;
     const { name, coordinates, arrivalTime, departureTime, sequence } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     const stopIdError = validateObjectId(stopId, 'Stop ID');
     if (stopIdError) errors.push(stopIdError);
-    
+
     if (name && name.trim().length === 0) {
       errors.push('Stop name cannot be empty');
     }
-    
+
     if (coordinates) {
       const coordErrors = validateCoordinates(coordinates.latitude, coordinates.longitude);
       if (coordErrors.length > 0) {
         errors.push.apply(errors, coordErrors);
       }
     }
-    
+
     if (sequence !== undefined) {
       const seq = parseInt(sequence);
       if (isNaN(seq) || seq < 0) {
         errors.push('Sequence must be a positive number');
       }
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.updateRouteStop(id, stopId, institutionId, req.body);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route or stop not found');
     }
-    
+
     logger.info('Transport route stop updated successfully:', { id, stopId });
     return successResponse(res, route, 'Route stop updated successfully');
   } catch (error) {
@@ -847,30 +875,30 @@ const updateRouteStop = async (req, res) => {
 
 const getRouteStops = async (req, res) => {
   try {
-    logger.info('Fetching transport route stops');
-    
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    logger.info('Fetching stops for transport route');
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     const { id } = req.params;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const stops = await transportRouteService.getRouteStops(id, institutionId);
-    
+
     if (!stops) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route stops fetched successfully:', { id });
     return successResponse(res, stops, 'Route stops retrieved successfully');
   } catch (error) {
@@ -882,37 +910,37 @@ const getRouteStops = async (req, res) => {
 const optimizeRoute = async (req, res) => {
   try {
     logger.info('Optimizing transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id } = req.params;
     const { optimizationCriteria } = req.body;
-    
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     const validCriteria = ['distance', 'time', 'stops'];
     const criteria = optimizationCriteria || 'distance';
-    
+
     if (!validCriteria.includes(criteria)) {
       errors.push('Invalid optimization criteria. Must be one of: ' + validCriteria.join(', '));
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.optimizeRoute(id, institutionId, criteria);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route optimized successfully:', { id, criteria });
     return successResponse(res, route, 'Route optimized successfully');
   } catch (error) {
@@ -924,34 +952,34 @@ const optimizeRoute = async (req, res) => {
 const duplicateRoute = async (req, res) => {
   try {
     logger.info('Duplicating transport route');
-    
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
     const { id } = req.params;
-    const { newName } = req.body;
-    
+    const { name } = req.body;
+
     // Validation
     const errors = [];
-    
+
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
-    
+
     const idError = validateObjectId(id, 'Route ID');
     if (idError) errors.push(idError);
-    
+
     if (newName && newName.length > MAX_NAME_LENGTH) {
       errors.push('New route name must not exceed ' + MAX_NAME_LENGTH + ' characters');
     }
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const route = await transportRouteService.duplicateRoute(id, institutionId, newName);
-    
+
     if (!route) {
       return notFoundResponse(res, 'Transport route not found');
     }
-    
+
     logger.info('Transport route duplicated successfully:', { originalId: id, newId: route._id });
     return createdResponse(res, route, 'Route duplicated successfully');
   } catch (error) {

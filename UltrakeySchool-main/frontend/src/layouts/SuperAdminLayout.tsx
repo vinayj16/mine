@@ -28,7 +28,7 @@ const SuperAdminLayout: React.FC = () => {
   const sidebarWidth = isMobileView ? 0 : (isSidebarCollapsed ? 80 : 280);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
+    <div className="layout-root superadmin-layout" style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: '#f8fafc' }}>
       <SuperAdminSidebar
         isCollapsed={isSidebarCollapsed}
         setCollapsed={setIsSidebarCollapsed}

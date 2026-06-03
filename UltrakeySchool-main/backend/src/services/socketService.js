@@ -1,8 +1,3 @@
-/**
- * Socket.io Service
- * Provides real-time communication features
- */
-
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import logger from '../utils/logger.js';

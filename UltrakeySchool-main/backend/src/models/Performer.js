@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const performerSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -116,9 +116,9 @@ const performerSchema = new mongoose.Schema({
 });
 
 // Compound indexes for efficient queries
-performerSchema.index({ schoolId: 1, type: 1, isFeatured: 1, featuredOrder: 1 });
-performerSchema.index({ schoolId: 1, 'performance.rating': -1 });
-performerSchema.index({ schoolId: 1, 'metrics.totalScore': -1 });
+performerSchema.index({ institutionId: 1, type: 1, isFeatured: 1, featuredOrder: 1 });
+performerSchema.index({ institutionId: 1, 'performance.rating': -1 });
+performerSchema.index({ institutionId: 1, 'metrics.totalScore': -1 });
 
 // Virtual for title
 performerSchema.virtual('title').get(function() {

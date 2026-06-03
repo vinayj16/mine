@@ -32,11 +32,6 @@ router.get('/', authorize(['admin', 'super-admin', 'principal',   'institution_a
 router.get('/summary', authorize(['admin', 'super-admin', 'principal',   'institution_admin']), getAnalyticsSummary);
 router.get('/realtime', authorize(['admin', 'super-admin']), getRealtimeAnalytics);
 
-// Institution Admin Dashboard Analytics
-router.get('/institute-admin/dashboard', async (req, res) => {
-  res.json({ success: true, data: { topStats: [], admissionKPIs: [], admissionsYearData: [], gradeStrength: [], admissionTrend: [] } });
-});
-
 // Overview Pages Analytics - return empty data until implemented
 router.get('/teaching-overview', async (req, res) => {
   res.json({ success: true, data: { topStats: [], teachingKPIs: [], subjectPerformance: [], classPerformance: [], teachingLoad: [] } });
@@ -48,7 +43,7 @@ router.get('/parent-overview', async (req, res) => {
   res.json({ success: true, data: { topStats: [], parentKPIs: [], parentEngagement: [], communicationStats: [] } });
 });
 
-// Institution Analytics - simplified to prevent crashes
+// Institution Analytics
 router.get('/institution', async (req, res) => {
   try {
     const Institution = (await import('../models/Institution.js')).default;

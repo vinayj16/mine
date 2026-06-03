@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const eventSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: false,
     index: true
   },
@@ -61,7 +61,7 @@ const eventSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-eventSchema.index({ schoolId: 1, startDate: 1 });
+eventSchema.index({ institutionId: 1, startDate: 1 });
 eventSchema.index({ eventType: 1 });
 
 export default mongoose.model('Event', eventSchema);

@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import branchService, { type Branch } from '../../services/branchService'
-import { studentService, type Student, type StudentFilters } from '../../services/studentService'
+import { studentService, type Student } from '../../services/studentService'
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils'
 
 const BranchDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [branch, setBranch] = useState<Branch | null>(null)
   const [students, setStudents] = useState<Student[]>([])
+  const [studentsLoading, setStudentsLoading] = useState(false)
+  const [studentsError, setStudentsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,27 +38,23 @@ const BranchDetailsPage: React.FC = () => {
   const fetchStudents = async () => {
     try {
       setStudentsLoading(true)
+      setStudentsError(null)
       setStudents([])
-      
-      // Get students for this branch - using the studentService
+
       const response = await studentService.getAll({
-        limit: 100, // Get more students for branch details
-        // Note: If the API doesn't support branch filter, this would need to be adjusted
-      } as StudentFilters & { branchId?: string })
-      
-      // For now, get all students and assume they belong to this branch
-      // In a real implementation, you would filter by branchId or use a specific endpoint
-      setStudents(response.data as unknown as Student[])
+        limit: 100,
+        branchId: id
+      })
+
+      setStudents(response?.data || [])
     } catch (err: any) {
       console.error('Failed to fetch students:', err)
-      setStudents(err.response?.data?.message || 'Failed to load students')
+      setStudents([])
+      setStudentsError(err.response?.data?.message || 'Failed to load students')
     } finally {
       setStudentsLoading(false)
     }
   }
-function setStudentsLoading(_arg0: boolean) {
-  throw new Error('Function not implemented.')
-}
 
   const getStatusBadge = (status: string) => {
     return status === 'active' ? 'bg-success' : 'bg-warning'
@@ -62,6 +62,29 @@ function setStudentsLoading(_arg0: boolean) {
 
   const getStudentName = (student: Student) => {
     return `${student.firstName} ${student.lastName}`
+  }
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!students.length) return
+    const data = students.map(s => ({
+      Name: getStudentName(s),
+      Email: s.email,
+      'Roll Number': s.rollNumber,
+      Grade: s.class,
+      Status: s.status,
+    }))
+    const columns: ExportColumn[] = [
+      { key: 'Name', label: 'Name' },
+      { key: 'Email', label: 'Email' },
+      { key: 'Roll Number', label: 'Roll Number' },
+      { key: 'Grade', label: 'Grade' },
+      { key: 'Status', label: 'Status' },
+    ]
+    if (type === 'pdf') {
+      exportToPDF(data, `branch-${branch?.code}-students`, columns, `Students of ${branch?.name}`)
+    } else {
+      exportToExcel(data, `branch-${branch?.code}-students`, columns)
+    }
   }
 
   if (loading) {
@@ -117,12 +140,12 @@ function setStudentsLoading(_arg0: boolean) {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2"></i>Export as Excel
                 </button>
               </li>
@@ -213,7 +236,7 @@ function setStudentsLoading(_arg0: boolean) {
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Institution ID</label>
-                    <div className="form-control">{branch.institutionId}</div>
+                    <div className="form-control">{typeof branch.institutionId === 'string' ? branch.institutionId : branch.institutionId?._id || 'N/A'}</div>
                   </div>
                 </div>
                 <div className="col-md-6">
@@ -268,7 +291,22 @@ function setStudentsLoading(_arg0: boolean) {
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student) => (
+                    {studentsLoading ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-4">
+                          <div className="spinner-border spinner-border-sm text-primary me-2" role="status" />
+                          Loading students...
+                        </td>
+                      </tr>
+                    ) : studentsError ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-danger py-4">{studentsError}</td>
+                      </tr>
+                    ) : students.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center text-muted py-4">No students found for this branch.</td>
+                      </tr>
+                    ) : students.map((student) => (
                       <tr key={student.id}>
                         <td>
                           <div className="d-flex align-items-center">
@@ -297,12 +335,12 @@ function setStudentsLoading(_arg0: boolean) {
                             </button>
                             <ul className="dropdown-menu dropdown-menu-end">
                               <li>
-                                <button className="dropdown-item">
+                                <button className="dropdown-item" onClick={() => navigate(`/super-admin/students/${student.id}`)}>
                                   <i className="ti ti-eye me-2"></i>View Details
                                 </button>
                               </li>
                               <li>
-                                <button className="dropdown-item">
+                                <button className="dropdown-item" onClick={() => navigate(`/super-admin/students/${student.id}/edit`)}>
                                   <i className="ti ti-edit me-2"></i>Edit Student
                                 </button>
                               </li>

@@ -1,6 +1,7 @@
 import apiService, { type ApiResponse } from './api';
 
 export interface ExamSchedule {
+  className: string;
   id: string;
   scheduleId?: string;
   institutionId: string;
@@ -23,7 +24,9 @@ export interface ExamSchedule {
 
 export interface CreateExamScheduleInput {
   institutionId: string;
-  classId: string;
+  classId?: string;
+  className?: string;
+  section?: string;
   subject: string;
   examName: string;
   examDate: string;

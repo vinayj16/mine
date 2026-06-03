@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const studentTimetableSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -90,7 +90,7 @@ const studentTimetableSchema = new mongoose.Schema({
   timestamps: true
 });
 
-studentTimetableSchema.index({ schoolId: 1, classId: 1, dayOfWeek: 1, isActive: 1 });
+studentTimetableSchema.index({ institutionId: 1, classId: 1, dayOfWeek: 1, isActive: 1 });
 studentTimetableSchema.index({ academicYear: 1, isActive: 1 });
 
 const StudentTimetable = mongoose.model('StudentTimetable', studentTimetableSchema);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Role {
   _id: string;
@@ -183,12 +184,32 @@ const RolesPermissionsPage = () => {
     });
   };
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = roles.map(r => ({
+      'Role Name': r.name,
+      Description: r.description || '-',
+      Permissions: `${r.permissions?.length || 0} permissions`,
+      'Created On': formatDate(r.createdAt),
+      Status: r.isActive ? 'Active' : 'Inactive'
+    }));
+    exportToPDF(exportData, 'roles', [
+      { key: 'Role Name', label: 'Role Name' },
+      { key: 'Description', label: 'Description' },
+      { key: 'Permissions', label: 'Permissions' },
+      { key: 'Created On', label: 'Created On' },
+      { key: 'Status', label: 'Status' }
+    ], 'Roles & Permissions');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = roles.map(r => ({
+      'Role Name': r.name,
+      Description: r.description || '-',
+      Permissions: `${r.permissions?.length || 0} permissions`,
+      'Created On': formatDate(r.createdAt),
+      Status: r.isActive ? 'Active' : 'Inactive'
+    }));
+    exportToExcel(exportData, 'roles');
   };
 
   if (error && !loading) {
@@ -256,12 +277,12 @@ const RolesPermissionsPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>

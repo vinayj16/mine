@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { getInstitutionId, getUser } from '../../utils/auth';
 import apiClient from '../../api/client';
-import StudentSelector from '../../components/students/StudentSelector';
 
 interface Student {
   _id: string;
@@ -46,35 +46,35 @@ const StudentFeesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [fees, setFees] = useState<FeeRecord[]>([]);
-  const [selectedYear, setSelectedYear] = useState('2024/2025');
+  const currentAcYear = new Date().getFullYear() + '-' + (new Date().getFullYear() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentAcYear);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedFee, setSelectedFee] = useState<FeeRecord | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState('upi');
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [upId, setUpId] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = getInstitutionId();
 
   const fetchStudent = async () => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get(`/students/${id}`, {
-        params: { schoolId }
-      });
+      const user = getUser();
+      let response;
+      if (id) {
+        response = await apiClient.get(`/students/${id}`, {
+          params: { institutionId }
+        });
+      } else if (user?.role === 'student') {
+        response = await apiClient.get('/students/me');
+      } else {
+        setLoading(false);
+        return;
+      }
 
-      if (response.data.success) {
+      if (response && response.data.success) {
         setStudent(response.data.data);
       }
     } catch (err: any) {
@@ -88,20 +88,22 @@ const StudentFeesPage: React.FC = () => {
   };
 
   const fetchFees = async () => {
-    if (!id) return;
+    const studentId = id || student?._id;
+    if (!studentId) return;
 
     try {
       setFeesLoading(true);
 
-      const response = await apiClient.get(`/students/${id}/fees`, {
+      const response = await apiClient.get(`/students/${studentId}/fees`, {
         params: { 
-          schoolId,
+          institutionId,
           academicYear: selectedYear
         }
       });
 
       if (response.data.success) {
-        setFees(response.data.data || []);
+        const result = response.data.data;
+        setFees(result?.fees || result || []);
       }
     } catch (err: any) {
       console.error('Error fetching fees:', err);
@@ -110,6 +112,21 @@ const StudentFeesPage: React.FC = () => {
     } finally {
       setFeesLoading(false);
     }
+  };
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (Object.prototype.hasOwnProperty.call(window, 'Razorpay')) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
   const handlePayNow = (fee: FeeRecord) => {
@@ -124,31 +141,88 @@ const StudentFeesPage: React.FC = () => {
 
     setProcessingPayment(true);
     try {
-      const paymentData = {
-        studentId: id,
-        feeId: selectedFee._id,
-        amount: parseFloat(paymentAmount),
-        paymentMethod,
-        upiId: paymentMethod === 'upi' ? upId : null,
-        cardDetails: paymentMethod === 'card' ? {
-          number: cardNumber.slice(-4),
-          expiry: cardExpiry,
-          lastFour: cardNumber.slice(-4)
-        } : null,
-        paymentDate: new Date().toISOString()
+      const sdkLoaded = await loadRazorpayScript();
+      if (!sdkLoaded) {
+        toast.error('Failed to load Razorpay SDK. Please check your network connection.');
+        setProcessingPayment(false);
+        return;
+      }
+
+      const amountToPay = parseFloat(paymentAmount);
+      if (isNaN(amountToPay) || amountToPay <= 0) {
+        toast.error('Please enter a valid payment amount');
+        setProcessingPayment(false);
+        return;
+      }
+
+      const paymentResponse = await apiClient.post(`/fees/invoices/${selectedFee._id}/pay`, {
+        paymentMethod: 'online',
+        amount: amountToPay
+      });
+
+      if (!paymentResponse.data.success) {
+        throw new Error(paymentResponse.data.message || 'Failed to initiate payment');
+      }
+
+      const { payment_id, order_id, razorpay_key } = paymentResponse.data.data;
+
+      let razorpayKey = razorpay_key;
+      if (!razorpayKey) {
+        const configRes = await apiClient.get('/fees/payment-config');
+        razorpayKey = configRes.data?.data?.razorpayKey || 'rzp_test_123456789';
+      }
+
+      const options = {
+        key: razorpayKey,
+        amount: Math.round(amountToPay * 100),
+        currency: 'INR',
+        name: 'EduSearch',
+        description: `${selectedFee.feeGroup} - ${selectedFee.feeCode}`,
+        order_id: order_id || payment_id,
+        handler: async function (response: any) {
+          try {
+            setProcessingPayment(true);
+            const verifyResponse = await apiClient.post('/fees/payments/verify', {
+              paymentId: payment_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature
+            });
+
+            if (verifyResponse.data.success) {
+              toast.success('Payment completed and verified successfully!');
+              setShowPaymentModal(false);
+              fetchFees();
+            } else {
+              toast.error(verifyResponse.data.message || 'Payment verification failed');
+            }
+          } catch (err: any) {
+            console.error('Verification error:', err);
+            toast.error(err.response?.data?.message || 'Verification failed');
+          } finally {
+            setProcessingPayment(false);
+          }
+        },
+        prefill: {
+          name: fullName,
+          email: student?.email || 'student@school.com',
+          contact: student?.phone || '9999999999'
+        },
+        theme: {
+          color: '#6366f1'
+        },
+        modal: {
+          ondismiss: function() {
+            setProcessingPayment(false);
+          }
+        }
       };
 
-      const response = await apiClient.post('/fees/pay', paymentData);
-      
-      if (response.data.success) {
-        toast.success('Payment successful! Invoice generated.');
-        setShowPaymentModal(false);
-        fetchFees();
-      }
+      const paymentWindow = new (window as any).Razorpay(options);
+      paymentWindow.open();
     } catch (err: any) {
       console.error('Payment error:', err);
-      toast.error(err.response?.data?.message || 'Payment failed');
-    } finally {
+      toast.error(err.response?.data?.message || err.message || 'Payment initiation failed');
       setProcessingPayment(false);
     }
   };
@@ -174,12 +248,12 @@ const StudentFeesPage: React.FC = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const formatCurrency = (amount?: number) => {
     if (amount === undefined || amount === null) return '₹0';
-    return new Intl.NumberFormat('en-INR', { style: 'currency', currency: 'INR' }).format(amount);
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
   };
 
   const capitalize = (str?: string) => {
@@ -211,24 +285,12 @@ const StudentFeesPage: React.FC = () => {
   }
 
   if (error || !student) {
-    if (!id && !error) {
-      return (
-        <StudentSelector
-          redirectPath="/students/fees"
-          title="Select Student for Fees"
-          description="Choose a student to view their fee details"
-        />
-      );
-    }
     return (
       <div className="card">
         <div className="card-body text-center py-5">
-          <i className="ti ti-alert-circle fs-1 text-danger mb-3"></i>
-          <h4 className="mb-3">{error || 'Student not found'}</h4>
-          <button className="btn btn-primary" onClick={fetchStudent}>
-            <i className="ti ti-refresh me-2"></i>
-            Retry
-          </button>
+          <i className="ti ti-alert-circle fs-1 text-muted mb-3"></i>
+          <h4 className="mb-3">{error || 'No student selected'}</h4>
+          <p className="text-muted">Select a student from the list or provide a student ID to view fees.</p>
         </div>
       </div>
     );
@@ -237,7 +299,6 @@ const StudentFeesPage: React.FC = () => {
   const fullName = `${student.firstName} ${student.lastName}`;
   const classLabel = [student.classId?.name, student.sectionId?.name].filter(Boolean).join(', ') || 'N/A';
 
-  // Calculate totals
   const totalAmount = fees.reduce((sum, fee) => sum + fee.amount, 0);
   const totalPaid = fees.filter(f => f.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
   const totalPending = fees.filter(f => f.status === 'unpaid').reduce((sum, fee) => sum + fee.amount, 0);
@@ -266,7 +327,7 @@ const StudentFeesPage: React.FC = () => {
             <i className="ti ti-lock me-2" />
             Login Details
           </button>
-          <Link to={`/students/edit/${id}`} className="btn btn-primary d-flex align-items-center mb-2">
+          <Link to={`/students/edit/${student._id || id}`} className="btn btn-primary d-flex align-items-center mb-2">
             <i className="ti ti-edit-circle me-2" />
             Edit Student
           </Link>
@@ -349,9 +410,9 @@ const StudentFeesPage: React.FC = () => {
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
                 >
-                  <option value="2024/2025">Year: 2024 / 2025</option>
-                  <option value="2023/2024">Year: 2023 / 2024</option>
-                  <option value="2022/2023">Year: 2022 / 2023</option>
+                  <option value="2026-2027">Year: 2026-2027</option>
+                  <option value="2025-2026">Year: 2025-2026</option>
+                  <option value="2024-2025">Year: 2024-2025</option>
                 </select>
               </div>
             </div>
@@ -513,101 +574,67 @@ const StudentFeesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Payment Modal */}
+      {/* Payment Modal - Simplified, Razorpay handles payment method selection */}
       {showPaymentModal && selectedFee && (
         <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Pay Fees - {selectedFee.feeGroup}</h5>
+          <div className="modal-dialog modal-dialog-centered modal-sm">
+            <div className="modal-content" style={{ borderRadius: 16 }}>
+              <div className="modal-header border-0 pb-0">
+                <h5 className="modal-title fw-bold">Pay Fee</h5>
                 <button type="button" className="btn-close" onClick={() => setShowPaymentModal(false)}></button>
               </div>
-              <form onSubmit={handlePaymentSubmit}>
-                <div className="modal-body">
-                  <div className="alert alert-info mb-3">
-                    <div className="d-flex justify-content-between">
-                      <span>Total Amount:</span>
-                      <strong>{formatCurrency(selectedFee.amount)}</strong>
-                    </div>
-                    {selectedFee.discount && (
-                      <div className="d-flex justify-content-between mt-2">
-                        <span>Discount:</span>
-                        <span className="text-success">-{formatCurrency(selectedFee.discount)}</span>
-                      </div>
-                    )}
-                    {selectedFee.fine && (
-                      <div className="d-flex justify-content-between mt-2">
-                        <span>Fine:</span>
-                        <span className="text-danger">+{formatCurrency(selectedFee.fine)}</span>
-                      </div>
-                    )}
-                    <hr />
-                    <div className="d-flex justify-content-between">
-                      <span>Payable Amount:</span>
-                      <strong>{formatCurrency(selectedFee.amount - (selectedFee.discount || 0) + (selectedFee.fine || 0))}</strong>
-                    </div>
+              <div className="modal-body pt-3">
+                <div className="bg-light rounded-3 p-3 mb-3">
+                  <div className="d-flex justify-content-between mb-1">
+                    <span className="text-muted">{selectedFee.feeGroup}</span>
+                    <span className="fw-bold">{formatCurrency(selectedFee.amount)}</span>
                   </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">Payment Amount</label>
-                    <input type="number" className="form-control" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required />
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">Payment Method</label>
-                    <div className="d-flex gap-3">
-                      <div className="form-check">
-                        <input type="radio" className="form-check-input" id="upi" name="paymentMethod" checked={paymentMethod === 'upi'} onChange={() => setPaymentMethod('upi')} />
-                        <label className="form-check-label" htmlFor="upi">UPI</label>
-                      </div>
-                      <div className="form-check">
-                        <input type="radio" className="form-check-input" id="card" name="paymentMethod" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} />
-                        <label className="form-check-label" htmlFor="card">Debit/Credit Card</label>
-                      </div>
-                      <div className="form-check">
-                        <input type="radio" className="form-check-input" id="netbanking" name="paymentMethod" checked={paymentMethod === 'netbanking'} onChange={() => setPaymentMethod('netbanking')} />
-                        <label className="form-check-label" htmlFor="netbanking">Net Banking</label>
-                      </div>
-                      <div className="form-check">
-                        <input type="radio" className="form-check-input" id="cash" name="paymentMethod" checked={paymentMethod === 'cash'} onChange={() => setPaymentMethod('cash')} />
-                        <label className="form-check-label" htmlFor="cash">Cash</label>
-                      </div>
-                    </div>
-                  </div>
-
-                  {paymentMethod === 'upi' && (
-                    <div className="mb-3">
-                      <label className="form-label">UPI ID</label>
-                      <input type="text" className="form-control" placeholder="yourname@upi" value={upId} onChange={(e) => setUpId(e.target.value)} />
+                  {selectedFee.discount && (
+                    <div className="d-flex justify-content-between mb-1">
+                      <span className="text-success">Discount</span>
+                      <span className="text-success">-{formatCurrency(selectedFee.discount)}</span>
                     </div>
                   )}
+                  {selectedFee.fine && (
+                    <div className="d-flex justify-content-between mb-1">
+                      <span className="text-danger">Fine</span>
+                      <span className="text-danger">+{formatCurrency(selectedFee.fine)}</span>
+                    </div>
+                  )}
+                  <hr className="my-2" />
+                  <div className="d-flex justify-content-between">
+                    <span className="fw-semibold">Payable</span>
+                    <span className="fw-bold text-primary">{formatCurrency(selectedFee.amount - (selectedFee.discount || 0) + (selectedFee.fine || 0))}</span>
+                  </div>
+                </div>
 
-                  {paymentMethod === 'card' && (
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Amount (₹)</label>
+                  <input type="number" className="form-control form-control-lg fw-bold" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} required style={{ fontSize: '1.25rem' }} />
+                </div>
+
+                <div className="text-center py-3 bg-primary bg-opacity-10 rounded-3 mb-2">
+                  <i className="ti ti-shield-check fs-1 text-primary mb-2 d-block"></i>
+                  <h6 className="mb-1 fw-semibold">Powered by Razorpay</h6>
+                  <p className="text-muted small mb-0">Pay via UPI, Cards, Net Banking, Wallets & More</p>
+                </div>
+              </div>
+              <div className="modal-footer border-0 pt-0">
+                <button type="button" className="btn btn-light flex-fill" onClick={() => setShowPaymentModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary flex-fill fw-semibold d-flex align-items-center justify-content-center" onClick={handlePaymentSubmit} disabled={processingPayment} style={{ borderRadius: 10 }}>
+                  {processingPayment ? (
                     <>
-                      <div className="mb-3">
-                        <label className="form-label">Card Number</label>
-                        <input type="text" className="form-control" placeholder="1234 5678 9012 3456" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} maxLength={16} />
-                      </div>
-                      <div className="row">
-                        <div className="col-md-6 mb-3">
-                          <label className="form-label">Expiry</label>
-                          <input type="text" className="form-control" placeholder="MM/YY" value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)} maxLength={5} />
-                        </div>
-                        <div className="col-md-6 mb-3">
-                          <label className="form-label">CVV</label>
-                          <input type="password" className="form-control" placeholder="123" value={cardCvv} onChange={(e) => setCardCvv(e.target.value)} maxLength={4} />
-                        </div>
-                      </div>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ti ti-lock-open me-2"></i>
+                      Pay ₹{parseFloat(paymentAmount || '0').toLocaleString()}
                     </>
                   )}
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowPaymentModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-success" disabled={processingPayment}>
-                    {processingPayment ? 'Processing...' : <>Pay ₹{paymentAmount}</>}
-                  </button>
-                </div>
-              </form>
+                </button>
+              </div>
             </div>
           </div>
         </div>

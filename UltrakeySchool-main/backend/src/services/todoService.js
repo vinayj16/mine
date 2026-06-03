@@ -146,6 +146,124 @@ class TodoService {
 
     return grouped;
   }
+
+  async getTodosByPriority(priority, userId, institutionId) {
+    const query = { priority };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('-createdAt');
+  }
+
+  async getTodosByStatus(status, userId, institutionId) {
+    const query = { status };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('-createdAt');
+  }
+
+  async getOverdueTodos(userId, institutionId) {
+    const query = {
+      completed: false,
+      status: { $nin: ['trash', 'done'] },
+      dueDate: { $lt: new Date() }
+    };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('dueDate');
+  }
+
+  async getTodayTodos(userId, institutionId) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    
+    const query = {
+      completed: false,
+      status: { $nin: ['trash', 'done'] },
+      dueDate: { $gte: start, $lte: end }
+    };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('dueDate');
+  }
+
+  async getUpcomingTodos(userId, institutionId, days = 7) {
+    const start = new Date();
+    const end = new Date();
+    end.setDate(end.getDate() + days);
+    
+    const query = {
+      completed: false,
+      status: { $nin: ['trash', 'done'] },
+      dueDate: { $gte: start, $lte: end }
+    };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('dueDate');
+  }
+
+  async updateTodoPriority(id, priority) {
+    return await Todo.findByIdAndUpdate(id, { priority }, { new: true });
+  }
+
+  async bulkUpdatePriority(ids, priority) {
+    return await Todo.updateMany({ _id: { $in: ids } }, { priority });
+  }
+
+  async searchTodos(q, userId, institutionId) {
+    const query = {
+      $or: [
+        { title: { $regex: q, $options: 'i' } },
+        { description: { $regex: q, $options: 'i' } },
+        { tags: { $in: [new RegExp(q, 'i')] } }
+      ]
+    };
+    if (userId) query.userId = userId;
+    if (institutionId) query.institutionId = institutionId;
+    return await Todo.find(query).sort('-createdAt');
+  }
+
+  async exportTodos(options = {}) {
+    const query = {};
+    if (options.userId) query.userId = options.userId;
+    if (options.institutionId) query.institutionId = options.institutionId;
+    if (options.status) query.status = options.status;
+    if (options.priority) query.priority = options.priority;
+    
+    const todos = await Todo.find(query).sort('-createdAt');
+    
+    if (options.format === 'json') {
+      return todos;
+    }
+    return todos.map(t => ({
+      Title: t.title,
+      Description: t.description || '',
+      Priority: t.priority,
+      Status: t.status,
+      Completed: t.completed ? 'Yes' : 'No',
+      DueDate: t.dueDate ? t.dueDate.toISOString().split('T')[0] : 'No Due Date',
+      CreatedAt: t.createdAt.toISOString().split('T')[0]
+    }));
+  }
+
+  async duplicateTodo(id) {
+    const original = await Todo.findById(id);
+    if (!original) return null;
+    
+    const duplicate = new Todo({
+      title: `${original.title} (Copy)`,
+      description: original.description,
+      priority: original.priority,
+      status: 'new',
+      completed: false,
+      dueDate: original.dueDate,
+      tags: original.tags,
+      userId: original.userId,
+      institutionId: original.institutionId
+    });
+    return await duplicate.save();
+  }
 }
 
 export default new TodoService();

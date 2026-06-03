@@ -1,8 +1,3 @@
-/**
- * Input Validation Middleware
- * Validates request body/query/params based on provided schema
- */
-
 import Joi from 'joi';
 
 /**

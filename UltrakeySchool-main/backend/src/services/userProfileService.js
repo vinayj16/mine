@@ -2,7 +2,7 @@ import User from '../models/User.js';
 import Agent from '../models/Agent.js';
 
 class UserProfileService {
-   async getUserProfile(schoolId, userId, userRole = null) {
+   async getUserProfile(institutionId, userId, userRole = null) {
      let user;
      
      // For agents, look directly in User collection (agents are stored as users with role 'agent')
@@ -14,9 +14,9 @@ class UserProfileService {
         _id: userId
       };
       
-      // Only add schoolId to query if schoolId is provided
-      if (schoolId) {
-        query.schoolId = schoolId;
+      // Only add institutionId to query if institutionId is provided
+      if (institutionId) {
+        query.institutionId = institutionId;
       }
       
       user = await User.findOne(query).lean();
@@ -26,11 +26,11 @@ class UserProfileService {
        throw new Error('User not found');
      }
 
-     return this.formatUserProfile(user, userRole);
+     return await this.formatUserProfile(user, userRole);
    }
 
-  async updateUserProfile(schoolId, userId, updateData) {
-    const allowedFields = ['name', 'email', 'phone', 'profileImage', 'department', 'address', 'city', 'state', 'country', 'postalCode', 'dateOfBirth', 'gender'];
+  async updateUserProfile(institutionId, userId, updateData) {
+    const allowedFields = ['name', 'email', 'phone', 'avatar', 'department', 'address', 'dateOfBirth', 'gender'];
     const filteredData = {};
 
     allowedFields.forEach(field => {
@@ -39,10 +39,28 @@ class UserProfileService {
       }
     });
 
-    // For agents, don't filter by schoolId
+    // Handle individual address fields if provided separately from 'address' object
+    if (!filteredData.address) {
+      filteredData.address = {};
+    }
+    
+    if (updateData.street) filteredData.address.street = updateData.street;
+    if (updateData.city) filteredData.address.city = updateData.city;
+    if (updateData.state) filteredData.address.state = updateData.state;
+    if (updateData.zipCode || updateData.postalCode) {
+      filteredData.address.zipCode = updateData.zipCode || updateData.postalCode;
+    }
+    if (updateData.country) filteredData.address.country = updateData.country;
+
+    // Remove empty address object if no address fields were set
+    if (Object.keys(filteredData.address).length === 0 && !updateData.address) {
+      delete filteredData.address;
+    }
+
+    // For agents, don't filter by institutionId
     const query = { _id: userId };
-    if (schoolId) {
-      query.schoolId = schoolId;
+    if (institutionId) {
+      query.institutionId = institutionId;
     }
 
     const user = await User.findOneAndUpdate(
@@ -55,7 +73,7 @@ class UserProfileService {
       throw new Error('User not found');
     }
 
-    return this.formatUserProfile(user.toObject());
+    return await this.formatUserProfile(user.toObject());
   }
 
   async updateLastLogin(userId) {
@@ -83,15 +101,36 @@ class UserProfileService {
     return rolePermissions[user.role] || ['read'];
   }
 
-  formatUserProfile(user, userRole = null) {
+  async formatUserProfile(user, userRole = null) {
+    let institutionData = null;
+    if (user.institutionId) {
+      try {
+        const Institution = (await import('../models/Institution.js')).default;
+        const inst = await Institution.findById(user.institutionId).select('name instituteCode type contact address category').lean();
+        if (inst) {
+          institutionData = {
+            id: inst._id.toString(),
+            name: inst.name,
+            instituteCode: inst.instituteCode,
+            type: inst.type,
+            category: inst.category,
+            contact: inst.contact,
+            address: inst.address
+          };
+        }
+      } catch (err) {
+        console.warn('Could not fetch institution details for profile:', err.message);
+      }
+    }
+
     // Handle agent users with different field structure
-    if (userRole === 'agent') {
+    if (userRole === 'agent' || user.role === 'agent') {
       return {
         id: user._id.toString(),
         name: user.name || user.fullName,
         email: user.email,
         role: user.role,
-        avatar: user.profileImage || '/assets/img/placeholder-avatar.webp',
+        avatar: user.avatar || user.profileImage || '/assets/img/placeholder-avatar.webp',
         department: user.department || 'Sales',
         lastLogin: user.lastLogin || new Date(),
         isOnline: true,
@@ -100,21 +139,35 @@ class UserProfileService {
         address: user.address,
         city: user.city,
         state: user.state,
-        commissionRate: user.commissionRate
+        commissionRate: user.commissionRate,
+        institutionId: user.institutionId,
+        institutionData
       };
     }
     
     // Handle regular users
     return {
       id: user._id.toString(),
-      name: user.name,
+      name: user.name || user.fullName,
       email: user.email,
       role: user.role,
-      avatar: user.profileImage || '/assets/img/placeholder-avatar.webp',
+      avatar: user.avatar || user.profileImage || '/assets/img/placeholder-avatar.webp',
       department: user.department,
       lastLogin: user.lastLogin || new Date(),
       isOnline: true,
-      permissions: []
+      permissions: [],
+      phone: user.phone,
+      address: user.address || {
+        street: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        country: ''
+      },
+      dateOfBirth: user.dateOfBirth,
+      gender: user.gender,
+      institutionId: user.institutionId,
+      institutionData
     };
   }
 }

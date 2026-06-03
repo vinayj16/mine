@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const subscriptionSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true
   },
   planId: {
@@ -31,7 +31,7 @@ const subscriptionSchema = new mongoose.Schema({
   },
   currency: {
     type: String,
-    default: 'USD'
+    default: 'INR'
   },
   startDate: {
     type: Date,
@@ -83,7 +83,7 @@ const subscriptionSchema = new mongoose.Schema({
   paymentMethod: {
     type: {
       type: String,
-      enum: ['card', 'bank_transfer', 'paypal', 'other']
+      enum: ['card', 'bank_transfer', 'paypal', 'other', 'razorpay', 'upi', 'net_banking']
     },
     lastFour: String,
     brand: String
@@ -101,7 +101,7 @@ const subscriptionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-subscriptionSchema.index({ schoolId: 1, status: 1 });
+subscriptionSchema.index({ institutionId: 1, status: 1 });
 subscriptionSchema.index({ endDate: 1 });
 subscriptionSchema.index({ status: 1 });
 

@@ -19,7 +19,8 @@ const {
   deleteAttendance,
   getAttendanceReport,
   getAttendancePercentage,
-  getLowAttendanceUsers
+  getLowAttendanceUsers,
+  getStaffAttendance
 } = attendanceController;
 
 const router = express.Router();
@@ -29,7 +30,7 @@ router.use(protect);
 
 // Simple CRUD routes (uses real database data via Attendance model - TESTED & VERIFIED)
 router.get('/', getHistoryValidation, getAttendanceHistory);
-router.get('/bulk', authorize('admin', 'teacher', 'principal'), getBulkAttendanceValidation, getBulkAttendance);
+router.get('/bulk', authorize('admin', 'teacher', 'principal'), getBulkAttendance);
 router.get('/with-summary', authorize('admin', 'teacher', 'principal'), getAttendanceWithSummary);
 router.delete('/:id', authorize('admin', 'principal'), deleteAttendance);
 router.get('/stats', authorize('admin', 'teacher', 'principal', 'institution_owner'), getStatsValidation, getAttendanceStats);
@@ -38,8 +39,8 @@ router.get('/low-attendance', authorize('admin', 'principal'), getLowAttendanceU
 router.post('/mark', authorize('admin', 'teacher', 'principal'), markAttendanceValidation, markAttendance);
 router.get('/history', getHistoryValidation, getAttendanceHistory);
 router.post('/bulk-mark', authorize('admin', 'principal', 'institution_admin', 'teacher'), bulkMarkAttendance);
-router.get('/staff', authorize('admin', 'principal', 'institution_admin', 'teacher', 'staff', 'staff_member'), getBulkAttendanceValidation, getBulkAttendance);
-router.get('/report', authorize('admin', 'principal', 'institution_admin'), getAttendanceReport);
+router.get('/staff', authorize('admin', 'principal', 'institution_admin', 'teacher', 'staff', 'staff_member'), getStaffAttendance);
+router.get('/report', authorize('admin', 'principal', 'institution_admin', 'teacher', 'student'), getAttendanceReport);
 router.get('/today', authorize('admin', 'principal', 'institution_admin', 'teacher'), getBulkAttendance);
 
 export default router;

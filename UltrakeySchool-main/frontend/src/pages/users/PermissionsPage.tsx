@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link} from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Permission {
   _id: string;
@@ -196,12 +197,39 @@ const PermissionsPage: React.FC = () => {
     return [...new Set(modules)];
   };
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = filteredPermissions.map(p => ({
+      'Permission Name': p.name,
+      Key: p.key,
+      Description: p.description || '-',
+      Module: p.module || '-',
+      Status: p.isActive ? 'Active' : 'Inactive',
+      Created: new Date(p.createdAt).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      })
+    }));
+    exportToPDF(exportData, 'permissions', [
+      { key: 'Permission Name', label: 'Permission Name' },
+      { key: 'Key', label: 'Key' },
+      { key: 'Description', label: 'Description' },
+      { key: 'Module', label: 'Module' },
+      { key: 'Status', label: 'Status' },
+      { key: 'Created', label: 'Created' }
+    ], 'Permissions');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = filteredPermissions.map(p => ({
+      'Permission Name': p.name,
+      Key: p.key,
+      Description: p.description || '-',
+      Module: p.module || '-',
+      Status: p.isActive ? 'Active' : 'Inactive',
+      Created: new Date(p.createdAt).toLocaleDateString('en-GB', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      })
+    }));
+    exportToExcel(exportData, 'permissions');
   };
 
   if (error && !loading) {
@@ -285,12 +313,12 @@ const PermissionsPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>

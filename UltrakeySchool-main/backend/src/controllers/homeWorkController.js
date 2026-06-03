@@ -48,14 +48,14 @@ const createHomeWork = async (req, res, next) => {
   try {
     logger.info('Creating homework');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { title, description, classId, subjectId, teacherId, dueDate, assignedDate, maxMarks, attachments, priority, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!title || title.trim().length === 0) {
       errors.push('Title is required');
@@ -118,7 +118,7 @@ const createHomeWork = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWork = await homeWorkService.createHomeWork(schoolId, req.body);
+    const homeWork = await homeWorkService.createHomeWork(institutionId, req.body);
     
     logger.info('Homework created successfully:', { homeWorkId: homeWork._id });
     return createdResponse(res, homeWork, 'Homework created successfully');
@@ -132,14 +132,19 @@ const getHomeWorks = async (req, res, next) => {
   try {
     logger.info('Fetching all homework');
     
-    const { schoolId } = req.params;
+    const institutionId = req.params.institutionId || req.query.institutionId || req.user?.institutionId;
     const { classId, subjectId, teacherId, status, priority, page, limit, sortBy, sortOrder, search, startDate, endDate } = req.query;
+    
+    // Return empty if no school context
+    if (!institutionId) {
+      return successResponse(res, [], 'No school context — returning empty');
+    }
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -219,7 +224,7 @@ const getHomeWorks = async (req, res, next) => {
       sortOrder: sortOrder || 'desc'
     };
     
-    const result = await homeWorkService.getHomeWorks(schoolId, filters, options);
+    const result = await homeWorkService.getHomeWorks(institutionId, filters, options);
     
     logger.info('Homework fetched successfully');
     return successResponse(res, result, 'Homework retrieved successfully');
@@ -233,13 +238,13 @@ const getHomeWorkById = async (req, res, next) => {
   try {
     logger.info('Fetching homework by ID');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -248,7 +253,7 @@ const getHomeWorkById = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWork = await homeWorkService.getHomeWorkById(homeWorkId, schoolId);
+    const homeWork = await homeWorkService.getHomeWorkById(homeWorkId, institutionId);
     
     if (!homeWork) {
       return notFoundResponse(res, 'Homework not found');
@@ -266,14 +271,14 @@ const updateHomeWork = async (req, res, next) => {
   try {
     logger.info('Updating homework');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     const { title, description, dueDate, assignedDate, maxMarks, priority, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -326,7 +331,7 @@ const updateHomeWork = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWork = await homeWorkService.updateHomeWork(homeWorkId, schoolId, req.body);
+    const homeWork = await homeWorkService.updateHomeWork(homeWorkId, institutionId, req.body);
     
     if (!homeWork) {
       return notFoundResponse(res, 'Homework not found');
@@ -344,13 +349,13 @@ const deleteHomeWork = async (req, res, next) => {
   try {
     logger.info('Deleting homework');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -359,7 +364,7 @@ const deleteHomeWork = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWork = await homeWorkService.deleteHomeWork(homeWorkId, schoolId);
+    const homeWork = await homeWorkService.deleteHomeWork(homeWorkId, institutionId);
     
     if (!homeWork) {
       return notFoundResponse(res, 'Homework not found');
@@ -377,14 +382,14 @@ const getHomeWorksByClass = async (req, res, next) => {
   try {
     logger.info('Fetching homework by class');
     
-    const { schoolId, classId } = req.params;
+    const { institutionId, classId } = req.params;
     const { page, limit, status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const classIdError = validateObjectId(classId, 'Class ID');
     if (classIdError) errors.push(classIdError);
@@ -408,7 +413,7 @@ const getHomeWorksByClass = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWorks = await homeWorkService.getHomeWorksByClass(schoolId, classId, { page: pageNum, limit: limitNum, status });
+    const homeWorks = await homeWorkService.getHomeWorksByClass(institutionId, classId, { page: pageNum, limit: limitNum, status });
     
     logger.info('Homework fetched successfully for class:', { classId });
     return successResponse(res, homeWorks, 'Homework retrieved successfully');
@@ -422,14 +427,14 @@ const getHomeWorksByTeacher = async (req, res, next) => {
   try {
     logger.info('Fetching homework by teacher');
     
-    const { schoolId, teacherId } = req.params;
+    const { institutionId, teacherId } = req.params;
     const { page, limit, status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
@@ -453,7 +458,7 @@ const getHomeWorksByTeacher = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWorks = await homeWorkService.getHomeWorksByTeacher(schoolId, teacherId, { page: pageNum, limit: limitNum, status });
+    const homeWorks = await homeWorkService.getHomeWorksByTeacher(institutionId, teacherId, { page: pageNum, limit: limitNum, status });
     
     logger.info('Homework fetched successfully for teacher:', { teacherId });
     return successResponse(res, homeWorks, 'Homework retrieved successfully');
@@ -467,14 +472,14 @@ const getHomeWorksBySubject = async (req, res, next) => {
   try {
     logger.info('Fetching homework by subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     const { page, limit, status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -498,7 +503,7 @@ const getHomeWorksBySubject = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWorks = await homeWorkService.getHomeWorksBySubject(schoolId, subjectId, { page: pageNum, limit: limitNum, status });
+    const homeWorks = await homeWorkService.getHomeWorksBySubject(institutionId, subjectId, { page: pageNum, limit: limitNum, status });
     
     logger.info('Homework fetched successfully for subject:', { subjectId });
     return successResponse(res, homeWorks, 'Homework retrieved successfully');
@@ -512,14 +517,14 @@ const getPendingHomeWorks = async (req, res, next) => {
   try {
     logger.info('Fetching pending homework');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, studentId, page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -546,7 +551,7 @@ const getPendingHomeWorks = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWorks = await homeWorkService.getPendingHomeWorks(schoolId, { classId, studentId, page: pageNum, limit: limitNum });
+    const homeWorks = await homeWorkService.getPendingHomeWorks(institutionId, { classId, studentId, page: pageNum, limit: limitNum });
     
     logger.info('Pending homework fetched successfully');
     return successResponse(res, homeWorks, 'Pending homework retrieved successfully');
@@ -560,14 +565,14 @@ const submitHomeWork = async (req, res, next) => {
   try {
     logger.info('Submitting homework');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     const { studentId, submissionText, attachments, submittedAt } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -597,7 +602,7 @@ const submitHomeWork = async (req, res, next) => {
     }
     
     const { studentId: sid, ...submissionData } = req.body;
-    const homeWork = await homeWorkService.submitHomeWork(homeWorkId, schoolId, studentId, submissionData);
+    const homeWork = await homeWorkService.submitHomeWork(homeWorkId, institutionId, studentId, submissionData);
     
     if (!homeWork) {
       return notFoundResponse(res, 'Homework not found');
@@ -615,14 +620,14 @@ const gradeSubmission = async (req, res, next) => {
   try {
     logger.info('Grading homework submission');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     const { studentId, marks, feedback, gradedBy } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -655,7 +660,7 @@ const gradeSubmission = async (req, res, next) => {
     }
     
     const { studentId: sid, ...gradeData } = req.body;
-    const homeWork = await homeWorkService.gradeSubmission(homeWorkId, schoolId, studentId, gradeData);
+    const homeWork = await homeWorkService.gradeSubmission(homeWorkId, institutionId, studentId, gradeData);
     
     if (!homeWork) {
       return notFoundResponse(res, 'Homework or submission not found');
@@ -673,14 +678,14 @@ const getAnalytics = async (req, res, next) => {
   try {
     logger.info('Fetching homework analytics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, teacherId, subjectId, startDate, endDate } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -716,7 +721,7 @@ const getAnalytics = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const analytics = await homeWorkService.getAnalytics(schoolId, { classId, teacherId, subjectId, startDate, endDate });
+    const analytics = await homeWorkService.getAnalytics(institutionId, { classId, teacherId, subjectId, startDate, endDate });
     
     logger.info('Homework analytics fetched successfully');
     return successResponse(res, analytics, 'Analytics retrieved successfully');
@@ -730,14 +735,14 @@ const getOverdueHomeWorks = async (req, res, next) => {
   try {
     logger.info('Fetching overdue homework');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, studentId, page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -764,7 +769,7 @@ const getOverdueHomeWorks = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homeWorks = await homeWorkService.getOverdueHomeWorks(schoolId, { classId, studentId, page: pageNum, limit: limitNum });
+    const homeWorks = await homeWorkService.getOverdueHomeWorks(institutionId, { classId, studentId, page: pageNum, limit: limitNum });
     
     logger.info('Overdue homework fetched successfully');
     return successResponse(res, homeWorks, 'Overdue homework retrieved successfully');
@@ -778,14 +783,14 @@ const bulkDeleteHomeWorks = async (req, res, next) => {
   try {
     logger.info('Bulk deleting homework');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { homeWorkIds } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!homeWorkIds || !Array.isArray(homeWorkIds) || homeWorkIds.length === 0) {
       errors.push('Homework IDs array is required and must not be empty');
@@ -807,7 +812,7 @@ const bulkDeleteHomeWorks = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await homeWorkService.bulkDeleteHomeWorks(schoolId, homeWorkIds);
+    const result = await homeWorkService.bulkDeleteHomeWorks(institutionId, homeWorkIds);
     
     logger.info('Homework deleted successfully:', { count: result.deletedCount });
     return successResponse(res, result, 'Homework deleted successfully');
@@ -821,14 +826,14 @@ const exportHomeWorks = async (req, res, next) => {
   try {
     logger.info('Exporting homework');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, classId, subjectId, status, startDate, endDate } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
@@ -869,7 +874,7 @@ const exportHomeWorks = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await homeWorkService.exportHomeWorks(schoolId, format.toLowerCase(), { classId, subjectId, status, startDate, endDate });
+    const exportData = await homeWorkService.exportHomeWorks(institutionId, format.toLowerCase(), { classId, subjectId, status, startDate, endDate });
     
     logger.info('Homework exported successfully:', { format });
     return successResponse(res, exportData, 'Homework exported successfully');
@@ -883,14 +888,14 @@ const getSubmissionsByStudent = async (req, res, next) => {
   try {
     logger.info('Fetching submissions by student');
     
-    const { schoolId, studentId } = req.params;
+    const { institutionId, studentId } = req.params;
     const { status, page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
@@ -914,7 +919,7 @@ const getSubmissionsByStudent = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const submissions = await homeWorkService.getSubmissionsByStudent(schoolId, studentId, { status, page: pageNum, limit: limitNum });
+    const submissions = await homeWorkService.getSubmissionsByStudent(institutionId, studentId, { status, page: pageNum, limit: limitNum });
     
     logger.info('Submissions fetched successfully for student:', { studentId });
     return successResponse(res, submissions, 'Submissions retrieved successfully');
@@ -928,13 +933,13 @@ const getSubmissionStatistics = async (req, res, next) => {
   try {
     logger.info('Fetching submission statistics');
     
-    const { schoolId, homeWorkId } = req.params;
+    const { institutionId, homeWorkId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const homeWorkIdError = validateObjectId(homeWorkId, 'Homework ID');
     if (homeWorkIdError) errors.push(homeWorkIdError);
@@ -943,7 +948,7 @@ const getSubmissionStatistics = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const statistics = await homeWorkService.getSubmissionStatistics(schoolId, homeWorkId);
+    const statistics = await homeWorkService.getSubmissionStatistics(institutionId, homeWorkId);
     
     logger.info('Submission statistics fetched successfully:', { homeWorkId });
     return successResponse(res, statistics, 'Statistics retrieved successfully');

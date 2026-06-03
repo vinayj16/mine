@@ -1,12 +1,6 @@
 import mongoose from 'mongoose';
 
 const transportFeeSchema = new mongoose.Schema({
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true,
-    index: true
-  },
   institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
@@ -101,7 +95,7 @@ const transportFeeSchema = new mongoose.Schema({
   timestamps: true
 });
 
-transportFeeSchema.index({ schoolId: 1, studentId: 1, academicYear: 1 });
+transportFeeSchema.index({ institutionId: 1, studentId: 1, academicYear: 1 });
 transportFeeSchema.index({ institutionId: 1, paymentStatus: 1 });
 transportFeeSchema.index({ dueDate: 1, paymentStatus: 1 });
 

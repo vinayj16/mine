@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import apiClient from "../../api/client";
+import ConfirmModal from "../../components/common/ConfirmModal";
 
 interface PlanLimits {
   students: { value: number; isUnlimited: boolean };
@@ -39,6 +40,8 @@ const MembershipPlans: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isYearly, setIsYearly] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -47,8 +50,8 @@ const MembershipPlans: React.FC = () => {
     description: '',
     category: 'starter',
     pricing: {
-      monthly: { amount: 0, currency: 'USD' },
-      yearly: { amount: 0, currency: 'USD' }
+      monthly: { amount: 0, currency: 'INR' },
+      yearly: { amount: 0, currency: 'INR' }
     },
     limits: {
       students: { value: 0, isUnlimited: false },
@@ -148,12 +151,15 @@ const MembershipPlans: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this plan?')) {
-      return;
-    }
+    setDeleteTarget(id);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
-      const response = await apiClient.delete(`/membership-plans/${id}`);
+      const response = await apiClient.delete(`/membership-plans/${deleteTarget}`);
       if (response.data.success) {
         toast.success('Plan deleted successfully');
         fetchPlans();
@@ -162,6 +168,8 @@ const MembershipPlans: React.FC = () => {
       console.error('Error deleting plan:', err);
       toast.error(err.response?.data?.message || 'Failed to delete plan');
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const resetForm = () => {
@@ -172,8 +180,8 @@ const MembershipPlans: React.FC = () => {
       description: '',
       category: 'starter',
       pricing: {
-        monthly: { amount: 0, currency: 'USD' },
-        yearly: { amount: 0, currency: 'USD' }
+        monthly: { amount: 0, currency: 'INR' },
+        yearly: { amount: 0, currency: 'INR' }
       },
       limits: {
         students: { value: 0, isUnlimited: false },
@@ -193,9 +201,9 @@ const MembershipPlans: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'INR'
     }).format(amount);
   };
 
@@ -361,22 +369,22 @@ const MembershipPlans: React.FC = () => {
                       </div>
                       <ul className="list-unstyled mb-3">
                         <li className="mb-2">
-                          {plan.limits.students.isUnlimited ? '✔ Unlimited Students' : `✔ ${plan.limits.students.value} Students`}
+                          <i className="ti ti-check text-success"></i> {plan.limits.students.isUnlimited ? 'Unlimited Students' : `${plan.limits.students.value} Students`}
                         </li>
                         <li className="mb-2">
-                          {plan.limits.classes.isUnlimited ? '✔ Unlimited Classes' : `✔ ${plan.limits.classes.value} Classes & Sections`}
+                          <i className="ti ti-check text-success"></i> {plan.limits.classes.isUnlimited ? 'Unlimited Classes' : `${plan.limits.classes.value} Classes & Sections`}
                         </li>
                         <li className="mb-2">
-                          {plan.limits.subjects.isUnlimited ? '✔ Unlimited Subjects' : `✔ ${plan.limits.subjects.value} Subjects & Exams`}
+                          <i className="ti ti-check text-success"></i> {plan.limits.subjects.isUnlimited ? 'Unlimited Subjects' : `${plan.limits.subjects.value} Subjects & Exams`}
                         </li>
                         <li className="mb-2">
-                          {plan.limits.departments.isUnlimited ? '✔ Unlimited Departments' : `✔ ${plan.limits.departments.value} Departments`}
+                          <i className="ti ti-check text-success"></i> {plan.limits.departments.isUnlimited ? 'Unlimited Departments' : `${plan.limits.departments.value} Departments`}
                         </li>
                         <li className="mb-2">
-                          {plan.limits.designations.isUnlimited ? '✔ Unlimited Designations' : `✔ ${plan.limits.designations.value} Designations`}
+                          <i className="ti ti-check text-success"></i> {plan.limits.designations.isUnlimited ? 'Unlimited Designations' : `${plan.limits.designations.value} Designations`}
                         </li>
                         <li className={`mb-2 ${plan.limits.library.isEnabled ? '' : 'text-danger'}`}>
-                          {plan.limits.library.isEnabled ? '✔' : '✖'} Library & Transport
+                          {plan.limits.library.isEnabled ? <i className="ti ti-check text-success"></i> : <i className="ti ti-x text-danger"></i>} Library & Transport
                         </li>
                       </ul>
                       <div className="d-flex gap-2">
@@ -408,6 +416,8 @@ const MembershipPlans: React.FC = () => {
           </>
         )}
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to delete this plan?" />
 
       {/* Add/Edit Membership Modal */}
       <div className="modal fade" id="add_membership">

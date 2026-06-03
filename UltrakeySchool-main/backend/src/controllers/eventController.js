@@ -1,4 +1,5 @@
 import eventService from '../services/eventService.js';
+import notificationService from '../services/notificationService.js';
 import Event from '../models/Event.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -56,17 +57,17 @@ const createEvent = async (req, res, next) => {
   try {
     logger.info('Creating event');
     
-    // Support both route param and body schoolId
-    const schoolId = req.params.schoolId || req.body.schoolId;
+    // Support route param, body, or authenticated user's school/institution
+    const institutionId = req.params.institutionId || req.body.institutionId || req.user?.institutionId || req.user?.institutionId;
     const { title, description, eventType, startDate, endDate, startTime, endTime, location, priority, visibility, maxAttendees, color } = req.body;
 
     // Validation
     const errors = [];
     
-    // schoolId is optional for global users (superadmin, agents)
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // institutionId is optional for global users (superadmin, agents)
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!title || title.trim().length === 0) {
@@ -150,7 +151,37 @@ const createEvent = async (req, res, next) => {
       eventType: VALID_EVENT_TYPES.includes(eventType) ? eventType : 'other'
     };
 
-    const event = await eventService.createEvent(schoolId, eventData);
+    const event = await eventService.createEvent(institutionId, eventData);
+    
+    // Auto-create notifications for upcoming events
+    if (event) {
+      try {
+        const User = mongoose.model('User');
+        const users = await User.find({
+          institutionId,
+          role: { $in: ['teacher', 'student', 'admin'] }
+        }).select('_id').limit(50).lean();
+        
+        const notificationPromises = users.map(u =>
+          notificationService.createNotification(institutionId, {
+            recipientId: u._id,
+            type: 'info',
+            title: 'Upcoming Event: ' + title,
+            message: (description || '').substring(0, 200),
+            priority: priority || 'medium',
+            metadata: {
+              source: 'event',
+              sourceId: event._id.toString(),
+              eventDate: startDate,
+              location: location || ''
+            }
+          }).catch(() => {})
+        );
+        await Promise.allSettled(notificationPromises);
+      } catch (notifErr) {
+        logger.warn('Failed to auto-create event notifications:', notifErr.message);
+      }
+    }
     
     logger.info('Event created successfully:', { eventId: event._id });
     return createdResponse(res, event, 'Event created successfully');
@@ -164,16 +195,16 @@ const getEvents = async (req, res, next) => {
   try {
     logger.info('Fetching events');
     
-    // Accept schoolId from query params OR route params
-    const schoolId = req.params.schoolId || req.query.schoolId;
+    // Accept institutionId from query params OR route params OR JWT
+    const institutionId = req.params.institutionId || req.query.institutionId || req.user?.institutionId;
     const { eventType, status, priority, visibility, startDate, endDate, page, limit, search } = req.query;
     
-    // Validation - make schoolId optional for query param calls
+    // Validation - make institutionId optional for query param calls
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (eventType && !VALID_EVENT_TYPES.includes(eventType)) {
@@ -226,16 +257,16 @@ const getEvents = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const filters = { page: pageNum, limit: limitNum };
+    const filters = {};
     if (eventType) filters.eventType = eventType;
     if (status) filters.status = status;
     if (priority) filters.priority = priority;
     if (visibility) filters.visibility = visibility;
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
-    if (search) filters.search = search;
+    if (search) filters.title = { $regex: search, $options: 'i' };
     
-    const events = await eventService.getEvents(schoolId, filters);
+    const events = await eventService.getEvents(institutionId, filters);
     
     logger.info('Events fetched successfully');
     return successResponse(res, events, 'Events retrieved successfully');
@@ -249,13 +280,13 @@ const getEventById = async (req, res, next) => {
   try {
     logger.info('Fetching event by ID');
     
-    const { schoolId, eventId } = req.params;
+    const { institutionId, eventId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const eventIdError = validateObjectId(eventId, 'Event ID');
     if (eventIdError) errors.push(eventIdError);
@@ -264,7 +295,7 @@ const getEventById = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const event = await eventService.getEventById(eventId, schoolId);
+    const event = await eventService.getEventById(eventId, institutionId);
     
     if (!event) {
       return notFoundResponse(res, 'Event not found');
@@ -282,18 +313,18 @@ const updateEvent = async (req, res, next) => {
   try {
     logger.info('Updating event');
     
-    // Support both route param and body schoolId
-    const schoolId = req.params.schoolId || req.body.schoolId;
+    // Support both route param and body institutionId
+    const institutionId = req.params.institutionId || req.body.institutionId;
     const { eventId } = req.params;
     const { title, description, eventType, startDate, endDate, startTime, endTime, location, status, priority, visibility, maxAttendees, color } = req.body;
     
     // Validation
     const errors = [];
     
-    // schoolId is optional for global users
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // institutionId is optional for global users
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     const eventIdError = validateObjectId(eventId, 'Event ID');
@@ -373,7 +404,7 @@ const updateEvent = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const event = await eventService.updateEvent(eventId, schoolId, req.body);
+    const event = await eventService.updateEvent(eventId, institutionId, req.body);
     
     if (!event) {
       return notFoundResponse(res, 'Event not found');
@@ -391,17 +422,17 @@ const deleteEvent = async (req, res, next) => {
   try {
     logger.info('Deleting event');
     
-    // Support both route param and body schoolId
-    const schoolId = req.params.schoolId || req.body.schoolId;
+    // Support both route param and body institutionId
+    const institutionId = req.params.institutionId || req.body.institutionId;
     const { eventId } = req.params;
     
     // Validation
     const errors = [];
     
-    // schoolId is optional for global users
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // institutionId is optional for global users
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     const eventIdError = validateObjectId(eventId, 'Event ID');
@@ -411,7 +442,7 @@ const deleteEvent = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await eventService.deleteEvent(eventId, schoolId);
+    const result = await eventService.deleteEvent(eventId, institutionId);
     
     if (!result) {
       return notFoundResponse(res, 'Event not found');
@@ -429,14 +460,14 @@ const getUpcomingEvents = async (req, res, next) => {
   try {
     logger.info('Fetching upcoming events');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { limit, days } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const limitNum = parseInt(limit) || 20;
     const daysNum = parseInt(days) || 30;
@@ -453,7 +484,7 @@ const getUpcomingEvents = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const events = await eventService.getUpcomingEvents(schoolId, { limit: limitNum, days: daysNum });
+    const events = await eventService.getUpcomingEvents(institutionId, { limit: limitNum, days: daysNum });
     
     logger.info('Upcoming events fetched successfully');
     return successResponse(res, events, 'Upcoming events retrieved successfully');
@@ -467,14 +498,14 @@ const getEventsByType = async (req, res, next) => {
   try {
     logger.info('Fetching events by type');
     
-    const { schoolId, eventType } = req.params;
+    const { institutionId, eventType } = req.params;
     const { page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!eventType) {
       errors.push('Event type is required');
@@ -497,7 +528,7 @@ const getEventsByType = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const events = await eventService.getEventsByType(schoolId, eventType, { page: pageNum, limit: limitNum });
+    const events = await eventService.getEventsByType(institutionId, eventType, { page: pageNum, limit: limitNum });
     
     logger.info('Events by type fetched successfully:', { eventType });
     return successResponse(res, events, 'Events retrieved successfully');
@@ -512,14 +543,14 @@ const bulkUpdateEvents = async (req, res) => {
   try {
     logger.info('Bulk updating events');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { eventIds, updates } = req.body;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
       errors.push('Event IDs array is required and must not be empty');
@@ -560,7 +591,7 @@ const bulkUpdateEvents = async (req, res) => {
     }
 
     const result = await Event.updateMany(
-      { _id: { $in: eventIds }, schoolId: new mongoose.Types.ObjectId(schoolId) },
+      { _id: { $in: eventIds }, institutionId: new mongoose.Types.ObjectId(institutionId) },
       { $set: updates }
     );
 
@@ -579,14 +610,14 @@ const bulkDeleteEvents = async (req, res) => {
   try {
     logger.info('Bulk deleting events');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { eventIds } = req.body;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!Array.isArray(eventIds) || eventIds.length === 0) {
       errors.push('Event IDs array is required and must not be empty');
@@ -612,7 +643,7 @@ const bulkDeleteEvents = async (req, res) => {
 
     const result = await Event.deleteMany({
       _id: { $in: eventIds },
-      schoolId: new mongoose.Types.ObjectId(schoolId)
+      institutionId: new mongoose.Types.ObjectId(institutionId)
     });
 
     logger.info('Events bulk deleted successfully:', { count: result.deletedCount });
@@ -630,14 +661,14 @@ const exportEvents = async (req, res) => {
   try {
     logger.info('Exporting events');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, eventType, status, startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const validFormats = ['json', 'csv', 'xlsx', 'pdf'];
     if (!format) {
@@ -673,7 +704,7 @@ const exportEvents = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const filters = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const filters = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (eventType) filters.eventType = eventType;
     if (status) filters.status = status;
     if (startDate || endDate) {
@@ -702,14 +733,14 @@ const getEventStatistics = async (req, res) => {
   try {
     logger.info('Fetching event statistics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (startDate) {
       const startDateError = validateDate(startDate, 'Start date');
@@ -730,7 +761,7 @@ const getEventStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const dateFilter = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const dateFilter = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (startDate || endDate) {
       dateFilter.startDate = {};
       if (startDate) dateFilter.startDate.$gte = new Date(startDate);
@@ -784,14 +815,14 @@ const getEventAnalytics = async (req, res) => {
   try {
     logger.info('Fetching event analytics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { groupBy, startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const validGroupBy = ['day', 'week', 'month', 'year', 'eventType', 'status', 'priority'];
     if (!groupBy) {
@@ -819,7 +850,7 @@ const getEventAnalytics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const dateFilter = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const dateFilter = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (startDate || endDate) {
       dateFilter.startDate = {};
       if (startDate) dateFilter.startDate.$gte = new Date(startDate);

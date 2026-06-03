@@ -8,29 +8,29 @@ const router = express.Router();
 router.use(protect);
 
 // CRUD Operations (all using real database data via AcademicReason model - TESTED & VERIFIED)
-router.post('/schools/:schoolId/academic-reasons', academicReasonController.createReason);
-router.get('/schools/:schoolId/academic-reasons', academicReasonController.getReasons);
-router.get('/schools/:schoolId/academic-reasons/:reasonId', academicReasonController.getReasonById);
-router.put('/schools/:schoolId/academic-reasons/:reasonId', academicReasonController.updateReason);
-router.delete('/schools/:schoolId/academic-reasons/:reasonId', academicReasonController.deleteReason);
+router.post('/schools/:institutionId/academic-reasons', academicReasonController.createReason);
+router.get('/schools/:institutionId/academic-reasons', academicReasonController.getReasons);
+router.get('/schools/:institutionId/academic-reasons/:reasonId', academicReasonController.getReasonById);
+router.put('/schools/:institutionId/academic-reasons/:reasonId', academicReasonController.updateReason);
+router.delete('/schools/:institutionId/academic-reasons/:reasonId', academicReasonController.deleteReason);
 
 // Bulk Operations
-router.post('/schools/:schoolId/academic-reasons/bulk-delete', academicReasonController.bulkDeleteReasons);
+router.post('/schools/:institutionId/academic-reasons/bulk-delete', academicReasonController.bulkDeleteReasons);
 
 // Filter and Query Operations
-router.get('/schools/:schoolId/academic-reasons/role/:role', academicReasonController.getReasonsByRole);
-router.get('/schools/:schoolId/academic-reasons/category/:category', academicReasonController.getReasonsByCategory);
-router.get('/schools/:schoolId/academic-reasons/search', academicReasonController.searchReasons);
+router.get('/schools/:institutionId/academic-reasons/role/:role', academicReasonController.getReasonsByRole);
+router.get('/schools/:institutionId/academic-reasons/category/:category', academicReasonController.getReasonsByCategory);
+router.get('/schools/:institutionId/academic-reasons/search', academicReasonController.searchReasons);
 
 // Analytics and Usage
-router.get('/schools/:schoolId/academic-reasons/analytics', academicReasonController.getAnalytics);
-router.post('/schools/:schoolId/academic-reasons/:reasonId/increment-usage', academicReasonController.incrementUsage);
-router.get('/schools/:schoolId/academic-reasons/most-used', academicReasonController.getMostUsedReasons);
+router.get('/schools/:institutionId/academic-reasons/analytics', academicReasonController.getAnalytics);
+router.post('/schools/:institutionId/academic-reasons/:reasonId/increment-usage', academicReasonController.incrementUsage);
+router.get('/schools/:institutionId/academic-reasons/most-used', academicReasonController.getMostUsedReasons);
 
 // Status Management
-router.patch('/schools/:schoolId/academic-reasons/:reasonId/toggle-status', academicReasonController.toggleStatus);
+router.patch('/schools/:institutionId/academic-reasons/:reasonId/toggle-status', academicReasonController.toggleStatus);
 
 // Export
-router.get('/schools/:schoolId/academic-reasons/export', academicReasonController.exportReasons);
+router.get('/schools/:institutionId/academic-reasons/export', academicReasonController.exportReasons);
 
 export default router;

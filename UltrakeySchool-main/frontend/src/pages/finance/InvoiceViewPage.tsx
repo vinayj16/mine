@@ -95,7 +95,7 @@ const InvoiceViewPage: React.FC = () => {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', { 
+    return new Date(dateString).toLocaleDateString('en-IN', { 
       year: 'numeric', 
       month: 'short', 
       day: 'numeric' 
@@ -103,7 +103,7 @@ const InvoiceViewPage: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const handlePrint = () => {
@@ -194,7 +194,7 @@ const InvoiceViewPage: React.FC = () => {
                   <div className="col-lg-4">
                     <div className="tax-invoice-info d-flex align-items-center justify-content-between">
                       <h5 className="mb-0">Student ID :</h5>
-                      <h6 className="mb-0">{invoice.studentId}</h6>
+                      <h6 className="mb-0">{typeof invoice.studentId === 'object' ? invoice.studentId?.name || invoice.studentId?._id || '-' : invoice.studentId}</h6>
                     </div>
                   </div>
                   <div className="col-lg-4">

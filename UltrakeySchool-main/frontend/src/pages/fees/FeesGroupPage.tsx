@@ -82,11 +82,10 @@ const FeesGroupPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await apiClient.get('/finance/fees');
+      const response = await apiClient.get('/finance/fee-groups');
       
-      if (response.data.success && response.data.data) {
-        const data = response.data.data.feeStructures || response.data.data;
-        // Ensure data is always an array
+      if (response.data.success) {
+        const data = response.data.data;
         setFeesGroups(Array.isArray(data) ? data : []);
       }
     } catch (err: any) {
@@ -104,7 +103,7 @@ const FeesGroupPage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.post('/finance/fees', newGroup);
+      const response = await apiClient.post('/finance/fee-groups', newGroup);
       
       if (response.data.success) {
         toast.success('Fee group created successfully');
@@ -127,7 +126,7 @@ const FeesGroupPage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.put(`/finance/fees/${selectedGroup._id}`, newGroup);
+      const response = await apiClient.put(`/finance/fee-groups/${selectedGroup._id}`, newGroup);
       
       if (response.data.success) {
         toast.success('Fee group updated successfully');
@@ -148,7 +147,7 @@ const FeesGroupPage: React.FC = () => {
     try {
       setSubmitting(true);
       
-      const response = await apiClient.delete(`/finance/fees/${selectedGroup._id}`);
+      const response = await apiClient.delete(`/finance/fee-groups/${selectedGroup._id}`);
       
       if (response.data.success) {
         toast.success('Fee group deleted successfully');

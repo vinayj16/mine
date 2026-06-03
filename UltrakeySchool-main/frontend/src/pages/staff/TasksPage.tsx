@@ -1,28 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import apiClient from '../../api/client';
-
-interface StaffTask {
-  _id: string;
-  title: string;
-  description: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'pending' | 'in-progress' | 'completed' | 'cancelled';
-  assignedBy: {
-    _id: string;
-    name: string;
-    email: string;
-  };
-  assignedTo: string;
-  dueDate: string;
-  createdAt: string;
-  updatedAt: string;
-  attachments?: string[];
-  notes?: string;
-}
+import { useAuth } from '../../store/authStore';
+import staffService, { type StaffTask } from '../../services/staffService';
 
 const TasksPage: React.FC = () => {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<StaffTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -43,19 +26,22 @@ const TasksPage: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [user?.id]);
 
   const fetchTasks = async () => {
+    if (!user?.id) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const response = await apiClient.get('/tasks');
-      
-      if (response.data.success) {
-        setTasks(response.data.data || []);
-      }
+      const list = await staffService.getMyTasks(user.id);
+      setTasks(list);
     } catch (error: any) {
       console.error('Error fetching tasks:', error);
       toast.error(error.response?.data?.message || 'Failed to load tasks');
+      setTasks([]);
     } finally {
       setLoading(false);
     }
@@ -64,20 +50,23 @@ const TasksPage: React.FC = () => {
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await apiClient.post('/tasks', formData);
-      
-      if (response.data.success) {
-        toast.success('Task created successfully');
-        setShowAddModal(false);
-        setFormData({
-          title: '',
-          description: '',
-          priority: 'medium',
-          dueDate: '',
-          notes: ''
-        });
-        fetchTasks();
-      }
+      await staffService.createTask(user.id, user.name, user.institutionId, {
+        title: formData.title,
+        description: formData.description,
+        priority: formData.priority,
+        dueDate: formData.dueDate,
+        notes: formData.notes
+      });
+      toast.success('Task created successfully');
+      setShowAddModal(false);
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'medium',
+        dueDate: '',
+        notes: ''
+      });
+      fetchTasks();
     } catch (error: any) {
       console.error('Error creating task:', error);
       toast.error(error.response?.data?.message || 'Failed to create task');
@@ -86,12 +75,9 @@ const TasksPage: React.FC = () => {
 
   const handleUpdateTaskStatus = async (taskId: string, status: StaffTask['status']) => {
     try {
-      const response = await apiClient.put(`/tasks/${taskId}`, { status });
-      
-      if (response.data.success) {
-        toast.success('Task status updated successfully');
-        fetchTasks();
-      }
+      await staffService.updateTaskStatus(taskId, status);
+      toast.success('Task status updated successfully');
+      fetchTasks();
     } catch (error: any) {
       console.error('Error updating task:', error);
       toast.error(error.response?.data?.message || 'Failed to update task');

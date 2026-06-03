@@ -25,7 +25,6 @@ export interface CreateSubjectInput {
   teacher: string;
   credits: number;
   semester: string;
-  schoolId?: string;
   department?: string;
 }
 
@@ -44,7 +43,6 @@ export interface SubjectFilters {
   isActive?: boolean;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
-  schoolId?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -63,14 +61,13 @@ export const subjectService = {
     institutionId: undefined
   }): Promise<PaginatedResponse<Subject>> {
     try {
-      // Get schoolId from localStorage if not provided
-      const schoolId = filters.schoolId || filters.institutionId || localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
+      // Get institutionId from localStorage if not provided
+      const institutionId = filters.institutionId || localStorage.getItem('institutionId') || '';
       
       const params = {
         page: filters.page || 1,
         limit: filters.limit || 100,
-        ...(schoolId && { schoolId }),
-        ...(filters.institutionId && { institutionId: filters.institutionId }),
+        ...(institutionId && { institutionId }),
         ...(filters.search && { search: filters.search }),
         ...(filters.class && { class: filters.class }),
         ...(filters.teacher && { teacher: filters.teacher }),
@@ -137,11 +134,11 @@ export const subjectService = {
   // Create new subject
   async create(data: CreateSubjectInput): Promise<Subject> {
     try {
-      // Get schoolId from data or localStorage
-      const schoolId = data.schoolId || data.institutionId || localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
+      // Get institutionId from data or localStorage
+      const institutionId = data.institutionId || localStorage.getItem('institutionId') || '';
       
       const response = await apiService.post<Subject>(
-        API_ENDPOINTS.SUBJECTS.CREATE(schoolId),
+        API_ENDPOINTS.SUBJECTS.CREATE(institutionId),
         data
       );
       
@@ -159,11 +156,11 @@ export const subjectService = {
   // Update existing subject
   async update(id: string, data: UpdateSubjectInput): Promise<Subject> {
     try {
-      // Get schoolId from localStorage or use default
-      const schoolId = localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
+      // Get institutionId from localStorage or use default
+      const institutionId = localStorage.getItem('institutionId') || '';
       
       const response = await apiService.put<Subject>(
-        API_ENDPOINTS.SUBJECTS.UPDATE(schoolId ? `${schoolId}/${id}` : id),
+        API_ENDPOINTS.SUBJECTS.UPDATE(institutionId ? `${institutionId}/${id}` : id),
         data
       );
       
@@ -181,11 +178,11 @@ export const subjectService = {
   // Delete subject
   async delete(id: string): Promise<void> {
     try {
-      // Get schoolId from localStorage or use default
-      const schoolId = localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
+      // Get institutionId from localStorage or use default
+      const institutionId = localStorage.getItem('institutionId') || '';
       
       const response = await apiService.delete<{ success: boolean; message: string }>(
-        API_ENDPOINTS.SUBJECTS.DELETE(schoolId ? `${schoolId}/${id}` : id)
+        API_ENDPOINTS.SUBJECTS.DELETE(institutionId ? `${institutionId}/${id}` : id)
       );
       
       if (!response.success) {

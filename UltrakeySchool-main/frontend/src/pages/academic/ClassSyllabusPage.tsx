@@ -8,7 +8,8 @@ import subjectService from '../../services/subjectService';
 import type { Syllabus, CreateSyllabusInput } from '../../services/syllabusService';
 import type { Class } from '../../services/classService';
 import type { Subject } from '../../services/subjectService';
-
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+ 
 const ClassSyllabusPage: React.FC = () => {
   const [syllabusList, setSyllabusList] = useState<Syllabus[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -26,11 +27,19 @@ const ClassSyllabusPage: React.FC = () => {
   const [filterClass, setFilterClass] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [quickAddClass, setQuickAddClass] = useState('');
+  const [classSubjects, setClassSubjects] = useState<Subject[]>([]);
+  const [subjectSyllabusMap, setSubjectSyllabusMap] = useState<Record<string, Syllabus>>({});
 
-  const schoolId = localStorage.getItem('schoolId') || '';
-  const institutionId = localStorage.getItem('institutionId') || '';
+  const getUserData = () => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch { return null; }
+  };
+  const userData = getUserData();
+  const institutionId = userData?.institutionId || userData?.institutionId || localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || '';
   
-  console.log('[Syllabus Page] schoolId:', schoolId);
   console.log('[Syllabus Page] institutionId:', institutionId);
 
   // Helper functions for type-safe value extraction
@@ -60,8 +69,7 @@ const ClassSyllabusPage: React.FC = () => {
   const fetchSubjects = async () => {
     try {
       const response = await subjectService.getAll({
-        schoolId,
-        institutionId: undefined
+        institutionId
       });
       console.log('[Syllabus Page] Subjects response:', response);
       setSubjects(response.subjects || []);
@@ -73,8 +81,9 @@ const ClassSyllabusPage: React.FC = () => {
   const fetchSyllabi = async () => {
     try {
       setLoading(true);
-      const data = await syllabusService.getAll(schoolId);
+      const data = await syllabusService.getAll(institutionId);
       console.log('[Syllabus Page] Syllabi response:', data);
+
       setSyllabusList(data);
     } catch (error) {
       console.error('Error fetching syllabi:', error);
@@ -102,8 +111,8 @@ const ClassSyllabusPage: React.FC = () => {
       };
 
       console.log('[Syllabus Page] Creating syllabus with data:', newSyllabusData);
-      console.log('[Syllabus Page] schoolId:', schoolId);
-      const response = await syllabusService.create(schoolId, newSyllabusData);
+      console.log('[Syllabus Page] institutionId:', institutionId);
+      const response = await syllabusService.create(institutionId, newSyllabusData);
       console.log('[Syllabus Page] Create response:', response);
       setShowAddModal(false);
       resetForm();
@@ -123,7 +132,7 @@ const ClassSyllabusPage: React.FC = () => {
     }
 
     try {
-      await syllabusService.update(schoolId, selectedSyllabus._id, {
+      await syllabusService.update(institutionId, selectedSyllabus._id, {
         classId: selectedClass,
         subjectId: selectedSubject,
         title,
@@ -144,7 +153,7 @@ const ClassSyllabusPage: React.FC = () => {
     if (!selectedSyllabus) return;
 
     try {
-      await syllabusService.delete(schoolId, selectedSyllabus._id);
+      await syllabusService.delete(institutionId, selectedSyllabus._id);
       setShowDeleteModal(false);
       toast.success('Syllabus deleted successfully');
       fetchSyllabi();
@@ -157,7 +166,7 @@ const ClassSyllabusPage: React.FC = () => {
   const handleDeleteMultiple = async () => {
     try {
       await Promise.all(
-        selectedItems.map((id) => syllabusService.delete(schoolId, id))
+        selectedItems.map((id) => syllabusService.delete(institutionId, id))
       );
       setSelectedItems([]);
       setShowDeleteModal(false);
@@ -172,7 +181,7 @@ const ClassSyllabusPage: React.FC = () => {
   const toggleStatus = async (syllabus: Syllabus) => {
     try {
       const newStatus = syllabus.status === 'active' ? 'archived' : 'active';
-      await syllabusService.update(schoolId, syllabus._id, { status: newStatus });
+      await syllabusService.update(institutionId, syllabus._id, { status: newStatus });
       toast.success('Status updated successfully');
       fetchSyllabi();
     } catch (error) {
@@ -203,6 +212,65 @@ const ClassSyllabusPage: React.FC = () => {
       setSelectedItems([...selectedItems, id]);
     } else {
       setSelectedItems(selectedItems.filter((itemId) => itemId !== id));
+    }
+  };
+
+  const loadSubjectsForClass = async (classId: string) => {
+    if (!classId) { setClassSubjects([]); setSubjectSyllabusMap({}); return; }
+    try {
+      const res = await subjectService.getAll({ institutionId, class: classId });
+      const subs = res.subjects || [];
+      setClassSubjects(subs);
+      const map: Record<string, Syllabus> = {};
+      syllabusList.forEach(s => {
+        const sid = typeof s.subjectId === 'object' ? (s.subjectId as any)._id : s.subjectId;
+        if (sid) map[sid] = s;
+      });
+      setSubjectSyllabusMap(map);
+    } catch { setClassSubjects([]); }
+  };
+
+  useEffect(() => { loadSubjectsForClass(quickAddClass); }, [quickAddClass, syllabusList]);
+
+  const handleQuickAdd = async (subjectId: string) => {
+    const sub = classSubjects.find(s => s._id === subjectId);
+    if (!sub) return;
+    try {
+      await syllabusService.create(institutionId, {
+        classId: quickAddClass,
+        subjectId,
+        academicYear,
+        term,
+        title: `${sub.name} Syllabus - ${academicYear}`,
+        status: 'active',
+      });
+      toast.success(`Syllabus added for ${sub.name}`);
+      fetchSyllabi();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to add syllabus');
+    }
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = filteredSyllabus.map(item => ({
+      Title: item.title,
+      Class: getDisplayValue(item.classId, 'name'),
+      Subject: getDisplayValue(item.subjectId, 'name'),
+      'Academic Year': item.academicYear,
+      Term: item.term,
+      Status: item.status.charAt(0).toUpperCase() + item.status.slice(1)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'syllabi', [
+        { key: 'Title', label: 'Title' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Subject', label: 'Subject' },
+        { key: 'Academic Year', label: 'Academic Year' },
+        { key: 'Term', label: 'Term' },
+        { key: 'Status', label: 'Status' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'syllabi');
     }
   };
 
@@ -263,12 +331,12 @@ const ClassSyllabusPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -285,9 +353,121 @@ const ClassSyllabusPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Syllabus by Class Quick-Add Panel ── */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <i className="ti ti-book-2 fs-5 text-primary"></i>
+            <h6 className="mb-0">Syllabus by Class — Add / View per Subject</h6>
+          </div>
+          <div className="row g-3 align-items-end">
+            <div className="col-md-4">
+              <label className="form-label">Select Class</label>
+              <select className="form-select" value={quickAddClass} onChange={e => setQuickAddClass(e.target.value)}>
+                <option value="">Choose a class...</option>
+                {classes.map(cls => (
+                  <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                    {cls.name} {cls.section ? `- ${cls.section}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-8 d-flex gap-2 text-muted align-items-center">
+              <small>
+                <span className="badge bg-success bg-opacity-10 text-success me-1">●</span> Has syllabus &nbsp;
+                <span className="badge bg-secondary bg-opacity-10 text-secondary me-1">○</span> No syllabus
+              </small>
+            </div>
+          </div>
+          {quickAddClass && (
+            <div className="mt-3">
+              {classSubjects.length === 0 ? (
+                <div className="text-center py-3 text-muted">
+                  <i className="ti ti-book-off me-1"></i> No subjects found for this class
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-sm mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th style={{ width: 40 }}>#</th>
+                        <th>Subject</th>
+                        <th style={{ width: 130 }}>Status</th>
+                        <th style={{ width: 180 }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classSubjects.map((sub, idx) => {
+                        const existing = subjectSyllabusMap[sub._id];
+                        return (
+                          <tr key={sub._id}>
+                            <td className="text-muted">{idx + 1}</td>
+                            <td>
+                              <span className="fw-medium">{sub.name}</span>
+                              {sub.code && <small className="text-muted ms-2">({sub.code})</small>}
+                            </td>
+                            <td>
+                              {existing ? (
+                                <span className="badge bg-success bg-opacity-10 text-success">
+                                  <i className="ti ti-circle-filled fs-6 me-1"></i> Syllabus exists
+                                </span>
+                              ) : (
+                                <span className="badge bg-secondary bg-opacity-10 text-secondary">
+                                  <i className="ti ti-circle fs-6 me-1"></i> Not added
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              {existing ? (
+                                <div className="d-flex gap-1">
+                                  <button
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => {
+                                      setSelectedSyllabus(existing);
+                                      setSelectedClass(typeof existing.classId === 'object' ? (existing.classId as any)._id : existing.classId);
+                                      setSelectedSubject(typeof existing.subjectId === 'object' ? (existing.subjectId as any)._id : existing.subjectId);
+                                      setTitle(existing.title);
+                                      setAcademicYear(existing.academicYear);
+                                      setTerm(existing.term);
+                                      setShowEditModal(true);
+                                    }}
+                                  >
+                                    <i className="ti ti-edit me-1"></i>Edit
+                                  </button>
+                                  <button
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={() => {
+                                      setSelectedSyllabus(existing);
+                                      setShowDeleteModal(true);
+                                    }}
+                                  >
+                                    <i className="ti ti-trash me-1"></i>
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  className="btn btn-sm btn-outline-success"
+                                  onClick={() => handleQuickAdd(sub._id)}
+                                >
+                                  <i className="ti ti-plus me-1"></i>Add Syllabus
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
-          <h4 className="mb-3">Class Syllabus</h4>
+          <h4 className="mb-3">All Syllabi</h4>
           <div className="d-flex align-items-center flex-wrap">
             <div className="input-icon-start mb-3 me-2 position-relative">
               <span className="icon-addon">

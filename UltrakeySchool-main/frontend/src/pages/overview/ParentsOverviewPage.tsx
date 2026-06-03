@@ -74,13 +74,10 @@ const ParentsOverviewPage: React.FC = () => {
       
       const response = await apiClient.get('/analytics/parent-overview')
       
-      console.log('Parent Overview API Response:', response.data)
-      
       if (response.data.success && response.data.data) {
         setDashboardData(response.data.data)
         toast.success('Parent Overview loaded successfully')
       } else {
-        console.error('API response structure:', response.data)
         setError('Invalid API response structure')
       }
     } catch (err: any) {

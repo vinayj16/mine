@@ -1,8 +1,3 @@
-/**
- * File Upload Component
- * Reusable component for file uploads with drag & drop support
- */
-
 import React, { useState, useRef, useCallback } from 'react';
 import uploadService, { 
   type FileTypeCategory, 
@@ -230,7 +225,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           style={{ display: 'none' }}
         />
         
-        <div className="upload-icon">📁</div>
+        <div className="upload-icon"><i className="ti ti-folder"></i></div>
         <h3>{label}</h3>
         {description && <p className="upload-description">{description}</p>}
         <p className="upload-hint">
@@ -252,7 +247,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           
           {files.map((fileWithProgress, index) => (
             <div key={index} className={`file-item status-${fileWithProgress.status}`}>
-              <div className="file-icon">{getFileIcon(fileWithProgress.file.name)}</div>
+              <div className="file-icon"><i className={getFileIcon(fileWithProgress.file.name)}></i></div>
               
               <div className="file-info">
                 <div className="file-name">{fileWithProgress.file.name}</div>
@@ -272,7 +267,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 )}
                 
                 {fileWithProgress.status === 'success' && (
-                  <div className="file-success">✓ Uploaded successfully</div>
+                  <div className="file-success"><i className="ti ti-check"></i> Uploaded successfully</div>
                 )}
               </div>
               
@@ -281,7 +276,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 className="btn-remove"
                 disabled={fileWithProgress.status === 'uploading'}
               >
-                ✕
+                <i className="ti ti-x"></i>
               </button>
             </div>
           ))}

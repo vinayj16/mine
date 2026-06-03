@@ -1,4 +1,5 @@
 import todoService from '../services/todoService.js';
+import notificationService from '../services/notificationService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -102,7 +103,33 @@ const createTodo = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const todo = await todoService.createTodo(req.body);
+    const enrichedData = {
+      ...req.body,
+      userId: req.body.userId || req.user?.id || req.user?._id,
+      userName: req.body.userName || req.user?.name || 'User'
+    };
+    const todo = await todoService.createTodo(enrichedData);
+    
+    // Auto-create notification for medium/high/urgent priority todos
+    if (todo && priority && ['medium', 'high', 'urgent'].includes(priority)) {
+      try {
+        const User = mongoose.model('User');
+        const resolvedInstId = institutionId || req.user?.institutionId;
+        const user = await User.findById(enrichedData.userId).select('_id institutionId').lean();
+        if (user) {
+          await notificationService.createNotification(resolvedInstId || user.institutionId, {
+            recipientId: user._id,
+            type: priority === 'urgent' ? 'warning' : 'info',
+            title: (priority === 'high' || priority === 'urgent' ? 'Important: ' : '') + title,
+            message: (description || title).substring(0, 200),
+            priority: priority || 'medium',
+            metadata: { source: 'todo', sourceId: todo._id.toString(), dueDate }
+          }).catch(() => {});
+        }
+      } catch (notifErr) {
+        logger.warn('Failed to auto-create todo notification:', notifErr.message);
+      }
+    }
     
     logger.info('Todo created successfully:', { todoId: todo._id, title });
     return createdResponse(res, todo, 'Todo created successfully');
@@ -146,7 +173,19 @@ const getAllTodos = async (req, res) => {
   try {
     logger.info('Fetching all todos');
     
-    const { page, limit, status, priority, userId, institutionId, search, sortBy, sortOrder } = req.query;
+    const { page, limit, status, priority, userId: queryUserId, institutionId, search, sortBy, sortOrder } = req.query;
+    
+    // Auto-filter by authenticated user - users can only see their own todos
+    // Superadmins see ALL todos by default unless a userId param is provided
+    // Admins/principals/institution_admins can optionally pass a userId param to view specific user's todos
+    let effectiveUserId = req.user?.id || req.user?._id;
+    if (req.user?.role === 'superadmin') {
+      // Superadmin: if no userId param provided, see all todos (no filter)
+      // If userId param provided, filter by that user
+      effectiveUserId = queryUserId || null;
+    } else if (queryUserId && ['admin', 'principal', 'institution_admin'].includes(req.user?.role)) {
+      effectiveUserId = queryUserId;
+    }
     
     // Validation
     const errors = [];
@@ -170,8 +209,8 @@ const getAllTodos = async (req, res) => {
       errors.push('Invalid priority. Must be one of: ' + VALID_PRIORITIES.join(', '));
     }
     
-    if (userId) {
-      const userIdError = validateObjectId(userId, 'User ID');
+    if (queryUserId) {
+      const userIdError = validateObjectId(queryUserId, 'User ID');
       if (userIdError) errors.push(userIdError);
     }
     
@@ -194,6 +233,7 @@ const getAllTodos = async (req, res) => {
     
     const result = await todoService.getAllTodos({
       ...req.query,
+      userId: effectiveUserId,
       page: pageNum,
       limit: limitNum
     });

@@ -1,9 +1,3 @@
-/**
- * Academic Reason Controller
- * Manages academic reasons for various roles and categories
- * (e.g., absence reasons, late arrival reasons, leave reasons)
- */
-
 import academicReasonService from '../services/academicReasonService.js';
 import ApiResponse from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -11,15 +5,15 @@ import logger from '../utils/logger.js';
 /**
  * Validate school ID
  */
-const validateSchoolId = (schoolId) => {
-  if (!schoolId) {
+const validateinstitutionId = (institutionId) => {
+  if (!institutionId) {
     throw new Error('School ID is required');
   }
   // Add MongoDB ObjectId validation if needed
-  if (!/^[0-9a-fA-F]{24}$/.test(schoolId)) {
+  if (!/^[0-9a-fA-F]{24}$/.test(institutionId)) {
     throw new Error('Invalid school ID format');
   }
-  return schoolId;
+  return institutionId;
 };
 
 /**
@@ -83,20 +77,20 @@ const validateReasonData = (data) => {
 
 /**
  * Create a new academic reason
- * @route POST /api/v1/schools/:schoolId/academic-reasons
+ * @route POST /api/v1/schools/:institutionId/academic-reasons
  */
 const createReason = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const userId = req.user?.id || 'system';
     
     // Validate request body
     validateReasonData(req.body);
     
-    const reason = await academicReasonService.createReason(schoolId, req.body, userId);
+    const reason = await academicReasonService.createReason(institutionId, req.body, userId);
     
     logger.info('Academic reason created', {
-      schoolId,
+      institutionId,
       reasonId: reason._id,
       userId,
       role: reason.role,
@@ -119,11 +113,11 @@ const createReason = async (req, res, next) => {
 
 /**
  * Get all academic reasons with filtering and pagination
- * @route GET /api/v1/schools/:schoolId/academic-reasons
+ * @route GET /api/v1/schools/:institutionId/academic-reasons
  */
 const getReasons = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { 
       role, 
       category, 
@@ -152,10 +146,10 @@ const getReasons = async (req, res, next) => {
       sortOrder: sortOrder || 'desc'
     };
 
-    const result = await academicReasonService.getReasons(schoolId, filters, options);
+    const result = await academicReasonService.getReasons(institutionId, filters, options);
 
     logger.info('Academic reasons retrieved', {
-      schoolId,
+      institutionId,
       userId: req.user?.id,
       filters,
       count: result.reasons.length,
@@ -179,21 +173,21 @@ const getReasons = async (req, res, next) => {
 
 /**
  * Get academic reason by ID
- * @route GET /api/v1/schools/:schoolId/academic-reasons/:reasonId
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/:reasonId
  */
 const getReasonById = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const reasonId = validateReasonId(req.params.reasonId);
     
-    const reason = await academicReasonService.getReasonById(reasonId, schoolId);
+    const reason = await academicReasonService.getReasonById(reasonId, institutionId);
 
     if (!reason) {
       return ApiResponse.notFound(res, 'Academic reason not found');
     }
 
     logger.info('Academic reason retrieved', {
-      schoolId,
+      institutionId,
       reasonId,
       userId: req.user?.id
     });
@@ -211,11 +205,11 @@ const getReasonById = async (req, res, next) => {
 
 /**
  * Update academic reason
- * @route PUT /api/v1/schools/:schoolId/academic-reasons/:reasonId
+ * @route PUT /api/v1/schools/:institutionId/academic-reasons/:reasonId
  */
 const updateReason = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const reasonId = validateReasonId(req.params.reasonId);
     const userId = req.user?.id || 'system';
     
@@ -229,14 +223,14 @@ const updateReason = async (req, res, next) => {
       }
     }
     
-    const reason = await academicReasonService.updateReason(reasonId, schoolId, req.body, userId);
+    const reason = await academicReasonService.updateReason(reasonId, institutionId, req.body, userId);
 
     if (!reason) {
       return ApiResponse.notFound(res, 'Academic reason not found');
     }
 
     logger.info('Academic reason updated', {
-      schoolId,
+      institutionId,
       reasonId,
       userId,
       updates: Object.keys(req.body)
@@ -255,21 +249,21 @@ const updateReason = async (req, res, next) => {
 
 /**
  * Delete academic reason
- * @route DELETE /api/v1/schools/:schoolId/academic-reasons/:reasonId
+ * @route DELETE /api/v1/schools/:institutionId/academic-reasons/:reasonId
  */
 const deleteReason = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const reasonId = validateReasonId(req.params.reasonId);
     
-    const reason = await academicReasonService.deleteReason(reasonId, schoolId);
+    const reason = await academicReasonService.deleteReason(reasonId, institutionId);
 
     if (!reason) {
       return ApiResponse.notFound(res, 'Academic reason not found');
     }
 
     logger.info('Academic reason deleted', {
-      schoolId,
+      institutionId,
       reasonId,
       userId: req.user?.id,
       title: reason.title
@@ -288,11 +282,11 @@ const deleteReason = async (req, res, next) => {
 
 /**
  * Bulk delete academic reasons
- * @route POST /api/v1/schools/:schoolId/academic-reasons/bulk-delete
+ * @route POST /api/v1/schools/:institutionId/academic-reasons/bulk-delete
  */
 const bulkDeleteReasons = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { reasonIds } = req.body;
     
     if (!reasonIds || !Array.isArray(reasonIds) || reasonIds.length === 0) {
@@ -302,10 +296,10 @@ const bulkDeleteReasons = async (req, res, next) => {
     // Validate all IDs
     reasonIds.forEach(id => validateReasonId(id));
     
-    const result = await academicReasonService.bulkDeleteReasons(reasonIds, schoolId);
+    const result = await academicReasonService.bulkDeleteReasons(reasonIds, institutionId);
 
     logger.info('Bulk delete academic reasons', {
-      schoolId,
+      institutionId,
       userId: req.user?.id,
       count: result.deletedCount
     });
@@ -326,21 +320,21 @@ const bulkDeleteReasons = async (req, res, next) => {
 
 /**
  * Get reasons by role
- * @route GET /api/v1/schools/:schoolId/academic-reasons/role/:role
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/role/:role
  */
 const getReasonsByRole = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { role } = req.params;
     
     if (!role) {
       return ApiResponse.badRequest(res, 'Role parameter is required');
     }
     
-    const reasons = await academicReasonService.getReasonsByRole(schoolId, role.toUpperCase());
+    const reasons = await academicReasonService.getReasonsByRole(institutionId, role.toUpperCase());
 
     logger.info('Academic reasons retrieved by role', {
-      schoolId,
+      institutionId,
       role,
       userId: req.user?.id,
       count: reasons.length
@@ -363,21 +357,21 @@ const getReasonsByRole = async (req, res, next) => {
 
 /**
  * Get reasons by category
- * @route GET /api/v1/schools/:schoolId/academic-reasons/category/:category
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/category/:category
  */
 const getReasonsByCategory = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { category } = req.params;
     
     if (!category) {
       return ApiResponse.badRequest(res, 'Category parameter is required');
     }
     
-    const reasons = await academicReasonService.getReasonsByCategory(schoolId, category.toUpperCase());
+    const reasons = await academicReasonService.getReasonsByCategory(institutionId, category.toUpperCase());
 
     logger.info('Academic reasons retrieved by category', {
-      schoolId,
+      institutionId,
       category,
       userId: req.user?.id,
       count: reasons.length
@@ -400,11 +394,11 @@ const getReasonsByCategory = async (req, res, next) => {
 
 /**
  * Search reasons
- * @route GET /api/v1/schools/:schoolId/academic-reasons/search
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/search
  */
 const searchReasons = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { q, limit, role, category } = req.query;
     
     if (!q || q.trim().length === 0) {
@@ -421,14 +415,14 @@ const searchReasons = async (req, res, next) => {
     if (category) filters.category = category.toUpperCase();
 
     const reasons = await academicReasonService.searchReasons(
-      schoolId,
+      institutionId,
       q.trim(),
       searchLimit,
       filters
     );
 
     logger.info('Academic reasons searched', {
-      schoolId,
+      institutionId,
       query: q,
       userId: req.user?.id,
       count: reasons.length,
@@ -453,15 +447,15 @@ const searchReasons = async (req, res, next) => {
 
 /**
  * Get analytics
- * @route GET /api/v1/schools/:schoolId/academic-reasons/analytics
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/analytics
  */
 const getAnalytics = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
-    const analytics = await academicReasonService.getAnalytics(schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
+    const analytics = await academicReasonService.getAnalytics(institutionId);
 
     logger.info('Academic reasons analytics retrieved', {
-      schoolId,
+      institutionId,
       userId: req.user?.id,
       totalReasons: analytics.totalReasons
     });
@@ -479,21 +473,21 @@ const getAnalytics = async (req, res, next) => {
 
 /**
  * Increment usage count
- * @route POST /api/v1/schools/:schoolId/academic-reasons/:reasonId/increment-usage
+ * @route POST /api/v1/schools/:institutionId/academic-reasons/:reasonId/increment-usage
  */
 const incrementUsage = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const reasonId = validateReasonId(req.params.reasonId);
     
-    const reason = await academicReasonService.incrementUsage(reasonId, schoolId);
+    const reason = await academicReasonService.incrementUsage(reasonId, institutionId);
 
     if (!reason) {
       return ApiResponse.notFound(res, 'Academic reason not found');
     }
 
     logger.info('Academic reason usage incremented', {
-      schoolId,
+      institutionId,
       reasonId,
       userId: req.user?.id,
       newCount: reason.usageCount
@@ -516,21 +510,21 @@ const incrementUsage = async (req, res, next) => {
 
 /**
  * Toggle reason status (active/inactive)
- * @route PATCH /api/v1/schools/:schoolId/academic-reasons/:reasonId/toggle-status
+ * @route PATCH /api/v1/schools/:institutionId/academic-reasons/:reasonId/toggle-status
  */
 const toggleStatus = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const reasonId = validateReasonId(req.params.reasonId);
     
-    const reason = await academicReasonService.toggleStatus(reasonId, schoolId);
+    const reason = await academicReasonService.toggleStatus(reasonId, institutionId);
 
     if (!reason) {
       return ApiResponse.notFound(res, 'Academic reason not found');
     }
 
     logger.info('Academic reason status toggled', {
-      schoolId,
+      institutionId,
       reasonId,
       userId: req.user?.id,
       newStatus: reason.status
@@ -553,11 +547,11 @@ const toggleStatus = async (req, res, next) => {
 
 /**
  * Get most used reasons
- * @route GET /api/v1/schools/:schoolId/academic-reasons/most-used
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/most-used
  */
 const getMostUsedReasons = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { limit, role, category } = req.query;
     
     const resultLimit = Math.min(50, Math.max(1, parseInt(limit) || 10));
@@ -566,13 +560,13 @@ const getMostUsedReasons = async (req, res, next) => {
     if (category) filters.category = category.toUpperCase();
 
     const reasons = await academicReasonService.getMostUsedReasons(
-      schoolId,
+      institutionId,
       resultLimit,
       filters
     );
 
     logger.info('Most used academic reasons retrieved', {
-      schoolId,
+      institutionId,
       userId: req.user?.id,
       count: reasons.length,
       filters
@@ -595,11 +589,11 @@ const getMostUsedReasons = async (req, res, next) => {
 
 /**
  * Export reasons to CSV
- * @route GET /api/v1/schools/:schoolId/academic-reasons/export
+ * @route GET /api/v1/schools/:institutionId/academic-reasons/export
  */
 const exportReasons = async (req, res, next) => {
   try {
-    const schoolId = validateSchoolId(req.params.schoolId);
+    const institutionId = validateinstitutionId(req.params.institutionId);
     const { role, category, status } = req.query;
     
     const filters = {};
@@ -607,10 +601,10 @@ const exportReasons = async (req, res, next) => {
     if (category) filters.category = category.toUpperCase();
     if (status) filters.status = status;
 
-    const csvData = await academicReasonService.exportToCSV(schoolId, filters);
+    const csvData = await academicReasonService.exportToCSV(institutionId, filters);
 
     logger.info('Academic reasons exported', {
-      schoolId,
+      institutionId,
       userId: req.user?.id,
       filters
     });

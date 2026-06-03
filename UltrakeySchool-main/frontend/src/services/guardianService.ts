@@ -55,12 +55,12 @@ export interface GuardianListResponse {
 const BASE_PATH = '/guardians';
 
 class GuardianService {
-  async listForSchool(
-    schoolId: string,
+  async listForInstitution(
+    institutionId: string,
     params: GuardianListParams = {}
   ): Promise<GuardianListResponse> {
-    if (!schoolId) {
-      throw new Error('School ID is required to fetch guardians');
+    if (!institutionId) {
+      throw new Error('Institution ID is required to fetch guardians');
     }
 
     const query: AxiosRequestConfig = {
@@ -73,7 +73,7 @@ class GuardianService {
     };
 
     const response = await apiClient.get<GuardianListResponse>(
-      `${BASE_PATH}/schools/${schoolId}`,
+      `${BASE_PATH}/institutions/${institutionId}`,
       query
     );
 
@@ -86,8 +86,14 @@ class GuardianService {
     }
 
     return response.data.data;
+  }
+
+  async listForSchool(institutionId: string, params: GuardianListParams = {}): Promise<GuardianListResponse> {
+    return this.listForInstitution(institutionId, params);
   }
 }
 
 export const guardianService = new GuardianService();
 export default guardianService;
+
+

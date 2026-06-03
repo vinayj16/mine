@@ -103,7 +103,7 @@ export const homeWorkIdValidator = [
 
 // Validation rules for getting homework list
 export const getHomeWorksValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty()
     .withMessage('School ID is required')
     .isMongoId()

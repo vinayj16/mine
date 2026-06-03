@@ -7,6 +7,11 @@ const {
   bulkCreateFees,
   getStudentFees,
   getPendingFees,
+  getAllFees,
+  getMyFees,
+  listFees,
+  getAccountantDashboard,
+  getPaymentConfig,
   sendReminders,
   getFeesReport,
   updateFee,
@@ -20,6 +25,7 @@ const {
 } = feeController;
 
 import { protect } from '../middleware/authMiddleware.js';
+import { validateTenantAccess } from '../middleware/multiTenant.js';
 import { authorize } from '../middleware/authGuard.js';
 import {
   getFeesOverviewValidation,
@@ -40,8 +46,9 @@ import {
 
 const router = express.Router();
 
-// All fee routes require authentication (TESTED & VERIFIED)
+// All fee routes require authentication and tenant validation
 router.use(protect);
+router.use(validateTenantAccess);
 
 // Invoice routes (TESTED & VERIFIED)
 router.post(
@@ -75,29 +82,31 @@ router.get(
   getPaymentReceipt
 );  
 
-// Frontend-compatible simple routes (TESTED & VERIFIED)
-router.get('/', async (req, res, next) => {
-  try {
-    const result = await getPendingFees(req, res);
-    return result;
-  } catch (error) {
-    next(error);
-  }
-});  
+// Payment gateway config (Razorpay key) - returns institution-specific key if authenticated
+router.get('/payment-config', protect, getPaymentConfig);
 
-router.get('/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    if (req.params.studentId) {
-      return getStudentFees(req, res, next);
-    }
-    res.json({ success: true, data: { id } });
-  } catch (error) {
-    next(error);
-  }
-});  
+// Accountant unified fee dashboard (tuition + hostel + transport)
+router.get(
+  '/accountant/dashboard',
+  authorize(['admin', 'accountant', 'principal', 'institution_admin']),
+  getAccountantDashboard
+);
+
+// Student's own fees
+router.get('/my', getMyFees);
+
+// Frontend-compatible list route (role-aware)
+router.get('/', listFees);  
 
 router.post('/', async (req, res, next) => {
+  try {
+    return createFee(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});  
+
+router.post('/create', async (req, res, next) => {
   try {
     return createFee(req, res, next);
   } catch (error) {
@@ -150,7 +159,7 @@ router.get(
 
 router.get(
   '/pending',
-  authorize(['admin', 'accountant', 'principal',   'institution_admin']),
+  authorize(['admin', 'accountant', 'principal', 'institution_admin', 'superadmin']),
   getPendingFeesValidation,
   getPendingFees
 );  
@@ -188,5 +197,14 @@ router.post(
   authorize(['admin', 'accountant']),
   applyLateFees
 );  
+
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    res.json({ success: true, data: { id } });
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

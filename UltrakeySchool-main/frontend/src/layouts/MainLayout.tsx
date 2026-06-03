@@ -5,6 +5,9 @@ import { canAccessRoute } from '../utils/permissions'
 import Header from '../components/layout/Header'
 import PageHeader from '../components/layout/PageHeader'
 import RoleSidebar from '../components/RoleSidebar'
+import RoleDashboardGuard from '../components/RoleDashboardGuard'
+import AIAssistantPanel from '../components/student/AIAssistantPanel'
+import { useAIAssistantStore } from '../store/aiAssistantStore'
 
 // Context for sharing sidebar state across components
 interface SidebarContextType {
@@ -33,6 +36,7 @@ const MainLayout = () => {
   const location = useLocation()
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { isOpen: aiIsOpen, close: aiClose, open: aiOpen } = useAIAssistantStore()
 
   // Handle mobile sidebar state - must be before any conditional returns
   useEffect(() => {
@@ -54,42 +58,9 @@ const MainLayout = () => {
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('keydown', handleEscape)
     }
-  }, [isMobileSidebarOpen])
+    }, [isMobileSidebarOpen])
 
-  // Check if user is authenticated
-  if (!user) {
-    console.log('[MainLayout] No user found, redirecting to login')
-    navigate('/login', { replace: true })
-    return null
-  }
-
-  // Check if user can access current route
-  if (!canAccessRoute(user, location.pathname)) {
-    return (
-      <div className="d-flex align-items-center justify-content-center vh-100">
-        <div className="card text-center p-5">
-          <div className="card-body">
-            <div className="mb-4">
-              <i className="ti ti-lock fs-1 text-warning mb-3"></i>
-            </div>
-            <h4 className="mb-3">Access Restricted</h4>
-            <p className="text-muted mb-4">
-              This module is not available for your role or plan.
-              <br />
-              Please contact your administrator for access.
-            </p>
-            <button 
-              className="btn btn-primary"
-              onClick={() => navigate(-1)}
-            >
-              Go Back
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
+  // Define toggle functions before early returns (needed by useEffect below)
   const toggleSidebar = () => {
     if (window.innerWidth < 1024) {
       setIsMobileSidebarOpen(prev => !prev)
@@ -102,11 +73,18 @@ const MainLayout = () => {
     setIsMobileSidebarOpen(false)
   }
 
-  // Apply body classes for sidebar state
+  // Apply body classes for sidebar state (must be before early returns)
   useEffect(() => {
     document.body.classList.toggle('mini-sidebar', isSidebarCollapsed && !isMobileSidebarOpen)
     document.body.classList.toggle('mobile-menu-open', isMobileSidebarOpen)
   }, [isSidebarCollapsed, isMobileSidebarOpen])
+
+  // Check if user is authenticated
+  if (!user) {
+    console.log('[MainLayout] No user found, redirecting to login')
+    navigate('/login', { replace: true })
+    return null
+  }
 
   const sidebarContextValue: SidebarContextType = {
     isCollapsed: isSidebarCollapsed,
@@ -120,24 +98,62 @@ const MainLayout = () => {
   return (
     <SidebarContext.Provider value={sidebarContextValue}>
       <div className="main-wrapper">
-        <Header />
+        <Header toggleSidebar={toggleSidebar} />
         <div className="main-container">
           <RoleSidebar 
             collapsed={isSidebarCollapsed}
             onCollapse={setIsSidebarCollapsed}
             onMobileClose={closeMobileSidebar}
+            isMobileOpen={isMobileSidebarOpen}
           />
           <main 
             className="page-wrapper" 
             role="main"
             id="main-content"
+            style={{ 
+              marginLeft: isMobileSidebarOpen ? '0' : (isSidebarCollapsed ? '80px' : '280px'),
+              transition: 'margin-left 0.3s cubic-bezier(0.4,0,0.2,1)',
+              width: isMobileSidebarOpen ? '100%' : `calc(100% - ${isSidebarCollapsed ? 80 : 280}px)`
+            }}
           >
             <div className="content">
               <PageHeader showBreadcrumbs={true} />
-              <Outlet />
+              <RoleDashboardGuard>
+                <Outlet />
+              </RoleDashboardGuard>
             </div>
           </main>
         </div>
+
+        {/* AI Assistant — globally visible for all authenticated users */}
+        {aiIsOpen && (
+          <AIAssistantPanel
+            onClose={() => aiClose()}
+            userName={user?.name || 'User'}
+          />
+        )}
+        {!aiIsOpen && (
+          <button
+            onClick={() => aiOpen()}
+            className="btn btn-primary rounded-circle position-fixed"
+            style={{
+              bottom: '30px',
+              right: '30px',
+              width: '60px',
+              height: '60px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px'
+            }}
+            title="Open AI Assistant"
+          >
+            <i className="ti ti-sparkles"></i>
+          </button>
+        )}
+
         {/* Mobile sidebar overlay */}
         {isMobileSidebarOpen && (
           <div 

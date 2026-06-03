@@ -22,19 +22,19 @@ class HRMService {
   }
 
   async getStaffById(id) {
-    return await Staff.findOne({ staffId: id });
+    return await Staff.findOne({ _id: id });
   }
 
   async updateStaff(id, data) {
     return await Staff.findOneAndUpdate(
-      { staffId: id },
+      { _id: id },
       { $set: data },
       { new: true, runValidators: true }
     );
   }
 
   async deleteStaff(id) {
-    return await Staff.findOneAndDelete({ staffId: id });
+    return await Staff.findOneAndDelete({ _id: id });
   }
 
   async searchStaff(query) {
@@ -62,7 +62,7 @@ class HRMService {
 
   async updateSalary(id, salaryData) {
     return await Staff.findOneAndUpdate(
-      { staffId: id },
+      { _id: id },
       { $set: { salary: salaryData } },
       { new: true }
     );
@@ -70,7 +70,7 @@ class HRMService {
 
   async addAttendance(id, attendanceData) {
     return await Staff.findOneAndUpdate(
-      { staffId: id },
+      { _id: id },
       { $push: { attendance: attendanceData } },
       { new: true }
     );
@@ -78,7 +78,7 @@ class HRMService {
 
   async updatePerformanceRating(id, rating) {
     return await Staff.findOneAndUpdate(
-      { staffId: id },
+      { _id: id },
       { $set: { performanceRating: rating } },
       { new: true }
     );
@@ -97,19 +97,19 @@ class HRMService {
   }
 
   async getDepartmentById(id) {
-    return await Department.findOne({ departmentId: id });
+    return await Department.findOne({ _id: id });
   }
 
   async updateDepartment(id, data) {
     return await Department.findOneAndUpdate(
-      { departmentId: id },
+      { _id: id },
       { $set: data },
       { new: true, runValidators: true }
     );
   }
 
   async deleteDepartment(id) {
-    return await Department.findOneAndDelete({ departmentId: id });
+    return await Department.findOneAndDelete({ _id: id });
   }
 
   // Designation Management
@@ -126,19 +126,19 @@ class HRMService {
   }
 
   async getDesignationById(id) {
-    return await Designation.findOne({ designationId: id });
+    return await Designation.findOne({ _id: id });
   }
 
   async updateDesignation(id, data) {
     return await Designation.findOneAndUpdate(
-      { designationId: id },
+      { _id: id },
       { $set: data },
       { new: true, runValidators: true }
     );
   }
 
   async deleteDesignation(id) {
-    return await Designation.findOneAndDelete({ designationId: id });
+    return await Designation.findOneAndDelete({ _id: id });
   }
 
   // Leave Management
@@ -156,24 +156,24 @@ class HRMService {
   }
 
   async getLeaveById(id) {
-    return await Leave.findOne({ leaveId: id });
+    return await Leave.findOne({ _id: id });
   }
 
   async updateLeave(id, data) {
     return await Leave.findOneAndUpdate(
-      { leaveId: id },
+      { _id: id },
       { $set: data },
       { new: true, runValidators: true }
     );
   }
 
   async deleteLeave(id) {
-    return await Leave.findOneAndDelete({ leaveId: id });
+    return await Leave.findOneAndDelete({ _id: id });
   }
 
   async approveLeave(id, approvedBy) {
     return await Leave.findOneAndUpdate(
-      { leaveId: id },
+      { _id: id },
       { 
         $set: { 
           status: 'approved',
@@ -187,7 +187,7 @@ class HRMService {
 
   async rejectLeave(id, approvedBy, comments) {
     return await Leave.findOneAndUpdate(
-      { leaveId: id },
+      { _id: id },
       { 
         $set: { 
           status: 'rejected',

@@ -33,7 +33,7 @@ class ClassService {
         institutionFilters.push(
           { institutionId: id },
           { institution: id },
-          { schoolId: id }
+          { institutionId: id }
         );
 
         if (mongoose.Types.ObjectId.isValid(id)) {
@@ -41,7 +41,7 @@ class ClassService {
           institutionFilters.push(
             { institutionId: objectId },
             { institution: objectId },
-            { schoolId: objectId }
+            { institutionId: objectId }
           );
         }
       }
@@ -193,6 +193,26 @@ class ClassService {
 
     classDoc.isDeleted = true;
     return await classDoc.save();
+  }
+
+  async getClassOverview(classId, institutionId) {
+    const [classDoc, students, subjects, teachers] = await Promise.all([
+      Class.findById(classId).populate('classTeacher', 'name email avatar').lean(),
+      (await import('../models/Student.js')).default.find({ classId, institutionId, isActive: true })
+        .populate('userId', 'name email avatar phone')
+        .select('firstName lastName admissionNumber rollNumber userId')
+        .lean(),
+      (await import('../models/Subject.js')).default.find({ classId, institutionId, isActive: true })
+        .select('name code type')
+        .lean(),
+      (await import('../models/Teacher.js')).default.find({ institutionId, isActive: true })
+        .populate('userId', 'name email avatar')
+        .select('firstName lastName employeeId department subjects userId')
+        .lean()
+    ]);
+    const teacherList = teachers.filter(t => t.subjects?.length > 0 || t.classes?.some(c => c.classId?.toString() === classId));
+
+    return { class: classDoc, students, subjects, teachers: teacherList };
   }
 
   async getClassesByInstitution(institutionId, academicYear) {

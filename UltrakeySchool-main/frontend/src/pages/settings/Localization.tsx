@@ -24,8 +24,8 @@ const Localization: React.FC = () => {
     dateFormat: 'DD/MM/YYYY',
     timeFormat: '24',
     currency: {
-      code: 'USD',
-      symbol: '$',
+      code: 'INR',
+      symbol: '₹',
       position: 'before'
     },
     language: 'en'
@@ -38,7 +38,7 @@ const Localization: React.FC = () => {
 
       const response = await apiClient.get('/settings', {
         params: {
-          institutionId: '507f1f77bcf86cd799439011'
+          institutionId: localStorage.getItem('institutionId') || ''
         }
       });
 
@@ -49,8 +49,8 @@ const Localization: React.FC = () => {
           dateFormat: data.dateFormat || 'DD/MM/YYYY',
           timeFormat: data.timeFormat || '24',
           currency: data.currency || {
-            code: 'USD',
-            symbol: '$',
+            code: 'INR',
+            symbol: '₹',
             position: 'before'
           },
           language: data.language || 'en'
@@ -77,7 +77,7 @@ const Localization: React.FC = () => {
       setSaving(true);
 
       const response = await apiClient.put('/settings/localization', {
-        institutionId: '507f1f77bcf86cd799439011',
+        institutionId: localStorage.getItem('institutionId') || '',
         ...formData
       });
 
@@ -269,14 +269,13 @@ const Localization: React.FC = () => {
               <div className="col-md-4">
                 <div className="mb-3">
                   <label className="form-label">
-                    <i className="ti ti-currency-dollar me-1"></i>Currency Code
+                    <i className="ti ti-currency-rupee me-1"></i>Currency Code
                   </label>
                   <select
                     className="form-select"
                     value={formData.currency.code}
                     onChange={(e) => handleCurrencyChange('code', e.target.value)}
                   >
-                    <option value="USD">USD - US Dollar</option>
                     <option value="EUR">EUR - Euro</option>
                     <option value="GBP">GBP - British Pound</option>
                     <option value="INR">INR - Indian Rupee</option>
@@ -299,7 +298,7 @@ const Localization: React.FC = () => {
                     className="form-control"
                     value={formData.currency.symbol}
                     onChange={(e) => handleCurrencyChange('symbol', e.target.value)}
-                    placeholder="$"
+                    placeholder="₹"
                     maxLength={3}
                   />
                 </div>
@@ -314,8 +313,8 @@ const Localization: React.FC = () => {
                     value={formData.currency.position}
                     onChange={(e) => handleCurrencyChange('position', e.target.value)}
                   >
-                    <option value="before">Before ($100)</option>
-                    <option value="after">After (100$)</option>
+                    <option value="before">Before (₹100)</option>
+                    <option value="after">After (100₹)</option>
                   </select>
                 </div>
               </div>
@@ -336,7 +335,7 @@ const Localization: React.FC = () => {
                     })}
                   </p>
                   <p className="mb-1">
-                    <strong>Time:</strong> {new Date().toLocaleTimeString('en-US', {
+                    <strong>Time:</strong> {new Date().toLocaleTimeString('en-IN', {
                       hour: '2-digit',
                       minute: '2-digit',
                       hour12: formData.timeFormat === '12'

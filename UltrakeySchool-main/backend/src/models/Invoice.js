@@ -49,7 +49,6 @@ const invoiceSchema = new mongoose.Schema({
   dueDate: { type: Date, required: true },
   
   // Institution/School
-  schoolId: { type: mongoose.Schema.Types.ObjectId, ref: 'Institution' },
   institutionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Institution' },
   
   // Items (for detailed breakdown)
@@ -73,7 +72,7 @@ invoiceSchema.index({ invoiceId: 1 });
 invoiceSchema.index({ invoiceNumber: 1 });
 invoiceSchema.index({ studentId: 1 });
 invoiceSchema.index({ status: 1 });
-invoiceSchema.index({ schoolId: 1 });
+invoiceSchema.index({ institutionId: 1 });
 invoiceSchema.index({ createdAt: -1 });
 
 // Generate invoice number before saving

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import apiClient from '../../api/client';
+import apiService from '../../services/api';
+import { getInstitutionId } from '../../utils/auth';
 import TeacherDetailTabs from '../../components/teachers/TeacherDetailTabs';
 
 interface Period {
@@ -46,7 +47,9 @@ interface TeacherProfile {
 }
 
 const TeacherRoutinePage = () => {
-  const { teacherId } = useParams<{ teacherId: string }>();
+  const { teacherId: urlTeacherId } = useParams<{ teacherId: string }>();
+  const [resolvedTeacherId, setResolvedTeacherId] = useState<string | null>(null);
+  const teacherId = resolvedTeacherId;
   const [routine, setRoutine] = useState<RoutineDay[]>([]);
   const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,39 +57,68 @@ const TeacherRoutinePage = () => {
   const [selectedYear, setSelectedYear] = useState('2024-2025');
   const [selectedTerm, setSelectedTerm] = useState('1');
 
-  // Get schoolId from localStorage user data
-  const getSchoolId = () => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        return user.schoolId || user.school || user.schoolID || user.institutionId;
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-      }
-    }
-    return null;
-  };
-
-  const schoolId = getSchoolId();
+  const institutionId = getInstitutionId();
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   useEffect(() => {
-    if (teacherId && schoolId) {
+    const resolveId = async () => {
+      if (urlTeacherId) {
+        setResolvedTeacherId(urlTeacherId);
+      } else {
+        try {
+          const response = await apiService.get('/dashboard/teacher');
+          const resData = response.data as any;
+          if (response.success && (resData?.teacher || resData)) {
+            const teacherData = resData?.teacher || resData;
+            const id = teacherData?.id || teacherData?._id;
+            setResolvedTeacherId(id);
+          } else {
+            setError('Could not resolve teacher profile');
+            setLoading(false);
+          }
+        } catch {
+          setError('Failed to resolve teacher profile');
+          setLoading(false);
+        }
+      }
+    };
+    resolveId();
+  }, [urlTeacherId]);
+
+  useEffect(() => {
+    if (teacherId && institutionId) {
       fetchTeacherProfile();
       fetchRoutine();
     }
-  }, [teacherId, selectedYear, selectedTerm, schoolId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherId, selectedYear, selectedTerm, institutionId]);
 
   const fetchTeacherProfile = async () => {
     try {
-      const response = await apiClient.get(`/teachers/${teacherId}`);
-      if (response.data.success) {
-        setTeacherProfile(response.data.data);
+      const response = await apiService.get(`/teachers/${teacherId}`);
+      if (response.success) {
+        setTeacherProfile(response.data as TeacherProfile);
       }
     } catch (error: any) {
       console.error('Failed to fetch teacher profile:', error);
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          setTeacherProfile({
+            _id: user.id || user._id,
+            firstName: user.name || user.fullName || '',
+            lastName: '',
+            email: user.email || '',
+            phone: '',
+            department: '',
+            designation: 'Teacher',
+          });
+        } catch {
+          // Swallow error - user info fallback failed
+        }
+      }
     }
   };
 
@@ -94,16 +126,14 @@ const TeacherRoutinePage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get(`/teachers/${teacherId}/routine`, {
-        params: {
-          schoolId,
+      const response = await apiService.get(`/teachers/${teacherId}/routine`, {
+          institutionId,
           academicYear: selectedYear,
           term: selectedTerm
-        }
       });
 
-      if (response.data.success) {
-        setRoutine(response.data.data || []);
+      if (response.success) {
+        setRoutine((response.data as RoutineDay[]) || []);
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch routine';

@@ -630,9 +630,9 @@ const institutionService = {
     return response.data;
   },
 
-  async migrateFromSchool(schoolId: string): Promise<Institution> {
+  async migrateFromSchool(institutionId: string): Promise<Institution> {
     const response: ApiResponse<Institution> = await apiService.post(
-      `${API_ENDPOINTS.INSTITUTIONS.LIST}/migrate/${schoolId}`,
+      `${API_ENDPOINTS.INSTITUTIONS.LIST}/migrate/${institutionId}`,
       {}
     );
     

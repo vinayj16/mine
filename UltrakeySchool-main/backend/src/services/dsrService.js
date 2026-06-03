@@ -1,8 +1,3 @@
-/**
- * DSR (Data Subject Request) Service
- * Handles data subject requests for GDPR compliance
- */
-
 const DataExportRequest = require('../models/dataExportRequest');
 const DataErasureRequest = require('../models/dataErasureRequest');
 const User = require('../models/User');

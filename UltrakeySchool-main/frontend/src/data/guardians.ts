@@ -1,8 +1,3 @@
-/**
- * Real-time Guardian Data with API Integration
- * Transforms mock data into dynamic, real-time guardian management
- */
-
 import { guardianService, type GuardianListParams } from '../services/guardianService'
 
 export interface GuardianRecord {
@@ -51,15 +46,15 @@ const extractClassLabel = (classData: any): string => {
 // Real-time API functions for guardian management
 export const guardianApi = {
   // Get all guardians with real-time data
-  getAllGuardians: async (schoolId?: string, params: GuardianListParams = {}): Promise<GuardianRecord[]> => {
+  getAllGuardians: async (institutionId?: string, params: GuardianListParams = {}): Promise<GuardianRecord[]> => {
     try {
-      if (!schoolId) {
-        // For demo purposes, return empty array if no schoolId provided
-        console.warn('[Guardian API] School ID required for fetching guardians')
+      if (!institutionId) {
+        // For demo purposes, return empty array if no institutionId provided
+        console.warn('[Guardian API] Institution ID required for fetching guardians')
         return []
       }
 
-      const response = await guardianService.listForSchool(schoolId, params)
+      const response = await guardianService.listForInstitution(institutionId, params)
       
       // Transform API data to match our interface
       return response.guardians.map(guardian => ({
@@ -92,14 +87,14 @@ export const guardianApi = {
   },
 
   // Get guardian by ID with real-time data
-  getGuardianById: async (guardianId: string, schoolId?: string): Promise<GuardianRecord | null> => {
+  getGuardianById: async (guardianId: string, institutionId?: string): Promise<GuardianRecord | null> => {
     try {
-      if (!schoolId) {
-        console.warn('[Guardian API] School ID required for fetching guardian')
+      if (!institutionId) {
+        console.warn('[Guardian API] Institution ID required for fetching guardian')
         return null
       }
 
-      const response = await guardianService.listForSchool(schoolId, { search: guardianId })
+      const response = await guardianService.listForInstitution(institutionId, { search: guardianId })
       const guardian = response.guardians.find(g => g.guardianId === guardianId || g._id === guardianId)
       
       if (!guardian) return null
@@ -134,9 +129,9 @@ export const guardianApi = {
   },
 
   // Filter guardians by status
-  getGuardiansByStatus: async (status: string, schoolId?: string): Promise<GuardianRecord[]> => {
+  getGuardiansByStatus: async (status: string, institutionId?: string): Promise<GuardianRecord[]> => {
     try {
-      const response = await guardianService.listForSchool(schoolId!, { status })
+      const response = await guardianService.listForSchool(institutionId!, { status })
       
       return response.guardians.map(guardian => ({
         _id: guardian._id,
@@ -168,14 +163,14 @@ export const guardianApi = {
   },
 
   // Search guardians
-  searchGuardians: async (searchTerm: string, schoolId?: string): Promise<GuardianRecord[]> => {
+  searchGuardians: async (searchTerm: string, institutionId?: string): Promise<GuardianRecord[]> => {
     try {
-      if (!schoolId) {
+      if (!institutionId) {
         console.warn('[Guardian API] School ID required for searching guardians')
         return []
       }
 
-      const response = await guardianService.listForSchool(schoolId, { search: searchTerm })
+      const response = await guardianService.listForSchool(institutionId, { search: searchTerm })
       
       return response.guardians.map(guardian => ({
         _id: guardian._id,
@@ -207,9 +202,9 @@ export const guardianApi = {
   },
 
   // Get guardian children
-  getGuardianChildren: async (guardianId: string, schoolId?: string): Promise<GuardianChildRecord[]> => {
+  getGuardianChildren: async (guardianId: string, institutionId?: string): Promise<GuardianChildRecord[]> => {
     try {
-      const guardian = await guardianApi.getGuardianById(guardianId, schoolId)
+      const guardian = await guardianApi.getGuardianById(guardianId, institutionId)
       return guardian?.children || []
     } catch (error) {
       console.error('[Guardian API] Failed to fetch guardian children:', error)
@@ -218,14 +213,14 @@ export const guardianApi = {
   },
 
   // Get guardians by class
-  getGuardiansByClass: async (classId: string, schoolId?: string): Promise<GuardianRecord[]> => {
+  getGuardiansByClass: async (classId: string, institutionId?: string): Promise<GuardianRecord[]> => {
     try {
-      if (!schoolId) {
+      if (!institutionId) {
         console.warn('[Guardian API] School ID required for fetching guardians by class')
         return []
       }
 
-      const response = await guardianService.listForSchool(schoolId)
+      const response = await guardianService.listForSchool(institutionId)
       
       // Filter guardians who have children in the specified class
       return response.guardians
@@ -266,7 +261,7 @@ export const guardianApi = {
   },
 
   // Get guardian statistics
-  getGuardianStats: async (schoolId?: string): Promise<{
+  getGuardianStats: async (institutionId?: string): Promise<{
     total: number
     active: number
     inactive: number
@@ -274,7 +269,7 @@ export const guardianApi = {
     totalChildren: number
   }> => {
     try {
-      if (!schoolId) {
+      if (!institutionId) {
         return {
           total: 0,
           active: 0,
@@ -284,7 +279,7 @@ export const guardianApi = {
         }
       }
 
-      const response = await guardianService.listForSchool(schoolId, { limit: 1000 })
+      const response = await guardianService.listForSchool(institutionId, { limit: 1000 })
       const guardians = response.guardians
       
       const stats = {
@@ -304,8 +299,8 @@ export const guardianApi = {
 }
 
 // Legacy function for backward compatibility
-export const getGuardianRecords = async (schoolId?: string): Promise<GuardianRecord[]> => {
-  return await guardianApi.getAllGuardians(schoolId)
+export const getGuardianRecords = async (institutionId?: string): Promise<GuardianRecord[]> => {
+  return await guardianApi.getAllGuardians(institutionId)
 }
 
 export default guardianApi

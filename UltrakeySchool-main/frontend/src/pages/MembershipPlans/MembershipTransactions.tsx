@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Transaction {
   _id: string;
   transactionId: string;
-  schoolId: {
+  institutionId: {
     _id: string;
     name: string;
   };
@@ -89,11 +90,37 @@ const MembershipTransactions: React.FC = () => {
   };
 
   const handleExportPDF = () => {
-    toast.info('PDF export feature coming soon');
+    const exportData = transactions.map(t => ({
+      ID: t.transactionId,
+      'Provider Name': typeof t.institutionId === 'object' ? t.institutionId.name : 'N/A',
+      'Plan Type': t.metadata?.planName || (typeof t.subscriptionId === 'object' ? t.subscriptionId.planName : t.type),
+      'Transaction Date': formatDate(t.createdAt),
+      Amount: formatCurrency(t.amount, t.currency),
+      'Payment Method': getPaymentMethodDisplay(t.paymentMethod, t.paymentDetails),
+      Status: t.status.charAt(0).toUpperCase() + t.status.slice(1)
+    }));
+    exportToPDF(exportData, 'transactions', [
+      { key: 'ID', label: 'ID' },
+      { key: 'Provider Name', label: 'Provider Name' },
+      { key: 'Plan Type', label: 'Plan Type' },
+      { key: 'Transaction Date', label: 'Transaction Date' },
+      { key: 'Amount', label: 'Amount' },
+      { key: 'Payment Method', label: 'Payment Method' },
+      { key: 'Status', label: 'Status' }
+    ], 'Membership Transactions');
   };
 
   const handleExportExcel = () => {
-    toast.info('Excel export feature coming soon');
+    const exportData = transactions.map(t => ({
+      ID: t.transactionId,
+      'Provider Name': typeof t.institutionId === 'object' ? t.institutionId.name : 'N/A',
+      'Plan Type': t.metadata?.planName || (typeof t.subscriptionId === 'object' ? t.subscriptionId.planName : t.type),
+      'Transaction Date': formatDate(t.createdAt),
+      Amount: formatCurrency(t.amount, t.currency),
+      'Payment Method': getPaymentMethodDisplay(t.paymentMethod, t.paymentDetails),
+      Status: t.status.charAt(0).toUpperCase() + t.status.slice(1)
+    }));
+    exportToExcel(exportData, 'transactions');
   };
 
   const handleFilterSubmit = (e: React.FormEvent) => {
@@ -149,8 +176,8 @@ const MembershipTransactions: React.FC = () => {
     }
   };
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
+  const formatCurrency = (amount: number, currency: string = 'INR') => {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: currency
     }).format(amount);
@@ -159,7 +186,7 @@ const MembershipTransactions: React.FC = () => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('en-IN', { 
       day: '2-digit', 
       month: 'short', 
       year: 'numeric' 
@@ -416,8 +443,8 @@ const MembershipTransactions: React.FC = () => {
                             </button>
                           </td>
                           <td>
-                            {typeof transaction.schoolId === 'object' 
-                              ? transaction.schoolId.name 
+                            {typeof transaction.institutionId === 'object' 
+                              ? transaction.institutionId.name 
                               : 'N/A'}
                           </td>
                           <td className="text-capitalize">

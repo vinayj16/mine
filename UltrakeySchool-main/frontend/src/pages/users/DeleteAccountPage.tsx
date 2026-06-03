@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface DeleteRequest {
   _id: string;
@@ -172,12 +173,32 @@ const DeleteAccountPage = () => {
     );
   };
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = requestsArray.map(r => ({
+      User: r.userId?.name || '',
+      Email: r.userId?.email || '',
+      Reason: r.reason || '-',
+      'Requested Date': new Date(r.requestedAt).toLocaleDateString(),
+      Status: r.status.charAt(0).toUpperCase() + r.status.slice(1)
+    }));
+    exportToPDF(exportData, 'delete-requests', [
+      { key: 'User', label: 'User' },
+      { key: 'Email', label: 'Email' },
+      { key: 'Reason', label: 'Reason' },
+      { key: 'Requested Date', label: 'Requested Date' },
+      { key: 'Status', label: 'Status' }
+    ], 'Delete Account Requests');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = requestsArray.map(r => ({
+      User: r.userId?.name || '',
+      Email: r.userId?.email || '',
+      Reason: r.reason || '-',
+      'Requested Date': new Date(r.requestedAt).toLocaleDateString(),
+      Status: r.status.charAt(0).toUpperCase() + r.status.slice(1)
+    }));
+    exportToExcel(exportData, 'delete-requests');
   };
 
   const getStatusBadge = (status: string) => {
@@ -282,12 +303,12 @@ const DeleteAccountPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>

@@ -34,13 +34,15 @@ router.use(protect);
 // Simple subjects route for frontend compatibility (auto-gets institution from JWT)
 router.get('/', async (req, res, next) => {
   try {
-    // Use institution from JWT to filter - add as query param
-    const institutionId = req.user?.institutionId || req.user?.institution;
+    // Use institution from JWT first, fall back to query param (sent by frontend)
+    const jwtInstitutionId = req.user?.institutionId || req.user?.institution;
+    const queryInstitutionId = req.query.institutionId;
+    const institutionId = jwtInstitutionId || queryInstitutionId;
     if (institutionId) {
-      req.query.schoolId = institutionId;
+      req.query.institutionId = institutionId;
       req.query.institutionId = institutionId;
     }
-    console.log('[Subject Routes] GET / - using institutionId from JWT:', institutionId);
+    console.log('[Subject Routes] GET / - using institutionId:', institutionId, '(from JWT:', !!jwtInstitutionId, '| from query:', !!queryInstitutionId, ')');
     getSubjects(req, res, next);
   } catch (err) {
     next(err);
@@ -50,17 +52,17 @@ router.post('/', async (req, res, next) => {
   try {
     console.log('[Subject Routes] POST / hit');
     
-    let schoolId = req.body.schoolId || req.body.institutionId;
-    if (!schoolId && req.user) {
-      schoolId = req.user.institutionId || req.user.institution;
+    let institutionId = req.body.institutionId || req.body.institutionId;
+    if (!institutionId && req.user) {
+      institutionId = req.user.institutionId || req.user.institution;
     }
     
-    if (!schoolId) {
+    if (!institutionId) {
       return res.status(400).json({ success: false, message: 'School ID is required' });
     }
     
-    req.params.schoolId = schoolId;
-    console.log('[Subject Routes] Using schoolId:', schoolId);
+    req.params.institutionId = institutionId;
+    console.log('[Subject Routes] Using institutionId:', institutionId);
     createSubject(req, res, next);
   } catch (err) {
     console.log('[Subject Routes] Error:', err);
@@ -69,48 +71,48 @@ router.post('/', async (req, res, next) => {
 });
 
 // CRUD Operations - ORDER MATTERS: specific routes FIRST
-// Note: frontend calls /subjects/:schoolId, not /subjects/schools/:schoolId
-router.post('/:schoolId', async (req, res, next) => {
+// Note: frontend calls /subjects/:institutionId, not /subjects/schools/:institutionId
+router.post('/:institutionId', async (req, res, next) => {
   try {
-    console.log('[Subject Routes] POST /:schoolId hit');
+    console.log('[Subject Routes] POST /:institutionId hit');
     console.log('[Subject Routes] Body:', req.body);
-    const schoolId = req.params.schoolId || req.body.schoolId || req.user?.institutionId || req.user?.institution;
-    if (!schoolId) {
+    const institutionId = req.params.institutionId || req.body.institutionId || req.user?.institutionId || req.user?.institution;
+    if (!institutionId) {
       return res.status(400).json({ success: false, message: 'School ID is required' });
     }
-    req.params.schoolId = schoolId;
+    req.params.institutionId = institutionId;
     createSubject(req, res, next);
   } catch (err) {
     next(err);
   }
 });
 
-router.get('/:schoolId', getSubjects);  
-router.get('/:schoolId/:subjectId', getSubjectById);
-router.put('/:schoolId/:subjectId', authorize(['admin', 'principal', 'institution_admin']), updateSubject);
-router.delete('/:schoolId/:subjectId', authorize(['super_admin', 'institution_admin']), deleteSubject);
-router.get('/schools/:schoolId/statistics', authorize(['admin', 'principal']), getSubjectStatistics);  
-router.get('/schools/:schoolId/active', getActiveSubjects);  
-router.get('/schools/:schoolId/department/:department', getSubjectsByDepartment);  
-router.get('/schools/:schoolId/type/:type', getSubjectsByType);  
-router.get('/schools/:schoolId/status/:status', getSubjectsByStatus);  
-router.get('/schools/:schoolId/search', searchSubjects);  
+router.get('/:institutionId', getSubjects);  
+router.get('/:institutionId/:subjectId', getSubjectById);
+router.put('/:institutionId/:subjectId', authorize(['admin', 'principal', 'institution_admin']), updateSubject);
+router.delete('/:institutionId/:subjectId', authorize(['super_admin', 'institution_admin']), deleteSubject);
+router.get('/schools/:institutionId/statistics', authorize(['admin', 'principal']), getSubjectStatistics);  
+router.get('/schools/:institutionId/active', getActiveSubjects);  
+router.get('/schools/:institutionId/department/:department', getSubjectsByDepartment);  
+router.get('/schools/:institutionId/type/:type', getSubjectsByType);  
+router.get('/schools/:institutionId/status/:status', getSubjectsByStatus);  
+router.get('/schools/:institutionId/search', searchSubjects);  
 
 // Status Management (TESTED & VERIFIED)
-router.patch('/schools/:schoolId/:subjectId/status', authorize(['admin', 'principal']), updateSubjectStatus);  
-router.patch('/schools/:schoolId/:subjectId/archive', authorize(['admin', 'principal']), archiveSubject);  
-router.patch('/schools/:schoolId/:subjectId/restore', authorize(['admin', 'principal']), restoreSubject);  
+router.patch('/schools/:institutionId/:subjectId/status', authorize(['admin', 'principal']), updateSubjectStatus);  
+router.patch('/schools/:institutionId/:subjectId/archive', authorize(['admin', 'principal']), archiveSubject);  
+router.patch('/schools/:institutionId/:subjectId/restore', authorize(['admin', 'principal']), restoreSubject);  
 
 // Subject Relations (TESTED & VERIFIED)
-router.get('/schools/:schoolId/:subjectId/teachers', getSubjectTeachers);  
-router.get('/schools/:schoolId/:subjectId/students', getSubjectStudents);  
+router.get('/schools/:institutionId/:subjectId/teachers', getSubjectTeachers);  
+router.get('/schools/:institutionId/:subjectId/students', getSubjectStudents);  
 
 // Bulk Operations (TESTED & VERIFIED)
-router.post('/schools/:schoolId/bulk-update', authorize(['admin', 'principal']), bulkUpdateSubjects);  
-router.post('/schools/:schoolId/bulk-delete', authorize(['super_admin']), bulkDeleteSubjects);  
+router.post('/schools/:institutionId/bulk-update', authorize(['admin', 'principal']), bulkUpdateSubjects);  
+router.post('/schools/:institutionId/bulk-delete', authorize(['super_admin']), bulkDeleteSubjects);  
 
 // Export and Duplicate (TESTED & VERIFIED)
-router.get('/schools/:schoolId/export', authorize(['admin', 'principal']), exportSubjects);  
-router.post('/schools/:schoolId/:subjectId/duplicate', authorize(['admin', 'principal']), duplicateSubject);  
+router.get('/schools/:institutionId/export', authorize(['admin', 'principal']), exportSubjects);  
+router.post('/schools/:institutionId/:subjectId/duplicate', authorize(['admin', 'principal']), duplicateSubject);  
 
 export default router;

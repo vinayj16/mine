@@ -143,14 +143,22 @@ const InstitutionsEngineeringCollegesPage: React.FC = () => {
     if (!selectedInstitution) return;
     
     try {
-      await superAdminService.updateInstitution(selectedInstitution._id, selectedInstitution as any);
+      const payload: Record<string, any> = {
+        name: selectedInstitution.name,
+        plan: selectedInstitution.plan,
+        instituteCode: selectedInstitution.instituteCode || undefined,
+        contactEmail: selectedInstitution.contactEmail,
+        contactPhone: selectedInstitution.contactPhone,
+        website: selectedInstitution.website || undefined,
+      };
+      await superAdminService.updateInstitution(selectedInstitution._id, payload);
       toast.success('Engineering College updated successfully');
       setShowEditModal(false);
       setSelectedInstitution(null);
       fetchInstitutions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating engineering college:', error);
-      toast.error('Failed to update engineering college');
+      toast.error(error?.response?.data?.message || 'Failed to update engineering college');
     }
   };
 
@@ -186,7 +194,7 @@ const InstitutionsEngineeringCollegesPage: React.FC = () => {
   const filteredInstitutions = institutions.filter(institution => {
     const matchesSearch = institution.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (institution.contactEmail?.toLowerCase() || '').includes(searchTerm.toLowerCase());
-    const matchesFilter = !filterStatus || institution.status === filterStatus;
+    const matchesFilter = !filterStatus || institution.status?.toLowerCase() === filterStatus.toLowerCase();
     const matchesPlan = !filterPlan || institution.plan === filterPlan;
     return matchesSearch && matchesFilter && matchesPlan;
   });
@@ -211,9 +219,9 @@ const InstitutionsEngineeringCollegesPage: React.FC = () => {
 
   const calculateStats = () => {
     const total = institutions.length;
-    const active = institutions.filter(inst => inst.status === 'Active').length;
-    const suspended = institutions.filter(inst => inst.status === 'Suspended').length;
-    const expired = institutions.filter(inst => inst.status === 'Expired').length;
+    const active = institutions.filter(inst => inst.status?.toLowerCase() === 'active').length;
+    const suspended = institutions.filter(inst => inst.status?.toLowerCase() === 'suspended').length;
+    const expired = institutions.filter(inst => inst.status?.toLowerCase() === 'expired').length;
     const totalRevenue = institutions.reduce((sum, inst) => {
       const revenue = inst.plan === 'basic' ? 1000 : inst.plan === 'premium' ? 5000 : 10000;
       return sum + revenue;
@@ -438,7 +446,7 @@ const InstitutionsEngineeringCollegesPage: React.FC = () => {
                           </span>
                         </td>
                         <td>2,500</td>
-                        <td>${institution.plan === 'basic' ? '1,000' : institution.plan === 'premium' ? '5,000' : '10,000'}</td>
+                        <td>₹{institution.plan === 'basic' ? '1,000' : institution.plan === 'premium' ? '5,000' : '10,000'}</td>
                         <td>{institution.subscriptionExpiry}</td>
                         <td>
                           <div className="d-flex align-items-center">

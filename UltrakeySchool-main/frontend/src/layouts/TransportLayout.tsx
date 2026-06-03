@@ -2,13 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import PageHeader from '../components/layout/PageHeader';
+import Header from '../components/layout/Header';
 import '../styles/sidebar.css';
 
 const TransportLayout: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   const sidebarWidth = isCollapsed ? 80 : 280;
+
+  useEffect(() => {
+    const check = () => setIsMobileView(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   const store = useAuthStore();
   const user = store.user;
   const isAuthenticated = store.isAuthenticated;
@@ -31,7 +39,7 @@ const TransportLayout: React.FC = () => {
           error: null
         });
       } catch (e) {
-        console.log('[TransportLayout] Failed to restore mock user');
+        // Failed to restore mock user
       }
     }
   }, []);
@@ -54,42 +62,38 @@ const TransportLayout: React.FC = () => {
     return <LoadingSpinner message="Loading Transport Dashboard..." fullPage />;
   }
 
-  const userInitials = user?.name
-    ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'TM';
-
-  const handleLogout = async () => {
-    await store.logout();
-    navigate('/login', { replace: true });
-  };
-
   const sidebarItems = [
     {
       title: 'TRANSPORT',
       items: [
-        { label: 'Dashboard', path: '/transport', icon: 'ti ti-layout-dashboard', end: true },
-        { label: 'Routes', path: '/transport/routes', icon: 'ti ti-route' },
-        { label: 'Vehicles', path: '/transport/vehicles', icon: 'ti ti-bus' },
-        { label: 'Drivers', path: '/transport/drivers', icon: 'ti ti-steering-wheel' },
-        { label: 'Pickup Points', path: '/transport/pickup-points', icon: 'ti ti-map-pin' },
-        { label: 'Assign Vehicle', path: '/transport/assign', icon: 'ti ti-transfer' },
-        { label: 'Reports', path: '/transport/reports', icon: 'ti ti-report' },
+        { label: 'Dashboard', path: '/dashboard/transport', icon: 'ti ti-layout-dashboard', end: true },
+        { label: 'Routes', path: '/dashboard/transport/routes', icon: 'ti ti-route' },
+        { label: 'Vehicles', path: '/dashboard/transport/vehicles', icon: 'ti ti-bus' },
+        { label: 'Drivers', path: '/dashboard/transport/drivers', icon: 'ti ti-steering-wheel' },
+        { label: 'Pickup Points', path: '/dashboard/transport/pickup-points', icon: 'ti ti-map-pin' },
+        { label: 'Assign Vehicle', path: '/dashboard/transport/assign', icon: 'ti ti-transfer' },
+        { label: 'Reports', path: '/dashboard/transport/reports', icon: 'ti ti-report' },
+        { label: 'Vehicle Maintenance', path: '/dashboard/transport/vehicle-maintenance', icon: 'ti ti-tool' },
+
       ]
     },
     {
       title: 'APPLICATIONS',
       items: [
-        { label: 'Chat', path: '/dashboard/applications/chat', icon: 'ti ti-brand-hipchat' },
-        { label: 'Calendar', path: '/dashboard/applications/calendar', icon: 'ti ti-calendar' },
-        { label: 'Notes', path: '/dashboard/applications/notes', icon: 'ti ti-note' },
-        { label: 'Email', path: '/dashboard/applications/email', icon: 'ti ti-mail' },
+        { label: 'Calendar', path: 'apps/calendar', icon: 'ti ti-calendar' },
+        { label: 'Call', path: 'apps/call', icon: 'ti ti-phone' },
+        { label: 'Chat', path: 'apps/chat', icon: 'ti ti-message' },
+        { label: 'Email', path: 'apps/email', icon: 'ti ti-mail' },
+        { label: 'File Manager', path: 'apps/file-manager', icon: 'ti ti-folder' },
+        { label: 'Notes', path: 'apps/notes', icon: 'ti ti-notes' },
+        { label: 'Todo', path: 'apps/todo', icon: 'ti ti-checklist' },
       ]
     },
     {
       title: 'MY ACCOUNT',
       items: [
-        { label: 'Profile', path: '/settings/profile', icon: 'ti ti-user' },
-        { label: 'Settings', path: '/settings', icon: 'ti ti-settings' },
+        { label: 'Profile', path: 'settings/profile', icon: 'ti ti-user' },
+        { label: 'Settings', path: 'settings', icon: 'ti ti-settings' },
       ]
     }
   ];
@@ -98,20 +102,22 @@ const TransportLayout: React.FC = () => {
     <div className="main-wrapper">
       {/* Sidebar */}
       <div
-        className={`sidebar role-sidebar transport ${isCollapsed ? 'collapsed' : ''}`}
+        className={`app-sidebar sidebar role-sidebar transport sidebar-bg-default ${isCollapsed ? 'collapsed' : ''}`}
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           height: '100vh',
           width: isCollapsed ? '80px' : '280px',
-          backgroundColor: '#ffffff',
-          transition: 'width 0.3s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'width 0.3s cubic-bezier(0.4,0,0.2,1), transform 0.3s cubic-bezier(0.4,0,0.2,1)',
           zIndex: 1000,
           boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          transform: isMobileView
+            ? isMobileOpen ? 'translateX(0)' : 'translateX(-100%)'
+            : 'translateX(0)'
         }}
       >
         {/* Header */}
@@ -141,20 +147,6 @@ const TransportLayout: React.FC = () => {
               </div>
             </div>
           )}
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            style={{
-              background: 'transparent', border: 'none', color: '#64748b',
-              fontSize: '1.1rem', cursor: 'pointer', padding: '0.4rem',
-              borderRadius: '0.375rem', transition: 'all 0.2s',
-              width: isCollapsed ? '100%' : 'auto',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#f1f5f9'; e.currentTarget.style.color = '#1e293b'; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#64748b'; }}
-            title={isCollapsed ? 'Expand' : 'Collapse'}
-          >
-            <i className={`ti ${isCollapsed ? 'ti-menu-2' : 'ti-arrow-left'}`}></i>
-          </button>
         </div>
 
         {/* Menu */}
@@ -253,20 +245,6 @@ const TransportLayout: React.FC = () => {
         />
       )}
 
-      {/* Mobile Menu Toggle */}
-      <button
-        className="d-lg-none"
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        style={{
-          position: 'fixed', top: 16, left: 16, zIndex: 1100,
-          backgroundColor: '#ffffff', color: '#1e293b', border: '1px solid #e2e8f0',
-          borderRadius: 8, padding: '8px 12px', cursor: 'pointer',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }}
-      >
-        <i className="ti ti-menu-2"></i>
-      </button>
-
       {/* Main Content */}
       <div
         className="page-wrapper"
@@ -278,138 +256,14 @@ const TransportLayout: React.FC = () => {
           backgroundColor: '#f8fafc',
         }}
       >
-        {/* Header Bar */}
-        <div
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 100,
-            backgroundColor: 'white',
-            borderBottom: '1px solid #e2e8f0',
-            padding: '0 1.5rem',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          }}
-        >
-          <div className="d-flex justify-content-between align-items-center" style={{ height: '64px' }}>
-            <PageHeader showBreadcrumbs={true} />
-            
-            <div className="d-flex align-items-center gap-3">
-              <select
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '0.375rem',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '0.875rem',
-                  color: '#64748b',
-                  backgroundColor: '#f8fafc',
-                  cursor: 'pointer',
-                }}
-              >
-                <option>2025 / 2026</option>
-                <option>2024 / 2025</option>
-              </select>
-
-              <button
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '0.5rem',
-                  cursor: 'pointer',
-                  color: '#64748b',
-                  position: 'relative',
-                  borderRadius: '0.375rem',
-                }}
-                onClick={() => navigate('/notifications')}
-              >
-                <i className="ti ti-bell" style={{ fontSize: '1.25rem' }} />
-                <span style={{
-                  position: 'absolute',
-                  top: 4,
-                  right: 4,
-                  width: 8,
-                  height: 8,
-                  backgroundColor: '#ef4444',
-                  borderRadius: '50%',
-                }} />
-              </button>
-
-              <button
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '0.5rem',
-                  cursor: 'pointer',
-                  color: '#64748b',
-                  borderRadius: '0.375rem',
-                }}
-                onClick={() => navigate('/dashboard/applications/chat')}
-              >
-                <i className="ti ti-brand-hipchat" style={{ fontSize: '1.25rem' }} />
-              </button>
-
-              <div className="dropdown">
-                <button
-                  className="btn btn-link p-0"
-                  data-bs-toggle="dropdown"
-                  aria-expanded="false"
-                  style={{ textDecoration: 'none' }}
-                >
-                  <div style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '0.375rem',
-                    background: 'linear-gradient(135deg, #1e3a5f 0%, #6366f1 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                  }}>
-                    {userInitials}
-                  </div>
-                </button>
-                <ul className="dropdown-menu dropdown-menu-end p-0 shadow-sm" style={{ borderRadius: '0.5rem', minWidth: '200px', border: '1px solid #e2e8f0' }}>
-                  <li className="p-3 border-bottom">
-                    <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.875rem' }}>
-                      {user?.name || 'Transport Manager'}
-                    </div>
-                    <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                      {user?.email || 'transport@institution.com'}
-                    </div>
-                  </li>
-                  <li>
-                    <button
-                      className="dropdown-item d-flex align-items-center gap-2 px-3 py-2"
-                      onClick={() => navigate('/settings/profile')}
-                      style={{ fontSize: '0.875rem', color: '#374151' }}
-                    >
-                      <i className="ti ti-user" /> My Profile
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      className="dropdown-item d-flex align-items-center gap-2 px-3 py-2"
-                      onClick={() => navigate('/settings')}
-                      style={{ fontSize: '0.875rem', color: '#374151' }}
-                    >
-                      <i className="ti ti-settings" /> Settings
-                    </button>
-                  </li>
-                  <li className="border-top mt-2 pt-2">
-                    <button
-                      className="dropdown-item d-flex align-items-center gap-2 px-3 py-2 text-danger"
-                      onClick={handleLogout}
-                      style={{ fontSize: '0.875rem' }}
-                    >
-                      <i className="ti ti-logout" /> Logout
-                    </button>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Header Bar - Using Common Header Component */}
+        <Header toggleSidebar={() => {
+          if (window.innerWidth < 1024) {
+            setIsMobileOpen(prev => !prev);
+          } else {
+            setIsCollapsed(prev => !prev);
+          }
+        }} />
 
         <div className="content" style={{ padding: '1.5rem' }}>
           <Outlet />

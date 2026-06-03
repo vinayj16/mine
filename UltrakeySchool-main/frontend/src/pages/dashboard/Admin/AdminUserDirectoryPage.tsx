@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
+import apiClient from '../../../api/client';
 
 interface UserDirectoryData {
   overview: {
@@ -32,6 +34,32 @@ const AdminUserDirectoryPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = userData?.users || [];
+    const exportData = data.map(u => ({
+      Name: u.name,
+      Email: u.email,
+      Role: u.role,
+      Department: u.department,
+      Status: u.status.charAt(0).toUpperCase() + u.status.slice(1),
+      'Last Login': u.lastLogin,
+      'Created Date': u.createdDate
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'users', [
+        { key: 'Name', label: 'Name' },
+        { key: 'Email', label: 'Email' },
+        { key: 'Role', label: 'Role' },
+        { key: 'Department', label: 'Department' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Last Login', label: 'Last Login' },
+        { key: 'Created Date', label: 'Created Date' }
+      ], 'User Directory');
+    } else {
+      exportToExcel(exportData, 'users');
+    }
+  };
+
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -39,25 +67,62 @@ const AdminUserDirectoryPage: React.FC = () => {
   const fetchUserData = async () => {
     try {
       setLoading(true);
-      // Set empty data for now
+      const res = await apiClient.get('/users', { params: { limit: 200 } });
+      const users: any[] = Array.isArray(res.data?.data)
+        ? res.data.data
+        : res.data?.data?.users || res.data?.users || [];
+
+      const roleCounts: Record<string, number> = {};
+      users.forEach((u: any) => {
+        const r = (u.role || 'other').toLowerCase();
+        roleCounts[r] = (roleCounts[r] || 0) + 1;
+      });
+
+      const roleColors: Record<string, string> = {
+        student: '#3b82f6', teacher: '#10b981', parent: '#f59e0b',
+        staff: '#ef4444', admin: '#8b5cf6', principal: '#ec4899',
+        accountant: '#14b8a6', librarian: '#f97316', other: '#6b7280',
+      };
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
       setUserData({
         overview: {
-          totalUsers: 0,
-          activeUsers: 0,
-          inactiveUsers: 0,
-          newUsersThisMonth: 0
+          totalUsers: users.length,
+          activeUsers: users.filter((u: any) => u.status === 'active' || !u.status).length,
+          inactiveUsers: users.filter((u: any) => u.status === 'inactive').length,
+          newUsersThisMonth: users.filter((u: any) => new Date(u.createdAt) >= monthStart).length,
         },
+        users: users.map((u: any) => ({
+          id: u._id || u.id,
+          name: u.name || u.fullName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Unknown',
+          email: u.email || '',
+          role: u.role || 'user',
+          department: u.department || u.class || '-',
+          status: (u.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+          lastLogin: u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-IN') : 'Never',
+          createdDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN') : '-',
+        })),
+        usersByRole: Object.entries(roleCounts).map(([role, count]) => ({
+          role: role.charAt(0).toUpperCase() + role.slice(1),
+          count,
+          color: roleColors[role] || '#6b7280',
+        })),
+      });
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      setUserData({
+        overview: { totalUsers: 0, activeUsers: 0, inactiveUsers: 0, newUsersThisMonth: 0 },
         users: [],
         usersByRole: [
           { role: 'Student', count: 0, color: '#3b82f6' },
           { role: 'Teacher', count: 0, color: '#10b981' },
           { role: 'Parent', count: 0, color: '#f59e0b' },
           { role: 'Staff', count: 0, color: '#ef4444' },
-          { role: 'Admin', count: 0, color: '#8b5cf6' }
-        ]
+          { role: 'Admin', count: 0, color: '#8b5cf6' },
+        ],
       });
-    } catch (error) {
-      console.error('Error fetching user data:', error);
     } finally {
       setLoading(false);
     }
@@ -238,7 +303,7 @@ const AdminUserDirectoryPage: React.FC = () => {
               <option value="Staff">Staff</option>
               <option value="Admin">Admin</option>
             </select>
-            <button className="btn btn-primary btn-sm">
+            <button className="btn btn-primary btn-sm" onClick={() => handleExport('pdf')}>
               <i className="ti ti-download me-1"></i>Export
             </button>
           </div>

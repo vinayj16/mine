@@ -4,10 +4,17 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { classRoomService } from '../../services/classRoomService';
 import type { ClassRoom, CreateClassRoomInput } from '../../services/classRoomService';
+import classService from '../../services/classService';
+import type { Class } from '../../services/classService';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+
+const FACILITY_OPTIONS = ['projector', 'whiteboard', 'smartboard', 'ac', 'computers', 'wifi', 'audio-system'];
+const ROOM_TYPES = ['classroom', 'laboratory', 'library', 'auditorium', 'computer-lab', 'other'];
 
 const ClassRoomPage = () => {
   // State management
   const [classRooms, setClassRooms] = useState<ClassRoom[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,18 +23,38 @@ const ClassRoomPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<ClassRoom | null>(null);
+  const [assigning, setAssigning] = useState<string | null>(null);
   
+  const getUserData = () => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+  };
+  const userData = getUserData();
+  const institutionId = userData.institutionId || localStorage.getItem('institutionId') || '';
+
   // Form state
-  const [formData, setFormData] = useState<CreateClassRoomInput>({
+  const [formData, setFormData] = useState<CreateClassRoomInput & { assignedClass?: string; roomType?: string }>({
     roomNo: '',
     capacity: 0,
     status: 'active',
+    building: '',
+    floor: 0,
+    roomType: 'classroom',
+    facilities: [],
+    institutionId: institutionId,
   });
 
   // Fetch classrooms from backend
   useEffect(() => {
     fetchClassRooms();
+    fetchClasses();
   }, []);
+
+  const fetchClasses = async () => {
+    try {
+      const res = await classService.getAll({ institutionId });
+      setClasses(res.data || []);
+    } catch { /* ignore */ }
+  };
 
   const fetchClassRooms = async () => {
     try {
@@ -37,7 +64,8 @@ const ClassRoomPage = () => {
         page: 1,
         limit: 100,
         sortBy: 'roomNo',
-        sortOrder: 'asc'
+        sortOrder: 'asc',
+        institutionId: institutionId
       });
       setClassRooms(response.classrooms || []);
     } catch (err: unknown) {
@@ -50,13 +78,51 @@ const ClassRoomPage = () => {
     }
   };
 
+  const handleAssignClass = async (roomId: string, classId: string) => {
+    try {
+      setAssigning(roomId);
+      await classRoomService.assignClass(roomId, classId);
+      toast.success('Class assigned to room');
+      fetchClassRooms();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to assign class');
+    } finally {
+      setAssigning(null);
+    }
+  };
+
+  const handleUnassignClass = async (roomId: string) => {
+    try {
+      setAssigning(roomId);
+      await classRoomService.unassignClass(roomId);
+      toast.success('Class unassigned from room');
+      fetchClassRooms();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to unassign class');
+    } finally {
+      setAssigning(null);
+    }
+  };
+
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'capacity' ? parseInt(value) || 0 : value
+      [name]: name === 'capacity' || name === 'floor' ? parseInt(value) || 0 : value
     }));
+  };
+
+  const handleFacilityChange = (facility: string) => {
+    setFormData(prev => {
+      const facilities = prev.facilities || [];
+      return {
+        ...prev,
+        facilities: facilities.includes(facility)
+          ? facilities.filter(f => f !== facility)
+          : [...facilities, facility]
+      };
+    });
   };
 
   // Handle form submission for adding a new room
@@ -64,15 +130,19 @@ const ClassRoomPage = () => {
     e.preventDefault();
     
     try {
-      await classRoomService.create(formData);
+      await classRoomService.create({ ...formData, institutionId});
       toast.success('Classroom added successfully');
       setShowAddModal(false);
       resetForm();
       await fetchClassRooms();
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to add classroom';
-      console.error('Error adding classroom:', err);
-      toast.error(errorMessage); 
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message || 'Failed to add classroom';
+      const details = err.response?.data?.error?.details;
+      if (details && Array.isArray(details)) {
+        toast.error(details.map((d: any) => d.message || d).join(', '));
+      } else {
+        toast.error(msg);
+      }
     }
   };
 
@@ -82,7 +152,11 @@ const ClassRoomPage = () => {
     if (!currentRoom?.id) return;
     
     try {
-      await classRoomService.update(currentRoom.id, formData);
+      const rid = currentRoom.id;
+      await classRoomService.update(rid, formData);
+      if ((formData as any).assignedClass) {
+        await classRoomService.assignClass(rid, (formData as any).assignedClass);
+      }
       toast.success('Classroom updated successfully');
       setShowEditModal(false);
       resetForm();
@@ -97,7 +171,7 @@ const ClassRoomPage = () => {
   // Handle delete room
   const handleDeleteRoom = async () => {
     if (!currentRoom?.id) return;
-    
+     
     try {
       await classRoomService.delete(currentRoom.id);
       toast.success('Classroom deleted successfully');
@@ -116,6 +190,10 @@ const ClassRoomPage = () => {
       roomNo: '',
       capacity: 0,
       status: 'active',
+      building: '',
+      floor: 0,
+      roomType: 'classroom',
+      facilities: [],
     });
   };
 
@@ -126,9 +204,9 @@ const ClassRoomPage = () => {
       roomNo: room.roomNo,
       capacity: room.capacity,
       status: room.status,
-      building: room.building,
-      floor: room.floor,
-      facilities: room.facilities,
+      building: room.building || '',
+      floor: room.floor || 0,
+      facilities: room.facilities || [],
     });
     setShowEditModal(true);
   };
@@ -136,6 +214,31 @@ const ClassRoomPage = () => {
   const openDeleteModal = (room: ClassRoom) => {
     setCurrentRoom(room);
     setShowDeleteModal(true);
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = classRooms.map(room => ({
+      'Room No': room.roomNo,
+      Capacity: room.capacity,
+      Building: room.building || '-',
+      Floor: room.floor !== undefined ? room.floor : '-',
+      Type: (room as any).roomType || 'classroom',
+      'Assigned Class': (room as any).assignedClassName || '-',
+      Status: (room.status || 'active').charAt(0).toUpperCase() + (room.status || 'active').slice(1)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'classrooms', [
+        { key: 'Room No', label: 'Room No' },
+        { key: 'Capacity', label: 'Capacity' },
+        { key: 'Building', label: 'Building' },
+        { key: 'Floor', label: 'Floor' },
+        { key: 'Type', label: 'Type' },
+        { key: 'Assigned Class', label: 'Assigned Class' },
+        { key: 'Status', label: 'Status' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'classrooms');
+    }
   };
 
   return (
@@ -186,12 +289,12 @@ const ClassRoomPage = () => {
               </button>
               <ul className="dropdown-menu dropdown-menu-end p-3">
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                     <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                   </button>
                 </li>
                 <li>
-                  <button className="dropdown-item rounded-1">
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                     <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                   </button>
                 </li>
@@ -325,11 +428,12 @@ const ClassRoomPage = () => {
                           <input className="form-check-input" type="checkbox" id="select-all" />
                         </div>
                       </th>
-                      <th>ID</th>
                       <th>Room No</th>
                       <th>Capacity</th>
                       <th>Building</th>
                       <th>Floor</th>
+                      <th>Type</th>
+                      <th>Assigned Class</th>
                       <th>Status</th>
                       <th>Action</th>
                     </tr>
@@ -342,11 +446,20 @@ const ClassRoomPage = () => {
                             <input className="form-check-input" type="checkbox" />
                           </div>
                         </td>
-                        <td><a href="#" className="link-primary">{(room.id || room._id || '').slice(0, 8)}</a></td>
                         <td>{room.roomNo}</td>
                         <td>{room.capacity}</td>
                         <td>{room.building || '-'}</td>
                         <td>{room.floor !== undefined ? room.floor : '-'}</td>
+                        <td>{(room as any).roomType || 'classroom'}</td>
+                        <td>
+                          {(room as any).assignedClassName ? (
+                            <span className="badge bg-info bg-opacity-10 text-info">
+                              {(room as any).assignedClassName}
+                            </span>
+                          ) : (
+                            <span className="text-muted">Not assigned</span>
+                          )}
+                        </td>
                         <td>
                           <span className={`badge badge-soft-${
                             room.status === 'active' ? 'success' : 
@@ -374,9 +487,39 @@ const ClassRoomPage = () => {
                                     <i className="ti ti-edit-circle me-2"></i>Edit
                                   </button>
                                 </li>
+                                {room.assignedClass || (room as any).assignedClassName ? (
+                                  <li>
+                                    <button 
+                                      className="dropdown-item rounded-1 text-warning"
+                                      onClick={() => handleUnassignClass(room.id || room._id!)}
+                                      disabled={assigning === (room.id || room._id)}
+                                    >
+                                      <i className="ti ti-x me-2"></i>Unassign
+                                    </button>
+                                  </li>
+                                ) : (
+                                    <li>
+                                      <div className="px-3 py-2" style={{ minWidth: 180 }}>
+                                        <small className="text-muted d-block mb-1">Assign a class:</small>
+                                        <select
+                                          className="form-select form-select-sm"
+                                          value=""
+                                          onChange={e => { if (e.target.value) handleAssignClass(room.id || room._id!, e.target.value); }}
+                                          disabled={assigning === (room.id || room._id)}
+                                        >
+                                          <option value="">Select class...</option>
+                                          {classes.map(cls => (
+                                            <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                                              {cls.name}{cls.section ? ` - ${cls.section}` : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </li>
+                                  )}
                                 <li>
                                   <button 
-                                    className="dropdown-item rounded-1"
+                                    className="dropdown-item rounded-1 text-danger"
                                     onClick={() => openDeleteModal(room)}
                                   >
                                     <i className="ti ti-trash-x me-2"></i>Delete
@@ -410,59 +553,68 @@ const ClassRoomPage = () => {
               <form onSubmit={handleAddRoom}>
                 <div className="modal-body">
                   <div className="row">
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Room No *</label>
+                        <input type="text" className="form-control" name="roomNo" value={formData.roomNo} onChange={handleInputChange} required />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Capacity *</label>
+                        <input type="number" className="form-control" name="capacity" value={formData.capacity} onChange={handleInputChange} required min={1} />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Building</label>
+                        <input type="text" className="form-control" name="building" value={formData.building || ''} onChange={handleInputChange} placeholder="e.g. Main Building" />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Floor</label>
+                        <input type="number" className="form-control" name="floor" value={formData.floor || 0} onChange={handleInputChange} min={0} />
+                      </div>
+                    </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Room No</label>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          name="roomNo"
-                          value={formData.roomNo}
-                          onChange={handleInputChange}
-                          required
-                        />
+                        <label className="form-label">Room Type</label>
+                        <select className="form-select" name="roomType" value={(formData as any).roomType || 'classroom'} onChange={handleInputChange}>
+                          {ROOM_TYPES.map(t => <option key={t} value={t}>{t.replace('-', ' ')}</option>)}
+                        </select>
                       </div>
+                    </div>
+                    <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Capacity</label>
-                        <input 
-                          type="number" 
-                          className="form-control" 
-                          name="capacity"
-                          value={formData.capacity}
-                          onChange={handleInputChange}
-                          required
-                        />
+                        <label className="form-label d-block">Facilities</label>
+                        <div className="d-flex flex-wrap gap-3">
+                          {FACILITY_OPTIONS.map(f => (
+                            <div className="form-check" key={f}>
+                              <input className="form-check-input" type="checkbox" checked={(formData.facilities || []).includes(f)} onChange={() => handleFacilityChange(f)} id={`add-fac-${f}`} />
+                              <label className="form-check-label" htmlFor={`add-fac-${f}`}>{f}</label>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    </div>
+                    <div className="col-md-12">
                       <div className="d-flex align-items-center justify-content-between">
                         <div className="status-title">
                           <h5>Status</h5>
                           <p>Change the Status by toggle</p>
                         </div>
                         <div className="form-check form-switch">
-                          <input 
-                            className="form-check-input" 
-                            type="checkbox" 
-                            role="switch" 
-                            checked={formData.status === 'active'}
-                            onChange={(e) => {
-                              setFormData({
-                                ...formData,
-                                status: e.target.checked ? 'active' : 'inactive'
-                              });
-                            }}
-                          />
+                          <input className="form-check-input" type="checkbox" role="switch" checked={formData.status === 'active'}
+                            onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })} />
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-light me-2" onClick={() => setShowAddModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Add Class Room
-                  </button>
+                  <button type="button" className="btn btn-light me-2" onClick={() => setShowAddModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Add Class Room</button>
                 </div>
               </form>
             </div>
@@ -484,59 +636,81 @@ const ClassRoomPage = () => {
               <form onSubmit={handleEditRoom}>
                 <div className="modal-body">
                   <div className="row">
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Room No *</label>
+                        <input type="text" className="form-control" name="roomNo" value={formData.roomNo} onChange={handleInputChange} required />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Capacity *</label>
+                        <input type="number" className="form-control" name="capacity" value={formData.capacity} onChange={handleInputChange} required min={1} />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Building</label>
+                        <input type="text" className="form-control" name="building" value={formData.building || ''} onChange={handleInputChange} />
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Floor</label>
+                        <input type="number" className="form-control" name="floor" value={formData.floor || 0} onChange={handleInputChange} min={0} />
+                      </div>
+                    </div>
                     <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Room No</label>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          name="roomNo"
-                          value={formData.roomNo}
-                          onChange={handleInputChange}
-                          required
-                        />
+                        <label className="form-label">Room Type</label>
+                        <select className="form-select" name="roomType" value={(formData as any).roomType || 'classroom'} onChange={handleInputChange}>
+                          {ROOM_TYPES.map(t => <option key={t} value={t}>{t.replace('-', ' ')}</option>)}
+                        </select>
                       </div>
+                    </div>
+                    <div className="col-md-12">
                       <div className="mb-3">
-                        <label className="form-label">Capacity</label>
-                        <input 
-                          type="number" 
-                          className="form-control" 
-                          name="capacity"
-                          value={formData.capacity}
-                          onChange={handleInputChange}
-                          required
-                        />
+                        <label className="form-label d-block">Facilities</label>
+                        <div className="d-flex flex-wrap gap-3">
+                          {FACILITY_OPTIONS.map(f => (
+                            <div className="form-check" key={f}>
+                              <input className="form-check-input" type="checkbox" checked={(formData.facilities || []).includes(f)} onChange={() => handleFacilityChange(f)} id={`edit-fac-${f}`} />
+                              <label className="form-check-label" htmlFor={`edit-fac-${f}`}>{f}</label>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    </div>
+                    {currentRoom && (
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Assign Class</label>
+                          <select className="form-select" value={(formData as any).assignedClass || ''} onChange={e => setFormData({ ...formData, assignedClass: e.target.value })}>
+                            <option value="">Not assigned</option>
+                            {classes.map(cls => (
+                              <option key={cls._id || cls.id} value={cls._id || cls.id}>{cls.name} {cls.section ? `- ${cls.section}` : ''}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    <div className="col-md-12">
                       <div className="d-flex align-items-center justify-content-between">
                         <div className="status-title">
                           <h5>Status</h5>
                           <p>Change the Status by toggle</p>
                         </div>
                         <div className="form-check form-switch">
-                          <input 
-                            className="form-check-input" 
-                            type="checkbox" 
-                            role="switch" 
-                            checked={formData.status === 'active'}
-                            onChange={(e) => {
-                              setFormData({
-                                ...formData,
-                                status: e.target.checked ? 'active' : 'inactive'
-                              });
-                            }}
-                          />
+                          <input className="form-check-input" type="checkbox" role="switch" checked={formData.status === 'active'}
+                            onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })} />
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="modal-footer">
-                  <button type="button" className="btn btn-light me-2" onClick={() => setShowEditModal(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Save Changes
-                  </button>
+                  <button type="button" className="btn btn-light me-2" onClick={() => setShowEditModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Save Changes</button>
                 </div>
               </form>
             </div>

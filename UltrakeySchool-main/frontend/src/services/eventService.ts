@@ -4,7 +4,7 @@ const API_URL = '/events';
 
 export interface Event {
   _id: string;
-  schoolId: string;
+  institutionId: string;
   title: string;
   description?: string;
   eventType: 'academic' | 'cultural' | 'sports' | 'celebration' | 'meeting' | 'workshop' | 'other';
@@ -29,13 +29,13 @@ export interface Event {
 const eventService = {
   // Get all events
   getAll: async (filters?: {
-    schoolId?: string;
+    institutionId?: string;
     eventType?: string;
     status?: string;
   }): Promise<Event[]> => {
     try {
       const params = new URLSearchParams();
-      if (filters?.schoolId) params.append('schoolId', filters.schoolId);
+      if (filters?.institutionId) params.append('institutionId', filters.institutionId);
       if (filters?.eventType) params.append('eventType', filters.eventType);
       if (filters?.status) params.append('status', filters.status);
       
@@ -93,9 +93,9 @@ const eventService = {
   },
 
   // Get upcoming events
-  getUpcoming: async (schoolId: string): Promise<Event[]> => {
+  getUpcoming: async (institutionId: string): Promise<Event[]> => {
     try {
-      const response = await apiClient.get(`${API_URL}/schools/${schoolId}/upcoming`);
+      const response = await apiClient.get(`${API_URL}/institutions/${institutionId}/upcoming`);
       return response.data.data || [];
     } catch (error) {
       console.warn('Event service getUpcoming failed, returning empty array:', error);
@@ -104,9 +104,9 @@ const eventService = {
   },
 
   // Get events by type
-  getByType: async (schoolId: string, eventType: string): Promise<Event[]> => {
+  getByType: async (institutionId: string, eventType: string): Promise<Event[]> => {
     try {
-      const response = await apiClient.get(`${API_URL}/schools/${schoolId}/type/${eventType}`);
+      const response = await apiClient.get(`${API_URL}/institutions/${institutionId}/type/${eventType}`);
       return response.data.data || [];
     } catch (error) {
       console.warn('Event service getByType failed, returning empty array:', error);

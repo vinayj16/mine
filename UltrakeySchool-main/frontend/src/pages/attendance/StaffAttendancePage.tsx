@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../store/authStore';
 import apiClient from '../../api/client';
 
 interface StaffAttendance {
@@ -16,14 +17,29 @@ interface StaffAttendance {
 }
 
 const StaffAttendancePage: React.FC = () => {
+  const { user, isAdmin } = useAuth();
   const [staffAttendance, setStaffAttendance] = useState<StaffAttendance[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
+  });
+
+  const isStaffUser = !isAdmin && user?.role !== 'superadmin';
 
   useEffect(() => {
-    fetchStaffAttendance();
+    if (isStaffUser) {
+      fetchMyAttendance();
+    }
+  }, [dateRange]);
+
+  useEffect(() => {
+    if (!isStaffUser) {
+      fetchStaffAttendance();
+    }
   }, [selectedDate]);
 
   const fetchStaffAttendance = async () => {
@@ -35,6 +51,25 @@ const StaffAttendancePage: React.FC = () => {
       setStaffAttendance(response.data.data || []);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to fetch staff attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMyAttendance = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get('/attendance/staff', {
+        params: {
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate
+        }
+      });
+      const data = response.data.data || [];
+      setStaffAttendance(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to fetch your attendance');
+      setStaffAttendance([]);
     } finally {
       setLoading(false);
     }
@@ -94,6 +129,147 @@ const StaffAttendancePage: React.FC = () => {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'present': return 'bg-success';
+      case 'late': return 'bg-warning';
+      case 'absent': return 'bg-danger';
+      case 'holiday': return 'bg-info';
+      case 'halfday': return 'bg-secondary';
+      default: return 'bg-light';
+    }
+  };
+
+  // === PERSONAL ATTENDANCE VIEW FOR STAFF MEMBERS ===
+  if (isStaffUser) {
+    return (
+      <>
+        <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
+          <div className="my-auto mb-2">
+            <h3 className="page-title mb-1">My Attendance</h3>
+            <nav>
+              <ol className="breadcrumb mb-0">
+                <li className="breadcrumb-item">
+                  <Link to="/">Dashboard</Link>
+                </li>
+                <li className="breadcrumb-item">
+                  <a href="#!">Staff</a>
+                </li>
+                <li className="breadcrumb-item active" aria-current="page">My Attendance</li>
+              </ol>
+            </nav>
+          </div>
+          <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+            <div className="pe-1 mb-2">
+              <button 
+                className="btn btn-outline-light bg-white btn-icon me-1" 
+                onClick={fetchMyAttendance}
+                title="Refresh"
+              >
+                <i className="ti ti-refresh"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
+            <h4 className="mb-3">Attendance History</h4>
+            <div className="d-flex align-items-center flex-wrap gap-2">
+              <div className="input-icon-start mb-3 position-relative">
+                <span className="icon-addon">
+                  <i className="ti ti-calendar"></i>
+                </span>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={dateRange.startDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+              <span className="mb-3">to</span>
+              <div className="input-icon-start mb-3 position-relative">
+                <span className="icon-addon">
+                  <i className="ti ti-calendar"></i>
+                </span>
+                <input 
+                  type="date" 
+                  className="form-control" 
+                  value={dateRange.endDate}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="card-body p-0 py-3">
+            {loading ? (
+              <div className="text-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+              </div>
+            ) : staffAttendance.length === 0 ? (
+              <div className="text-center py-5">
+                <i className="ti ti-clipboard-off" style={{ fontSize: '48px', opacity: 0.3 }} />
+                <p className="text-muted mt-3">No attendance records found for this period</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table">
+                  <thead className="thead-light">
+                    <tr>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Check In</th>
+                      <th>Check Out</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staffAttendance.map((record, index) => (
+                      <tr key={record._id || index}>
+                        <td>
+                          <span className="fw-medium">
+                            {record.date ? new Date(record.date).toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            }) : selectedDate}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge ${getStatusBadge(record.attendance || record.status)}`}>
+                            {(record.attendance || record.status || 'absent').charAt(0).toUpperCase() + 
+                             (record.attendance || record.status || 'absent').slice(1)}
+                          </span>
+                        </td>
+                        <td>
+                          {record.checkInTime 
+                            ? new Date(record.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                            : '--:--'}
+                        </td>
+                        <td>
+                          {record.checkOutTime
+                            ? new Date(record.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                            : '--:--'}
+                        </td>
+                        <td>
+                          <span className="text-muted small">{record.notes || '--'}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // === ADMIN MANAGEMENT VIEW ===
   return (
     <>
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">

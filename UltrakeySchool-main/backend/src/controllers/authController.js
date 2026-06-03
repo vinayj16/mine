@@ -9,7 +9,12 @@ import User from '../models/User.js';
 import UserCredential from '../models/UserCredential.js';
 import Student from '../models/Student.js';
 import bcrypt from 'bcryptjs';
-import { sendCredentialsEmail } from '../config/email.js';
+import crypto from 'crypto';
+import { sendCredentialsEmail, sendEmail } from '../config/email.js';
+import trackInstitutionLogin from '../utils/institutionActivityTracker.js';
+
+const hashRefreshToken = (token) =>
+  crypto.createHash('sha256').update(token).digest('hex');
 
 // Validation constants
 const MIN_PASSWORD_LENGTH = 8;
@@ -288,6 +293,24 @@ const login = async (req, res) => {
       }
     }
 
+    // If not found in Student, try Agent collection
+    if (!foundUser) {
+      try {
+        const Agent = (await import('../models/Agent.js')).default;
+        foundUser = await Agent.findOne({ email: email.toLowerCase() });
+        if (foundUser) {
+          userType = 'Agent';
+          logger.info('User found in Agent collection:', {
+            email: foundUser.email,
+            role: 'agent',
+            institutionId: foundUser.institutionId
+          });
+        }
+      } catch (dbError) {
+        logger.warn('Database query failed for Agent:', dbError.message);
+      }
+    }
+
     // Fallback to in-memory array if not found in database
     if (!foundUser) {
       foundUser = userCredentials.find(cred => cred.email.toLowerCase() === email.toLowerCase());
@@ -328,6 +351,15 @@ const login = async (req, res) => {
           // Try bcrypt anyway - might work
           isPasswordValid = await bcrypt.compare(password, foundUser.password);
         }
+      } else if (userType === 'Agent') {
+        // Agent collection uses bcrypt hashed passwords via comparePassword method
+        if (typeof foundUser.comparePassword === 'function') {
+          isPasswordValid = await foundUser.comparePassword(password);
+        } else if (foundUser.password.startsWith('$2') || foundUser.password.startsWith('$2a')) {
+          isPasswordValid = await bcrypt.compare(password, foundUser.password);
+        } else {
+          isPasswordValid = foundUser.password === password;
+        }
       } else if (userType === 'Student') {
         // Student collection - check if password is hashed or plain text
         if (foundUser.password && (foundUser.password.startsWith('$2') || foundUser.password.startsWith('$2a'))) {
@@ -356,6 +388,11 @@ const login = async (req, res) => {
         return errorResponse(res, 'Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
 
+      if (userType === 'Agent' && foundUser.status !== 'Active') {
+        logger.warn('Login attempt for inactive agent:', foundUser.email);
+        return errorResponse(res, 'Account is deactivated. Please contact administrator.', 403, 'ACCOUNT_DEACTIVATED');
+      }
+
       // Check if account is active (for UserCredential and Student collections)
       if ((userType === 'UserCredential' || userType === 'Student') && foundUser.status !== 'active') {
         logger.warn('Login attempt for inactive user account:', foundUser.email);
@@ -363,11 +400,14 @@ const login = async (req, res) => {
       }
 
       // Normalize role for frontend
-      let normalizedRole = foundUser.role;
-      // Don't normalize - keep the role as is for frontend to recognize
-      // if (normalizedRole === 'superadmin') {
-      //   normalizedRole = 'SUPER_ADMIN';
-      // }
+      let normalizedRole = foundUser.role || 'agent';
+      // For Agent collection, map status to lowercase
+      if (userType === 'Agent') {
+        normalizedRole = 'agent';
+        if (foundUser.status === 'Active') foundUser.status = 'active';
+        else if (foundUser.status === 'Inactive') foundUser.status = 'inactive';
+        else if (foundUser.status === 'Suspended') foundUser.status = 'suspended';
+      }
 
       // Generate JWT tokens
       const userId = foundUser._id ? foundUser._id.toString() : foundUser.userId || foundUser.email;
@@ -395,105 +435,99 @@ const login = async (req, res) => {
         institution: userInstitution ? userInstitution.toString() : null
       });
 
-      // Get institution details if user has an institutionId (for any role)
-      let institutionData = {};
-      if (userInstitution) {
-        try {
-          const Institution = (await import('../models/Institution.js')).default;
-          const institutionIdStr = userInstitution.toString();
-          logger.info('Login DEBUG - fetching institution:', institutionIdStr);
-          const institutionDetails = await Institution.findById(institutionIdStr).select('name instituteCode type contact address category');
-          if (institutionDetails) {
-            institutionData = {
-              institutionName: institutionDetails.name,
-              institutionCode: institutionDetails.instituteCode,
-              institutionType: institutionDetails.type,
-              institutionCategory: institutionDetails.category,
-              institutionContact: institutionDetails.contact
-            };
-          }
-        } catch (err) {
-          logger.warn('Could not fetch institution details:', err.message);
-        }
-      }
-
-      const userResponse = {
-        id: userId,
-        email: foundUser.email,
-        role: normalizedRole,
-        name: foundUser.name || foundUser.fullName,
-        fullName: foundUser.fullName || foundUser.name,
-        schoolId: foundUser.schoolId,
-        institutionId: foundUser.institutionId || (foundUser.institution ? foundUser.institution.toString() : null),
-        instituteType: foundUser.instituteType || foundUser.institution || foundUser.schoolId,
-        instituteCode: foundUser.instituteCode || foundUser.institution || foundUser.schoolId,
-        permissions: foundUser.permissions || [],
-        modules: foundUser.modules || [],
-        plan: foundUser.plan || 'basic',
-        status: foundUser.status || 'active',
-        ...institutionData
-      };
-
-      // Update login status and last login time
+      // Persist refresh token so /auth/refresh-token works (especially for agents)
       try {
-        if (userType === 'UserCredential') {
-          await UserCredential.updateOne(
-            { email: foundUser.email.toLowerCase() },
-            {
-              hasLoggedIn: true,
-              lastLoginAt: new Date()
-            }
-          );
+        if (userType === 'Agent') {
+          const Agent = (await import('../models/Agent.js')).default;
+          const { buildAgentIdFilter } = await import('../utils/agentAuthHelpers.js');
+          const idFilter = buildAgentIdFilter(foundUser._id) || {
+            email: foundUser.email.toLowerCase()
+          };
+          await Agent.updateOne(idFilter, {
+            $set: {
+              refreshToken: hashRefreshToken(tokens.refreshToken),
+              lastLogin: new Date(),
+              role: 'agent'
+            },
+            $inc: { loginCount: 1 }
+          });
         } else if (userType === 'User') {
-          await User.updateOne(
-            { email: foundUser.email.toLowerCase() },
-            {
-              lastLoginAt: new Date()
-            }
-          );
+          await User.findByIdAndUpdate(foundUser._id, {
+            refreshToken: hashRefreshToken(tokens.refreshToken),
+            lastLogin: new Date()
+          });
+        } else if (userType === 'UserCredential') {
+          await UserCredential.findByIdAndUpdate(foundUser._id, {
+            refreshToken: hashRefreshToken(tokens.refreshToken),
+            lastLoginAt: new Date()
+          });
+        } else if (userType === 'Student') {
+          await Student.findByIdAndUpdate(foundUser._id, {
+            refreshToken: hashRefreshToken(tokens.refreshToken),
+            lastLogin: new Date()
+          });
         }
-      } catch (dbError) {
-        logger.warn('Failed to update login status in database:', dbError.message);
-        // Update in-memory storage as fallback
-        if (userType === 'Memory') {
-          foundUser.hasLoggedIn = true;
-        }
+      } catch (persistErr) {
+        logger.warn('Could not persist refresh token on login:', persistErr.message);
       }
 
-      const loginUserId = foundUser._id ? foundUser._id.toString() : (foundUser.userId || foundUser.email);
-      logger.info('Login successful for user:', { 
-        userId: loginUserId, 
-        email: foundUser.email, 
-        role: normalizedRole,
-        userType 
-      });
+       // Get institution details if user has an institutionId (for any role)
+       let institutionDetails = null;
+       if (userInstitution) {
+         try {
+           const Institution = (await import('../models/Institution.js')).default;
+           const institutionIdStr = userInstitution.toString();
+           logger.info('Login DEBUG - fetching institution:', institutionIdStr);
+            institutionDetails = await Institution.findById(institutionIdStr).select('name instituteCode type contact address subscription.planName subscription.status subscription.endDate subscription.billingCycle');
+         } catch (err) {
+           logger.warn('Could not fetch institution details:', err.message);
+         }
+       }
 
-      // Log activity for audit
-      try {
-        await superAdminService.logActivity({
-          action: 'user_login',
-          resourceType: normalizedRole === 'agent' ? 'agent' : 'user',
-          resourceId: foundUser._id,
-          user: foundUser._id,
-          userName: foundUser.name || foundUser.fullName,
-          ipAddress: req.ip || req.connection?.remoteAddress,
-          userAgent: req.headers['user-agent'],
-          details: {
-            userType,
-            email: foundUser.email,
-            role: normalizedRole
-          }
-        });
-      } catch (auditError) {
-        logger.warn('Failed to log login activity:', auditError.message);
-      }
+     const userResponse = {
+       id: userId,
+       email: foundUser.email,
+       role: normalizedRole,
+       name: foundUser.name || foundUser.fullName,
+       fullName: foundUser.fullName || foundUser.name,
+       avatar: foundUser.avatar || foundUser.photo || '',
+       photo: foundUser.photo || foundUser.avatar || '',
+       institutionId: foundUser.institutionId,
+       institutionId: foundUser.institutionId || (foundUser.institution ? foundUser.institution.toString() : null),
+       instituteType: foundUser.instituteType || foundUser.institution || foundUser.institutionId,
+       instituteCode: foundUser.instituteCode || foundUser.institution || foundUser.institutionId,
+       permissions: foundUser.permissions || [],
+       modules: foundUser.modules || [],
+       plan: foundUser.plan || 'basic',
+       status: foundUser.status || 'active',
+        institutionData: institutionDetails ? {
+          id: institutionDetails._id,
+          name: institutionDetails.name,
+          instituteCode: institutionDetails.instituteCode,
+          type: institutionDetails.type,
+          status: institutionDetails.status,
+          contact: institutionDetails.contact,
+          address: institutionDetails.address,
+          subscription: institutionDetails.subscription ? {
+            planName: institutionDetails.subscription.planName,
+            status: institutionDetails.subscription.status,
+            endDate: institutionDetails.subscription.endDate,
+            billingCycle: institutionDetails.subscription.billingCycle
+          } : null
+        } : null
+     };
 
-      return successResponse(res, {
-        user: userResponse,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn
-      }, 'Login successful');
+     logger.info('Login response institutionData:', userResponse.institutionData);
+
+     // Track daily login on the institution (non-blocking)
+     trackInstitutionLogin({ institutionId: userInstitution, userId: userId, name: userResponse.name, role: userResponse.role }).catch(() => {});
+
+     return successResponse(res, {
+       user: userResponse,
+       accessToken: tokens.accessToken,
+       refreshToken: tokens.refreshToken,
+       expiresIn: tokens.expiresIn
+     }, 'Login successful');
     }
 
     // If user not found in any collection, return error
@@ -555,7 +589,7 @@ const refreshToken = async (req, res) => {
   } catch (error) {
     logger.error('Token refresh error:', error);
     
-    if (error.message.includes('Invalid refresh token') || error.message.includes('expired')) {
+    if (error.message.includes('Invalid refresh token') || error.message.includes('expired') || error.message.includes('malformed') || error.message.includes('signature') || error.message.includes('invalid') || error.message.includes('jwt')) {
       return errorResponse(res, 'Invalid or expired refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
     
@@ -583,7 +617,7 @@ const logout = async (req, res) => {
     const userName = req.user.name;
     const userRole = req.user.role;
     
-    await authService.logout(userId);
+    await authService.logout(userId, userRole);
     
     // Log logout activity for audit
     try {
@@ -924,10 +958,37 @@ export const createAccountRequest = async (req, res) => {
       email: accountRequest.email
     });
 
+    // Send acknowledgment email
+    try {
+      await sendEmail({
+        email: accountRequest.email,
+        subject: 'Registration Received - UltraKey EduSearch',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #6366f1; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; font-size: 24px;">Thank You for Registering!</h1>
+            </div>
+            <div style="padding: 30px; background: #f8f9fa; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
+              <p>Dear <strong>${accountRequest.fullName}</strong>,</p>
+              <p>We have received your institution registration request for <strong>${accountRequest.instituteType}</strong> (Code: ${accountRequest.instituteCode}).</p>
+              <p>Our team will research your institution and contact you shortly regarding the next steps.</p>
+              <p>If you have any questions, please reply to this email.</p>
+              <br/>
+              <p>Best regards,</p>
+              <p><strong>UltraKey EduSearch Team</strong></p>
+            </div>
+          </div>
+        `
+      });
+      logger.info('Registration acknowledgment email sent to:', accountRequest.email);
+    } catch (emailErr) {
+      logger.error('Failed to send registration email:', emailErr.message);
+    }
+
     return createdResponse(res, {
       registrationId: accountRequest.requestId,
       status: accountRequest.status,
-      message: 'Account request submitted successfully. Your request is under review.'
+      message: 'Registration submitted successfully! Our team will research your institution and contact you shortly.'
     }, 'Account request submitted successfully');
 
   } catch (error) {

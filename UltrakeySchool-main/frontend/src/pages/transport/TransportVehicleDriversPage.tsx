@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { useAuth } from '../../store/authStore';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Driver {
   _id: string;
@@ -20,6 +22,7 @@ interface Driver {
 }
 
 const TransportVehicleDriversPage = () => {
+  const { user } = useAuth();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,9 +53,10 @@ const TransportVehicleDriversPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/transport/drivers?_t=' + Date.now());
+      const instId = user?.institutionId || user?.institution || '';
+      const response = await apiClient.get(`/drivers?institutionId=${instId}&_t=${Date.now()}`);
 
-      let driversData = [];
+      let driversData: Driver[] = [];
       if (response.data?.success) {
         const innerData = response.data.data;
         if (Array.isArray(innerData)) {
@@ -84,7 +88,8 @@ const TransportVehicleDriversPage = () => {
 
     try {
       setSaving(true);
-      const response = await apiClient.post('/transport/drivers', formData);
+      const instId = user?.institutionId || user?.institution || '';
+      const response = await apiClient.post('/drivers', { ...formData, institutionId: instId });
 
       if (response.data.success) {
         toast.success('Driver added successfully');
@@ -113,7 +118,9 @@ const TransportVehicleDriversPage = () => {
 
     try {
       setSaving(true);
-      const response = await apiClient.put(`/transport/drivers/${selectedDriver._id}`, formData);
+      // Build clean payload — exclude address since it's a free-form string but Mongoose expects an object
+      const { address, ...restData } = formData;
+      const response = await apiClient.put(`/drivers/${selectedDriver._id}`, restData);
 
       if (response.data.success) {
         toast.success('Driver updated successfully');
@@ -138,32 +145,48 @@ const TransportVehicleDriversPage = () => {
   };
 
   const handleDelete = async () => {
+    const idsToDelete = [...selectedDrivers];
+    if (idsToDelete.length === 0) return;
+
+    // Save original data for potential rollback
+    const originalData = [...drivers];
+
+    // Optimistically remove from UI immediately
+    setDrivers(prev => prev.filter(d => !idsToDelete.includes(d._id)));
+    setShowDeleteModal(false);
+    setSelectedDrivers([]);
+    setDeleting(true);
+
     try {
-      setDeleting(true);
-
-      if (selectedDrivers.length === 1) {
-        const response = await apiClient.delete(`/transport/drivers/${selectedDrivers[0]}`);
-        if (response.data.success) {
-          toast.success('Driver deleted successfully');
-        }
+      if (idsToDelete.length === 1) {
+        const response = await apiClient.delete(`/drivers/${idsToDelete[0]}?_t=${Date.now()}`);
+        if (!response.data?.success) throw new Error(response.data?.message || 'Delete failed');
       } else {
-        const response = await apiClient.post('/transport/drivers/bulk-delete', {
-          ids: selectedDrivers,
+        const response = await apiClient.post('/drivers/bulk-delete', {
+          ids: idsToDelete,
+          _t: Date.now()
         });
-        if (response.data.success) {
-          toast.success('Drivers deleted successfully');
-        }
+        if (!response.data?.success) throw new Error(response.data?.message || 'Bulk delete failed');
       }
-
-      setShowDeleteModal(false);
-      setSelectedDrivers([]);
+      toast.success(`${idsToDelete.length > 1 ? 'Drivers' : 'Driver'} deleted successfully`);
       fetchDrivers();
     } catch (err: any) {
+      // Rollback optimistic removal on failure
+      setDrivers(originalData);
       console.error('Error deleting driver(s):', err);
       toast.error(err.response?.data?.message || 'Failed to delete driver(s)');
     } finally {
       setDeleting(false);
     }
+  };
+
+  /** Convert address object to readable string for the textarea */
+  const formatAddressForDisplay = (addr: any): string => {
+    if (!addr) return '';
+    if (typeof addr === 'string') return addr;
+    // It's an object with street, city, state, etc.
+    const parts = [addr.street, addr.city, addr.state, addr.country, addr.postalCode].filter(Boolean);
+    return parts.join(', ');
   };
 
   const openEditModal = (driver: Driver) => {
@@ -174,7 +197,7 @@ const TransportVehicleDriversPage = () => {
       phone: driver.phone,
       licenseNumber: driver.licenseNumber,
       licenseExpiry: driver.licenseExpiry || '',
-      address: driver.address || '',
+      address: formatAddressForDisplay(driver.address),
     });
     setShowEditModal(true);
   };
@@ -202,12 +225,35 @@ const TransportVehicleDriversPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = filteredDrivers.map(d => ({
+      Name: d.name,
+      Phone: d.phone,
+      'License Number': d.licenseNumber,
+      'License Expiry': d.licenseExpiry ? new Date(d.licenseExpiry).toLocaleDateString() : '-',
+      'Assigned Vehicle': d.assignedVehicle?.registrationNumber || 'Not Assigned',
+      Status: d.status
+    }));
+    exportToPDF(exportData, 'drivers', [
+      { key: 'Name', label: 'Name' },
+      { key: 'Phone', label: 'Phone' },
+      { key: 'License Number', label: 'License Number' },
+      { key: 'License Expiry', label: 'License Expiry' },
+      { key: 'Assigned Vehicle', label: 'Assigned Vehicle' },
+      { key: 'Status', label: 'Status' }
+    ], 'Vehicle Drivers');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = filteredDrivers.map(d => ({
+      Name: d.name,
+      Phone: d.phone,
+      'License Number': d.licenseNumber,
+      'License Expiry': d.licenseExpiry ? new Date(d.licenseExpiry).toLocaleDateString() : '-',
+      'Assigned Vehicle': d.assignedVehicle?.registrationNumber || 'Not Assigned',
+      Status: d.status
+    }));
+    exportToExcel(exportData, 'drivers');
   };
 
   const activeDrivers = drivers.filter((d) => d.status === 'Active').length;
@@ -223,10 +269,10 @@ const TransportVehicleDriversPage = () => {
             <nav>
               <ol className="breadcrumb mb-0">
                 <li className="breadcrumb-item">
-                  <Link to="/transport">Dashboard</Link>
+                  <Link to="/dashboard/main">Dashboard</Link>
                 </li>
                 <li className="breadcrumb-item">
-                  <Link to="/institution/transport/routes">Transport</Link>
+                  <Link to="/dashboard/main/transport">Transport</Link>
                 </li>
                 <li className="breadcrumb-item active">Drivers</li>
               </ol>
@@ -255,10 +301,10 @@ const TransportVehicleDriversPage = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/transport/routes">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active">Drivers</li>
             </ol>
@@ -294,12 +340,12 @@ const TransportVehicleDriversPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -512,7 +558,7 @@ const TransportVehicleDriversPage = () => {
                       <td>
                         {driver.assignedVehicle ? (
                           <Link
-                            to={`/institution/transport/vehicles/${driver.assignedVehicle._id}`}
+                            to={`/dashboard/main/transport/vehicles/${driver.assignedVehicle._id}`}
                             className="badge bg-info-transparent text-info"
                           >
                             {driver.assignedVehicle.registrationNumber}
@@ -533,13 +579,13 @@ const TransportVehicleDriversPage = () => {
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
-                          <Link
-                            to={`/transport/drivers/${driver._id}`}
+                          <button
                             className="btn btn-sm btn-icon btn-light me-2"
-                            title="View Details"
+                            onClick={() => openEditModal(driver)}
+                            title="View / Edit Details"
                           >
                             <i className="ti ti-eye"></i>
-                          </Link>
+                          </button>
                           <button
                             className="btn btn-sm btn-icon btn-info me-2"
                             onClick={() => openEditModal(driver)}

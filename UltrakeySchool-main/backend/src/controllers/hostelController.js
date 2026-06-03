@@ -1,6 +1,6 @@
 import { Room, Hostel, Allocation, HostelComplaint, VisitorLog, RoomType } from '../models/Hostel.js';
 import { Recruitment } from '../models/Recruitment.js';
-import { PerformanceReview } from '../models/PerformanceReview.js';
+import PerformanceReview from '../models/PerformanceReview.js';
 import { Training } from '../models/hr.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse, badRequestResponse, forbiddenResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -633,6 +633,10 @@ const getAllHostels = async (req, res) => {
   try {
     logger.info('Fetching all hostels');
     const { type, status, search, page, limit } = req.query;
+    if (!req.tenantId) {
+      logger.info('No institution context — returning empty hostels');
+      return successResponse(res, { hostels: [], total: 0, page: 1, limit: 20 }, 'No school context — returning empty');
+    }
     const errors = [];
     if (type && !VALID_HOSTEL_TYPES.includes(type)) errors.push('Invalid hostel type');
     if (status && !VALID_HOSTEL_STATUSES.includes(status)) errors.push('Invalid hostel status');
@@ -640,7 +644,6 @@ const getAllHostels = async (req, res) => {
     const limitNum = parseInt(limit) || 20;
     if (pageNum < 1) errors.push('Page must be greater than 0');
     if (limitNum < 1 || limitNum > 100) errors.push('Limit must be between 1 and 100');
-    if (!req.tenantId) errors.push('Institution information is required');
     if (errors.length > 0) return validationErrorResponse(res, errors);
     
     // Handle both ObjectId and string institution IDs

@@ -39,7 +39,7 @@ const TaxSettings: React.FC = () => {
     taxExemptionThreshold: 0
   });
 
-  const institutionId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchSettings = async () => {
     try {
@@ -307,7 +307,7 @@ const TaxSettings: React.FC = () => {
                   <i className="ti ti-discount me-1"></i>Tax Exemption Threshold
                 </label>
                 <div className="input-group">
-                  <span className="input-group-text">$</span>
+                  <span className="input-group-text">₹</span>
                   <input
                     type="number"
                     className="form-control"
@@ -331,7 +331,7 @@ const TaxSettings: React.FC = () => {
                 <h6 className="alert-heading">
                   <i className="ti ti-calculator me-1"></i>Tax Calculation Preview
                 </h6>
-                <p className="mb-2">Example: $100.00 base amount</p>
+                <p className="mb-2">Example: ₹100.00 base amount</p>
                 <ul className="mb-0">
                   {settings.taxTypes.filter(t => t.enabled).map(tax => (
                     <li key={tax.name}>

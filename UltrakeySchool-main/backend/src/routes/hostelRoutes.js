@@ -14,6 +14,7 @@ import { validateTenantAccess } from '../middleware/multiTenant.js';
 import { sendHostelEmail } from '../config/email.js';
 import Student from '../models/Student.js';
 import User from '../models/User.js';
+import HostelFee from '../models/hostelFee.js';
 import { successResponse, errorResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
@@ -186,7 +187,7 @@ router.get('/visitor-logs',
   visitorLogController.getAll
 );  
 
- // Hostel Dashboard - Hostel Warden specific (TESTED & VERIFIED)
+  // Hostel Dashboard - Hostel Warden specific (TESTED & VERIFIED)
 router.get('/dashboard/stats',
   authorize('hostel_warden', 'admin', 'institution_admin',   'superadmin', 'principal'),
   async (req, res) => {  
@@ -232,6 +233,11 @@ router.get('/dashboard/stats',
         })
       ]);
 
+      // Fee stats
+      const allFees = await HostelFee.find(tenantFilter).lean();
+      const totalCollected = allFees.filter(f => f.status === 'paid').reduce((s, f) => s + (f.amount || 0), 0);
+      const totalPending = allFees.filter(f => f.status === 'pending' || f.status === 'overdue').reduce((s, f) => s + (f.amount || 0), 0);
+
       const { successResponse } = await import('../utils/apiResponse.js');
       return successResponse(res, {
         totalResidents: activeAllocations,
@@ -239,7 +245,9 @@ router.get('/dashboard/stats',
         maintenanceIssues: 0,
         pendingComplaints: pendingComplaints,
         vacantRooms: availableRooms,
-        occupiedRooms: occupiedRooms
+        occupiedRooms: occupiedRooms,
+        totalCollected,
+        totalPending
       });
     } catch (error) {
       console.error('Dashboard stats error:', error);
@@ -365,6 +373,139 @@ router.get('/inventory',
     } catch (error) {
       const { errorResponse } = await import('../utils/apiResponse.js');
       return errorResponse(res, 'Failed to retrieve inventory', 500);
+    }
+  }
+);
+
+// Hostel Students - return students for this institution
+router.get('/students',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const tenantFilter = mongoose.Types.ObjectId.isValid(req.tenantId)
+        ? { institutionId: req.tenantId }
+        : {};
+      const students = await Student.find(tenantFilter).select('firstName lastName email studentId class section');
+      return successResponse(res, { students });
+    } catch (error) {
+      return errorResponse(res, 'Failed to fetch students', 500);
+    }
+  }
+);
+
+// Hostel Fees - return hostel fee records for this institution
+router.get('/fees',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin', 'accountant'),
+  async (req, res) => {
+    try {
+      const tenantFilter = mongoose.Types.ObjectId.isValid(req.tenantId)
+        ? { institution: req.tenantId }
+        : {};
+      const rawFees = await HostelFee.find(tenantFilter)
+        .populate('student', 'firstName lastName name')
+        .sort({ dueDate: -1 }).lean();
+      const fees = rawFees.map(f => ({
+        ...f,
+        amount: f.amount || 0,
+        paidAmount: f.status === 'paid' ? (f.amount || 0) : 0,
+        dueAmount: f.status === 'paid' ? 0 : (f.amount || 0),
+        studentName: f.student ? `${f.student.firstName || ''} ${f.student.lastName || ''}`.trim() || f.student.name || 'Unknown' : 'Unknown',
+        period: f.description || `Due ${f.dueDate ? new Date(f.dueDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : 'N/A'}`
+      }));
+      return successResponse(res, { fees });
+    } catch (error) {
+      return errorResponse(res, 'Failed to fetch fees', 500);
+    }
+  }
+);
+
+// Hostel Fee Statistics (for dashboard stats)
+router.get('/fees/stats',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin', 'accountant'),
+  async (req, res) => {
+    try {
+      const tenantFilter = mongoose.Types.ObjectId.isValid(req.tenantId)
+        ? { institution: req.tenantId }
+        : {};
+      const allFees = await HostelFee.find(tenantFilter).lean();
+      const totalCollected = allFees.filter(f => f.status === 'paid').reduce((s, f) => s + (f.amount || 0), 0);
+      const totalPending = allFees.filter(f => f.status === 'pending' || f.status === 'overdue').reduce((s, f) => s + (f.amount || 0), 0);
+      return successResponse(res, { totalCollected, totalPending, totalFees: allFees.length });
+    } catch (error) {
+      return errorResponse(res, 'Failed to fetch fee stats', 500);
+    }
+  }
+);
+
+// Payment history
+router.get('/payments/history',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin', 'accountant'),
+  async (req, res) => {
+    try {
+      const tenantFilter = mongoose.Types.ObjectId.isValid(req.tenantId)
+        ? { institution: req.tenantId }
+        : {};
+      const rawPayments = await HostelFee.find({ ...tenantFilter, status: 'paid' })
+        .populate('student', 'firstName lastName name')
+        .sort({ paidAt: -1 })
+        .limit(50)
+        .lean();
+      const records = rawPayments.map(p => ({
+        ...p,
+        receiptNo: p.transactionReference || `RCPT-${p._id.toString().slice(-6).toUpperCase()}`,
+        studentName: p.student ? `${p.student.firstName || ''} ${p.student.lastName || ''}`.trim() || p.student.name || 'Unknown' : 'Unknown',
+        period: p.description || `Due ${p.dueDate ? new Date(p.dueDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : 'N/A'}`,
+        amount: p.amount || 0,
+        paymentMethod: 'Cash',
+        paymentDate: p.paidAt || p.createdAt
+      }));
+      return successResponse(res, { records });
+    } catch (error) {
+      return errorResponse(res, 'Failed to fetch payment history', 500);
+    }
+  }
+);
+
+// Allocate student (frontend compat)
+router.post('/allocate',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const { Allocation } = await import('../models/Hostel.js');
+      const { studentId, roomId } = req.body;
+      const allocation = await Allocation.create({
+        student: studentId,
+        room: roomId,
+        allocationDate: new Date(),
+        status: 'active',
+        institution: req.tenantId
+      });
+      await Room.findByIdAndUpdate(roomId, { $inc: { occupied: 1 }, status: 'occupied' });
+      return successResponse(res, { allocation }, 'Student allocated successfully');
+    } catch (error) {
+      return errorResponse(res, error.message, 500);
+    }
+  }
+);
+
+// Deallocate student (frontend compat)
+router.post('/deallocate',
+  authorize('hostel_warden', 'admin', 'institution_admin', 'superadmin'),
+  async (req, res) => {
+    try {
+      const { Allocation, Room } = await import('../models/Hostel.js');
+      const { studentId } = req.body;
+      const allocation = await Allocation.findOneAndUpdate(
+        { student: studentId, status: 'active' },
+        { status: 'checked-out', actualCheckoutDate: new Date() },
+        { new: true }
+      );
+      if (allocation?.room) {
+        await Room.findByIdAndUpdate(allocation.room, { $inc: { occupied: -1 } });
+      }
+      return successResponse(res, { allocation }, 'Student deallocated successfully');
+    } catch (error) {
+      return errorResponse(res, error.message, 500);
     }
   }
 );

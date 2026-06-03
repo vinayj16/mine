@@ -3,10 +3,10 @@ import mongoose from 'mongoose';
 const currentYear = new Date().getFullYear();
 
 const feeSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true,
+    ref: 'Institution',
+    required: false,
     index: true
   },
   studentId: {
@@ -155,11 +155,24 @@ const feeSchema = new mongoose.Schema({
   timestamps: true
 });
 
-feeSchema.index({ schoolId: 1, status: 1, dueDate: 1 });
-feeSchema.index({ schoolId: 1, year: 1, month: 1 });
-feeSchema.index({ schoolId: 1, term: 1, academicYear: 1 });
+feeSchema.index({ institutionId: 1, status: 1, dueDate: 1 });
+feeSchema.index({ institutionId: 1, status: 1, dueDate: 1 });
+feeSchema.index({ institutionId: 1, year: 1, month: 1 });
+feeSchema.index({ institutionId: 1, term: 1, academicYear: 1 });
+feeSchema.index({ institutionId: 1, term: 1, academicYear: 1 });
 
 feeSchema.pre('save', function(next) {
+  // If nested feeItems exist, compute amount from them
+  if (this.feeItems && this.feeItems.length > 0) {
+    // Sum total amount from feeItems
+    const totalFromItems = this.feeItems.reduce((sum, item) => sum + (item.amount || item.dueAmount || 0), 0);
+    if (!this.amount || this.amount === 0) this.amount = totalFromItems;
+    
+    // Sum paid amount from feeItems
+    const totalPaidFromItems = this.feeItems.reduce((sum, item) => sum + (item.paid || 0), 0);
+    if (!this.paidAmount || this.paidAmount === 0) this.paidAmount = totalPaidFromItems;
+  }
+  
   this.remainingAmount = this.amount - this.paidAmount + this.lateFee - this.discount;
   
   if (this.remainingAmount <= 0) {

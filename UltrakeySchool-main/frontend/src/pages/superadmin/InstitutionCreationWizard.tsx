@@ -319,7 +319,7 @@ const InstitutionCreationWizard: React.FC<InstitutionCreationWizardProps> = ({
           localStorage.setItem('demo_institutions', JSON.stringify(existingInstitutions))
           
           // Navigate to institutions list to see the created data
-          let dashboardRoute = '/super-admin/institutions'
+          const dashboardRoute = '/super-admin/institutions'
           
           // Show success then navigate
           setTimeout(() => {
@@ -889,7 +889,7 @@ const InstitutionCreationWizard: React.FC<InstitutionCreationWizardProps> = ({
                   update={update}
                   errors={errors}
                   placeholder="Select currency"
-                  options={['USD', 'INR', 'EUR', 'GBP']}
+                  options={['INR', 'EUR', 'GBP']}
                 />
               </Field>
             </div>

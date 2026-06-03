@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
-import { useAuth } from '../../store/authStore';
+import { useAuth, useAuthStore } from '../../store/authStore';
 
 const StaffProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -12,6 +12,12 @@ const StaffProfilePage: React.FC = () => {
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState<any>({});
   const [activeTab, setActiveTab] = useState('personal');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const aadharRef = useRef<HTMLInputElement>(null);
+  const panRef = useRef<HTMLInputElement>(null);
+  const passbookRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchInstitutionData();
@@ -76,13 +82,58 @@ const StaffProfilePage: React.FC = () => {
   };
 
   const handlePasswordChange = () => {
-    // Navigate to password change page or open modal
-    toast.info('Password change feature coming soon');
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      toast.error('All password fields are required');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    try {
+      await apiClient.put('/auth/change-password', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      toast.success('Password changed successfully');
+      setShowPasswordModal(false);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to change password');
+    }
   };
 
   const handleDocumentUpload = (documentType: string) => {
-    // Handle document upload
-    toast.info(`${documentType} upload feature coming soon`);
+    if (documentType === 'Aadhar Card') aadharRef.current?.click();
+    else if (documentType === 'PAN Card') panRef.current?.click();
+    else if (documentType === 'Bank Passbook') passbookRef.current?.click();
+  };
+
+  const handleDocumentFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, documentType: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('type', documentType);
+      const res = await apiClient.post('/upload/document', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.success) {
+        toast.success(`${documentType} uploaded successfully`);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || `Failed to upload ${documentType}`);
+    }
+    e.target.value = '';
   };
 
   if (loading) {
@@ -152,7 +203,7 @@ const StaffProfilePage: React.FC = () => {
                 <div className="row align-items-center">
                   <div className="col-md-8">
                     <h4 className="mb-2">
-                      Welcome to {institutionData.name || 'Your Institution'}! 🎓
+                      <span>Welcome to {institutionData.name || 'Your Institution'}! <i className="ti ti-school"></i></span>
                     </h4>
                     <p className="mb-0">
                       <i className="ti ti-user me-2"></i>
@@ -215,14 +266,46 @@ const StaffProfilePage: React.FC = () => {
               </div>
               
               {/* PROFILE PICTURE */}
-              <div className="avatar avatar-xxl mx-auto mb-3">
+              <div className="avatar avatar-xxl mx-auto mb-3 position-relative" style={{cursor: profile?.avatar ? 'pointer' : 'default'}} onClick={() => { if (profile?.avatar) setShowPhotoModal(true); }}>
                 {profile?.avatar ? (
-                  <img src={profile.avatar} alt="Profile" className="rounded-circle" />
+                  <img src={profile.avatar} alt="Profile" className="rounded-circle" style={{width:'100%',height:'100%',objectFit:'cover'}} />
                 ) : (
                   <div className="avatar-title rounded-circle bg-primary">
                     {profile?.name?.charAt(0)?.toUpperCase() || user?.name?.charAt(0)?.toUpperCase() || 'S'}
                   </div>
                 )}
+                <label htmlFor="avatar-upload" className="position-absolute bottom-0 end-0 btn btn-sm btn-primary rounded-circle p-1" style={{width:'32px',height:'32px',lineHeight:'1',cursor:'pointer'}} onClick={(e) => e.stopPropagation()}>
+                  <i className="ti ti-camera"></i>
+                </label>
+                <input 
+                  id="avatar-upload" 
+                  type="file" 
+                  accept="image/*" 
+                  style={{display:'none'}}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const formData = new FormData();
+                      formData.append('image', file);
+                      const res = await apiClient.post('/upload/profile', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                      });
+                      if (res.data?.success) {
+                        const imageUrl = res.data.data?.imageUrl || res.data.data?.avatar || res.data.data?.url;
+                        if (imageUrl) {
+                          setProfile((prev: any) => ({ ...prev, avatar: imageUrl }));
+                          // Sync with auth store using central setAvatar (sets both avatar and photo)
+                          useAuthStore.getState().setAvatar(imageUrl);
+                          toast.success('Profile photo updated');
+                        }
+                      }
+                    } catch (err: any) {
+                      toast.error(err.response?.data?.error?.message || 'Failed to upload photo');
+                    }
+                    e.target.value = '';
+                  }}
+                />
               </div>
               
               <h4 className="mb-1">{profile?.name || user?.name || 'Staff Member'}</h4>
@@ -268,11 +351,8 @@ const StaffProfilePage: React.FC = () => {
 
               {/* QUICK ACTIONS */}
               <div className="border-top pt-3 mt-3">
-                <div className="d-grid gap-2" style={{gridTemplateColumns: '1fr 1fr'}}>
-                  <Link to="/staff/attendance" className="btn btn-sm btn-outline-primary">
-                    <i className="ti ti-clock me-1" />Mark Attendance
-                  </Link>
-                  <Link to="/staff/leave" className="btn btn-sm btn-outline-success">
+                <div className="d-grid gap-2">
+                  <Link to="/dashboard/staff/leaves" className="btn btn-sm btn-outline-success">
                     <i className="ti ti-calendar-off me-1" />Apply Leave
                   </Link>
                 </div>
@@ -288,16 +368,16 @@ const StaffProfilePage: React.FC = () => {
                 <Link to="/dashboard/staff" className="list-group-item list-group-item-action">
                   <i className="ti ti-home me-2"></i>Dashboard
                 </Link>
-                <Link to="/staff/attendance" className="list-group-item list-group-item-action">
+                <Link to="/attendance/staff" className="list-group-item list-group-item-action">
                   <i className="ti ti-clock me-2"></i>Attendance
                 </Link>
-                <Link to="/staff/tasks" className="list-group-item list-group-item-action">
+                <Link to="/dashboard/staff/tasks" className="list-group-item list-group-item-action">
                   <i className="ti ti-list me-2"></i>My Tasks
                 </Link>
-                <Link to="/staff/documents" className="list-group-item list-group-item-action">
-                  <i className="ti ti-files me-2"></i>Documents
+                <Link to="/dashboard/staff/leaves" className="list-group-item list-group-item-action">
+                  <i className="ti ti-calendar-off me-2"></i>Leaves
                 </Link>
-                <Link to="/staff/notifications" className="list-group-item list-group-item-action">
+                <Link to="/dashboard/staff/notifications" className="list-group-item list-group-item-action">
                   <i className="ti ti-bell me-2"></i>Notifications
                 </Link>
               </div>
@@ -614,6 +694,7 @@ const StaffProfilePage: React.FC = () => {
                         >
                           <i className="ti ti-upload me-2" />Upload Aadhar
                         </button>
+                        <input ref={aadharRef} type="file" style={{display:'none'}} accept=".pdf,.jpg,.png" onChange={(e) => handleDocumentFileSelect(e, 'Aadhar Card')} />
                       </div>
                       <div className="col-md-4">
                         <button 
@@ -622,6 +703,7 @@ const StaffProfilePage: React.FC = () => {
                         >
                           <i className="ti ti-upload me-2" />Upload PAN
                         </button>
+                        <input ref={panRef} type="file" style={{display:'none'}} accept=".pdf,.jpg,.png" onChange={(e) => handleDocumentFileSelect(e, 'PAN Card')} />
                       </div>
                       <div className="col-md-4">
                         <button 
@@ -630,6 +712,7 @@ const StaffProfilePage: React.FC = () => {
                         >
                           <i className="ti ti-upload me-2" />Upload Passbook
                         </button>
+                        <input ref={passbookRef} type="file" style={{display:'none'}} accept=".pdf,.jpg,.png" onChange={(e) => handleDocumentFileSelect(e, 'Bank Passbook')} />
                       </div>
                     </div>
                   </div>
@@ -639,8 +722,69 @@ const StaffProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Password Change Modal */}
+      {/* Profile Photo Modal */}
+      {showPhotoModal && profile?.avatar && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowPhotoModal(false)}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h5 className="modal-title">Profile Photo</h5>
+                <button type="button" className="btn-close" onClick={() => setShowPhotoModal(false)} />
+              </div>
+              <div className="modal-body text-center p-4">
+                <img 
+                  src={profile.avatar} 
+                  alt="Profile" 
+                  className="img-fluid rounded"
+                  style={{ maxHeight: '70vh', objectFit: 'contain' }}
+                />
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowPhotoModal(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPasswordModal && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Change Password</h5>
+                <button type="button" className="btn-close" onClick={() => setShowPasswordModal(false)} />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">Current Password</label>
+                  <input type="password" className="form-control" value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm(p => ({ ...p, currentPassword: e.target.value }))} required />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">New Password</label>
+                  <input type="password" className="form-control" value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))} required minLength={6} />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Confirm New Password</label>
+                  <input type="password" className="form-control" value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))} required />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowPasswordModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-primary" onClick={handlePasswordSubmit}>Change Password</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
 
 export default StaffProfilePage;
+

@@ -6,15 +6,15 @@ class PerformerService {
   /**
    * Get best performers (teachers and students) for dashboard
    */
-  async getBestPerformers(schoolId, options = {}) {
+  async getBestPerformers(institutionId, options = {}) {
     const {
       limit = 5,
       period = 'current'
     } = options;
 
     const [teachers, students] = await Promise.all([
-      this.getTopPerformersByType(schoolId, 'teacher', limit, period),
-      this.getTopPerformersByType(schoolId, 'student', limit, period)
+      this.getTopPerformersByType(institutionId, 'teacher', limit, period),
+      this.getTopPerformersByType(institutionId, 'student', limit, period)
     ]);
 
     return [
@@ -38,9 +38,9 @@ class PerformerService {
   /**
    * Get top performers by type (teacher or student)
    */
-  async getTopPerformersByType(schoolId, type, limit = 5, period = 'current') {
+  async getTopPerformersByType(institutionId, type, limit = 5, period = 'current') {
     const query = {
-      schoolId,
+      institutionId,
       type,
       isActive: true
     };
@@ -76,9 +76,9 @@ class PerformerService {
   /**
    * Get featured performers (manually selected)
    */
-  async getFeaturedPerformers(schoolId) {
+  async getFeaturedPerformers(institutionId) {
     const performers = await Performer.find({
-      schoolId,
+      institutionId,
       isFeatured: true,
       isActive: true
     })
@@ -109,7 +109,7 @@ class PerformerService {
   /**
    * Create or update performer record
    */
-  async upsertPerformer(schoolId, performerData) {
+  async upsertPerformer(institutionId, performerData) {
     const {
       userId,
       type,
@@ -132,7 +132,7 @@ class PerformerService {
 
     const performer = await Performer.findOneAndUpdate(
       {
-        schoolId,
+        institutionId,
         userId,
         type,
         'period.month': defaultPeriod.month,
@@ -163,9 +163,9 @@ class PerformerService {
   /**
    * Calculate and update performer metrics automatically
    */
-  async calculatePerformerMetrics(schoolId, userId, type) {
+  async calculatePerformerMetrics(institutionId, userId, type) {
     // Get user data
-    const user = await User.findOne({ _id: userId, schoolId });
+    const user = await User.findOne({ _id: userId, institutionId });
     if (!user) {
       throw new Error('User not found');
     }
@@ -176,7 +176,7 @@ class PerformerService {
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
     const attendanceRecords = await Attendance.find({
-      schoolId,
+      institutionId,
       userId,
       userType: type === 'teacher' ? 'teacher' : 'student',
       date: { $gte: startOfMonth, $lte: endOfMonth }
@@ -210,7 +210,7 @@ class PerformerService {
     performerData.performance.rating = this.calculateRating(performerData);
 
     // Upsert performer record
-    return await this.upsertPerformer(schoolId, performerData);
+    return await this.upsertPerformer(institutionId, performerData);
   }
 
   /**
@@ -244,10 +244,10 @@ class PerformerService {
   /**
    * Set featured performers
    */
-  async setFeaturedPerformers(schoolId, performerIds) {
+  async setFeaturedPerformers(institutionId, performerIds) {
     // Unset all featured performers
     await Performer.updateMany(
-      { schoolId },
+      { institutionId },
       { $set: { isFeatured: false, featuredOrder: 0 } }
     );
 
@@ -266,10 +266,10 @@ class PerformerService {
   /**
    * Get performer details by ID
    */
-  async getPerformerById(schoolId, performerId) {
+  async getPerformerById(institutionId, performerId) {
     const performer = await Performer.findOne({
       _id: performerId,
-      schoolId
+      institutionId
     }).lean();
 
     if (!performer) {
@@ -282,9 +282,9 @@ class PerformerService {
   /**
    * Delete performer record
    */
-  async deletePerformer(schoolId, performerId) {
+  async deletePerformer(institutionId, performerId) {
     const result = await Performer.findOneAndUpdate(
-      { _id: performerId, schoolId },
+      { _id: performerId, institutionId },
       { $set: { isActive: false } },
       { new: true }
     );
@@ -295,15 +295,15 @@ class PerformerService {
   /**
    * Bulk update performers for a period
    */
-  async bulkUpdatePerformers(schoolId, type, period) {
+  async bulkUpdatePerformers(institutionId, type, period) {
     const users = await User.find({
-      schoolId,
+      institutionId,
       role: type,
       isActive: true
     });
 
     const updates = users.map(user => 
-      this.calculatePerformerMetrics(schoolId, user._id, type)
+      this.calculatePerformerMetrics(institutionId, user._id, type)
     );
 
     return await Promise.all(updates);

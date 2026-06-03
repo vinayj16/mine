@@ -50,6 +50,7 @@ router.put('/:id', authorize(['admin', 'teacher', 'principal']), updateAttendanc
 router.delete('/:id', authorize(['admin', 'principal']), deleteAttendance);  
 
 // Bulk Operations (TESTED & VERIFIED)
+router.post('/bulk', authorize(['admin', 'teacher', 'principal']), bulkMarkAttendance);  
 router.post('/bulk-mark', authorize(['admin', 'teacher', 'principal']), bulkMarkAttendance);  
 router.post('/bulk-delete', authorize(['super_admin']), bulkDeleteAttendance);  
 

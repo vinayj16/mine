@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import { superAdminService, type Institution } from '../../services/superAdminService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const InstitutionsPage = () => {
   const [institutions, setInstitutions] = useState<Institution[]>([])
@@ -11,6 +12,8 @@ const InstitutionsPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [activeTab, setActiveTab] = useState<string>('All')
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -50,18 +53,23 @@ const InstitutionsPage = () => {
     }
   }
 
-  const handleDeleteInstitution = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this institution? This action cannot be undone.')) {
-      return
-    }
+  const handleDeleteInstitution = (id: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget(id)
+  }
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
     try {
-      await superAdminService.deleteInstitution(id)
+      await superAdminService.deleteInstitution(deleteTarget)
       toast.success('Institution deleted successfully')
       fetchInstitutions()
     } catch (err) {
       console.error('Error deleting institution:', err)
       toast.error('Failed to delete institution')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -157,7 +165,7 @@ const InstitutionsPage = () => {
   }
 
   return (
-    <div className="container-fluid">
+    <><div className="container-fluid">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h4 className="fw-bold">Institutions Management</h4>
@@ -484,6 +492,8 @@ const InstitutionsPage = () => {
         </div>
       </div>
     </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this institution? This action cannot be undone." />
+    </>
   )
 }
 

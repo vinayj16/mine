@@ -27,7 +27,7 @@ const enrollmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
     required: true
@@ -72,7 +72,7 @@ const enrollmentSchema = new mongoose.Schema({
 // Index for efficient queries
 enrollmentSchema.index({ studentId: 1, academicYear: 1 }, { unique: true });
 enrollmentSchema.index({ classId: 1, academicYear: 1 });
-enrollmentSchema.index({ schoolId: 1, academicYear: 1 });
+enrollmentSchema.index({ institutionId: 1, academicYear: 1 });
 
 const Enrollment = mongoose.model('Enrollment', enrollmentSchema);
 

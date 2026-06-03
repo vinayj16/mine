@@ -35,9 +35,10 @@ const validateEmail = (email) => {
 // Helper function to validate phone number
 const validatePhone = (phone) => {
   if (!phone) return null;
-  const phonePattern = /^\+?[1-9]\d{1,14}$/;
-  if (!phonePattern.test(phone) || phone.length > MAX_PHONE_LENGTH) {
-    return 'Invalid phone number format';
+  // More lenient phone regex allowing spaces, dashes, and parentheses
+  const phonePattern = /^[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}$/;
+  if (phone.length > MAX_PHONE_LENGTH) {
+    return 'Phone number too long';
   }
   return null;
 };
@@ -56,17 +57,18 @@ export const getUserProfile = async (req, res) => {
   try {
     logger.info('Fetching user profile');
     
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const userId = req.user?.id;
     const userRole = req.user?.role;
     
     // Validation
     const errors = [];
     
-    // For agents, schoolId is optional
-    if (userRole !== 'agent') {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // For agents and institution-level roles, institutionId is optional
+    const institutionRoles = ['superadmin', 'institution_admin', 'admin', 'principal', 'teacher', 'transport_manager', 'hr_manager', 'accountant', 'librarian', 'hostel_warden', 'agent'];
+    if (!institutionRoles.includes(userRole)) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     const userIdError = validateObjectId(userId, 'User ID');
@@ -76,7 +78,7 @@ export const getUserProfile = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const profile = await userProfileService.getUserProfile(schoolId, userId, userRole);
+    const profile = await userProfileService.getUserProfile(institutionId, userId, userRole);
     
     if (!profile) {
       return notFoundResponse(res, 'User profile not found');
@@ -96,18 +98,24 @@ export const updateUserProfile = async (req, res) => {
   try {
     logger.info('Updating user profile');
 
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const userId = req.user?.id;
     const userRole = req.user?.role;
-    const { name, firstName, lastName, email, phone, bio, dateOfBirth, gender, address } = req.body;
+    const { name, firstName, lastName, email, phone, bio, dateOfBirth, gender, address, avatar, profileImage } = req.body;
+
+    // Map 'avatar' from frontend to 'profileImage' for backend compatibility
+    if (avatar && !profileImage) {
+      req.body.profileImage = avatar;
+    }
 
     // Validation
     const errors = [];
 
-    // For agents, schoolId is optional
-    if (userRole !== 'agent') {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // For agents and institution-level roles, institutionId is optional
+    const institutionRoles = ['superadmin', 'institution_admin', 'admin', 'principal', 'teacher', 'transport_manager', 'hr_manager', 'accountant', 'librarian', 'hostel_warden', 'agent'];
+    if (!institutionRoles.includes(userRole)) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
 
     const userIdError = validateObjectId(userId, 'User ID');
@@ -151,7 +159,7 @@ export const updateUserProfile = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const profile = await userProfileService.updateUserProfile(schoolId, userId, req.body);
+    const profile = await userProfileService.updateUserProfile(institutionId, userId, req.body);
     
     if (!profile) {
       return notFoundResponse(res, 'User profile not found');
@@ -196,7 +204,7 @@ const getProfileById = async (req, res) => {
     logger.info('Fetching profile by ID');
     
     const { id } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -204,14 +212,14 @@ const getProfileById = async (req, res) => {
     const idError = validateObjectId(id, 'Profile ID');
     if (idError) errors.push(idError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const profile = await userProfileService.getUserProfile(schoolId, id);
+    const profile = await userProfileService.getUserProfile(institutionId, id);
     
     if (!profile) {
       return notFoundResponse(res, 'User profile not found');
@@ -230,7 +238,7 @@ const updateProfilePicture = async (req, res) => {
     logger.info('Updating profile picture');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { avatarUrl } = req.body;
     
     // Validation
@@ -239,8 +247,8 @@ const updateProfilePicture = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!avatarUrl || avatarUrl.trim().length === 0) {
       errors.push('Avatar URL is required');
@@ -255,7 +263,7 @@ const updateProfilePicture = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const profile = await userProfileService.updateProfilePicture(schoolId, userId, avatarUrl);
+    const profile = await userProfileService.updateProfilePicture(institutionId, userId, avatarUrl);
     
     if (!profile) {
       return notFoundResponse(res, 'User profile not found');
@@ -274,7 +282,7 @@ const updatePrivacySettings = async (req, res) => {
     logger.info('Updating privacy settings');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { profileVisibility, emailVisibility, phoneVisibility } = req.body;
     
     // Validation
@@ -283,8 +291,8 @@ const updatePrivacySettings = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (profileVisibility && !VALID_PRIVACY_SETTINGS.includes(profileVisibility)) {
       errors.push('Invalid profile visibility. Must be one of: ' + VALID_PRIVACY_SETTINGS.join(', '));
@@ -302,7 +310,7 @@ const updatePrivacySettings = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const settings = await userProfileService.updatePrivacySettings(schoolId, userId, req.body);
+    const settings = await userProfileService.updatePrivacySettings(institutionId, userId, req.body);
     
     if (!settings) {
       return notFoundResponse(res, 'User profile not found');
@@ -321,7 +329,7 @@ const getPrivacySettings = async (req, res) => {
     logger.info('Fetching privacy settings');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -329,14 +337,14 @@ const getPrivacySettings = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const settings = await userProfileService.getPrivacySettings(schoolId, userId);
+    const settings = await userProfileService.getPrivacySettings(institutionId, userId);
     
     logger.info('Privacy settings fetched successfully:', { userId });
     return successResponse(res, settings, 'Privacy settings retrieved successfully');
@@ -351,7 +359,7 @@ const updateNotificationPreferences = async (req, res) => {
     logger.info('Updating notification preferences');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { emailNotifications, smsNotifications, pushNotifications } = req.body;
     
     // Validation
@@ -360,8 +368,8 @@ const updateNotificationPreferences = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (emailNotifications !== undefined && typeof emailNotifications !== 'boolean') {
       errors.push('Email notifications must be a boolean');
@@ -379,7 +387,7 @@ const updateNotificationPreferences = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const preferences = await userProfileService.updateNotificationPreferences(schoolId, userId, req.body);
+    const preferences = await userProfileService.updateNotificationPreferences(institutionId, userId, req.body);
     
     if (!preferences) {
       return notFoundResponse(res, 'User profile not found');
@@ -398,7 +406,7 @@ const getNotificationPreferences = async (req, res) => {
     logger.info('Fetching notification preferences');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -406,14 +414,14 @@ const getNotificationPreferences = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const preferences = await userProfileService.getNotificationPreferences(schoolId, userId);
+    const preferences = await userProfileService.getNotificationPreferences(institutionId, userId);
     
     logger.info('Notification preferences fetched successfully:', { userId });
     return successResponse(res, preferences, 'Notification preferences retrieved successfully');
@@ -471,7 +479,7 @@ const updateSocialLinks = async (req, res) => {
     logger.info('Updating social links');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { facebook, twitter, linkedin, instagram, website } = req.body;
     
     // Validation
@@ -480,8 +488,8 @@ const updateSocialLinks = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const urlPattern = /^https?:\/\/.+/;
     
@@ -509,7 +517,7 @@ const updateSocialLinks = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const profile = await userProfileService.updateSocialLinks(schoolId, userId, req.body);
+    const profile = await userProfileService.updateSocialLinks(institutionId, userId, req.body);
     
     if (!profile) {
       return notFoundResponse(res, 'User profile not found');
@@ -528,7 +536,7 @@ const getSocialLinks = async (req, res) => {
     logger.info('Fetching social links');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -536,14 +544,14 @@ const getSocialLinks = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const socialLinks = await userProfileService.getSocialLinks(schoolId, userId);
+    const socialLinks = await userProfileService.getSocialLinks(institutionId, userId);
     
     logger.info('Social links fetched successfully:', { userId });
     return successResponse(res, socialLinks, 'Social links retrieved successfully');
@@ -558,7 +566,7 @@ const getProfileCompleteness = async (req, res) => {
     logger.info('Fetching profile completeness');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -566,14 +574,14 @@ const getProfileCompleteness = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const completeness = await userProfileService.getProfileCompleteness(schoolId, userId);
+    const completeness = await userProfileService.getProfileCompleteness(institutionId, userId);
     
     logger.info('Profile completeness fetched successfully:', { userId });
     return successResponse(res, completeness, 'Profile completeness retrieved successfully');
@@ -629,7 +637,7 @@ const deleteAccount = async (req, res) => {
     logger.info('Deleting user account');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { password, confirmDeletion } = req.body;
     
     // Validation
@@ -638,8 +646,8 @@ const deleteAccount = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!password || password.trim().length === 0) {
       errors.push('Password is required to delete account');
@@ -653,7 +661,7 @@ const deleteAccount = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    await userProfileService.deleteAccount(schoolId, userId, password);
+    await userProfileService.deleteAccount(institutionId, userId, password);
     
     logger.info('User account deleted successfully:', { userId });
     return successResponse(res, null, 'Account deleted successfully');
@@ -668,7 +676,7 @@ const exportProfileData = async (req, res) => {
     logger.info('Exporting profile data');
     
     const userId = req.user?.id;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { format } = req.query;
     
     // Validation
@@ -677,8 +685,8 @@ const exportProfileData = async (req, res) => {
     const userIdError = validateObjectId(userId, 'User ID');
     if (userIdError) errors.push(userIdError);
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const validFormats = ['json', 'csv', 'pdf'];
     const formatValue = format || 'json';
@@ -691,7 +699,7 @@ const exportProfileData = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await userProfileService.exportProfileData(schoolId, userId, formatValue);
+    const exportData = await userProfileService.exportProfileData(institutionId, userId, formatValue);
     
     logger.info('Profile data exported successfully:', { userId, format: formatValue });
     return successResponse(res, exportData, 'Profile data exported successfully');

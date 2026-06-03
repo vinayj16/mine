@@ -37,35 +37,15 @@ const validateAcademicYear = (year) => {
   return /^\d{4}-\d{4}$/.test(year);
 };
 
+const resolveinstitutionId = (req) => req.params.institutionId || req.user?.institutionId || req.user?.institutionId || req.query.institutionId || req.query.institutionId;
+
 const createTimetable = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const institutionId = resolveinstitutionId(req);
     const { classId, academicYear, status, periods } = req.body;
-
-    // Get schoolId from user if not in params
-    let finalSchoolId = schoolId || req.user?.institutionId || req.user?.institution || req.body.schoolId || req.body.institutionId;
-    if (!finalSchoolId) {
-      // Try to get from user context
-    }
     
-    // Validate required fields - make more lenient
     const errors = [];
-    // if (!finalSchoolId) {
-    //   errors.push({ field: 'schoolId', message: 'School ID is required' });
-    // } else if (!validateObjectId(finalSchoolId).valid) {
-    //   // Allow string schoolIds too
-    // }
-    // Make classId optional for easier creation
-    // if (!classId) {
-    //   errors.push({ field: 'classId', message: 'Class ID is required' });
-    // } else {
-    //   const validation = validateObjectId(classId, 'classId');
-    //   if (!validation.valid) {
-    //     errors.push(validation.error);
-    //   }
-    // }
     if (!academicYear) {
-      // Make optional - use default if not provided
       req.body.academicYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
     } else if (!validateAcademicYear(academicYear)) {
       errors.push({ field: 'academicYear', message: 'Academic year must be in format YYYY-YYYY' });
@@ -91,8 +71,8 @@ const createTimetable = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info('Creating timetable for school ' + schoolId + ' and class ' + classId);
-    const timetable = await classTimetableService.createTimetable(schoolId, req.body);
+    logger.info('Creating timetable for school ' + institutionId + ' and class ' + classId);
+    const timetable = await classTimetableService.createTimetable(institutionId, req.body);
     
     return createdResponse(res, timetable, 'Timetable created successfully');
   } catch (error) {
@@ -103,16 +83,16 @@ const createTimetable = async (req, res, next) => {
 
 const getTimetables = async (req, res, next) => {
   try {
-    const { schoolId: paramSchoolId } = req.params;
-    const { schoolId: querySchoolId, classId, academicYear, status, page = 1, limit = 20 } = req.query;
+    const { institutionId: paraminstitutionId } = req.params;
+    const { institutionId: queryInstitutionId, classId, academicYear, status, page = 1, limit = 20 } = req.query;
 
-    // Use schoolId from params or query params
-    const schoolId = paramSchoolId || querySchoolId;
+    // Use institutionId from params, query params, or authenticated user
+    const institutionId = paraminstitutionId || queryInstitutionId || req.user?.institutionId;
 
-    // Validate schoolId if provided
+    // Validate institutionId if provided
     const errors = [];
-    if (schoolId) {
-      const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    if (institutionId) {
+      const schoolValidation = validateObjectId(institutionId, 'institutionId');
       if (!schoolValidation.valid) {
         errors.push(schoolValidation.error);
       }
@@ -155,8 +135,8 @@ const getTimetables = async (req, res, next) => {
     if (academicYear) filters.academicYear = academicYear;
     if (status) filters.status = status;
 
-    logger.info('Fetching timetables for school: ' + schoolId);
-    const timetables = await classTimetableService.getTimetables(schoolId, filters);
+    logger.info('Fetching timetables for school: ' + institutionId);
+    const timetables = await classTimetableService.getTimetables(institutionId, filters);
     
     return successResponse(res, timetables, 'Timetables fetched successfully', {
       filters
@@ -169,14 +149,10 @@ const getTimetables = async (req, res, next) => {
 
 const getTimetableById = async (req, res, next) => {
   try {
-    const { schoolId, timetableId } = req.params;
+    const institutionId = resolveinstitutionId(req);
+    const { timetableId } = req.params;
 
-    // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
-    if (!schoolValidation.valid) {
-      errors.push(schoolValidation.error);
-    }
     const timetableValidation = validateObjectId(timetableId, 'timetableId');
     if (!timetableValidation.valid) {
       errors.push(timetableValidation.error);
@@ -187,7 +163,7 @@ const getTimetableById = async (req, res, next) => {
     }
 
     logger.info('Fetching timetable by ID: ' + timetableId);
-    const timetable = await classTimetableService.getTimetableById(timetableId, schoolId);
+    const timetable = await classTimetableService.getTimetableById(timetableId, institutionId);
     
     if (!timetable) {
       return notFoundResponse(res, 'Timetable not found');
@@ -202,15 +178,11 @@ const getTimetableById = async (req, res, next) => {
 
 const updateTimetable = async (req, res, next) => {
   try {
-    const { schoolId, timetableId } = req.params;
+    const institutionId = resolveinstitutionId(req);
+    const { timetableId } = req.params;
     const { status, academicYear, periods } = req.body;
 
-    // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
-    if (!schoolValidation.valid) {
-      errors.push(schoolValidation.error);
-    }
     const timetableValidation = validateObjectId(timetableId, 'timetableId');
     if (!timetableValidation.valid) {
       errors.push(timetableValidation.error);
@@ -242,7 +214,7 @@ const updateTimetable = async (req, res, next) => {
     }
 
     logger.info('Updating timetable: ' + timetableId);
-    const timetable = await classTimetableService.updateTimetable(timetableId, schoolId, req.body);
+    const timetable = await classTimetableService.updateTimetable(timetableId, institutionId, req.body);
     
     if (!timetable) {
       return notFoundResponse(res, 'Timetable not found');
@@ -257,14 +229,10 @@ const updateTimetable = async (req, res, next) => {
 
 const deleteTimetable = async (req, res, next) => {
   try {
-    const { schoolId, timetableId } = req.params;
+    const institutionId = resolveinstitutionId(req);
+    const { timetableId } = req.params;
 
-    // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
-    if (!schoolValidation.valid) {
-      errors.push(schoolValidation.error);
-    }
     const timetableValidation = validateObjectId(timetableId, 'timetableId');
     if (!timetableValidation.valid) {
       errors.push(timetableValidation.error);
@@ -275,7 +243,7 @@ const deleteTimetable = async (req, res, next) => {
     }
 
     logger.info('Deleting timetable: ' + timetableId);
-    const result = await classTimetableService.deleteTimetable(timetableId, schoolId);
+    const result = await classTimetableService.deleteTimetable(timetableId, institutionId);
     
     if (!result) {
       return notFoundResponse(res, 'Timetable not found');
@@ -290,11 +258,11 @@ const deleteTimetable = async (req, res, next) => {
 
 const getWeeklyTimetable = async (req, res, next) => {
   try {
-    const { schoolId, classId } = req.params;
+    const { institutionId, classId } = req.params;
 
     // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -308,7 +276,7 @@ const getWeeklyTimetable = async (req, res, next) => {
     }
 
     logger.info('Fetching weekly timetable for class: ' + classId);
-    const timetables = await classTimetableService.getWeeklyTimetable(schoolId, classId);
+    const timetables = await classTimetableService.getWeeklyTimetable(institutionId, classId);
     
     return successResponse(res, timetables, 'Weekly timetable fetched successfully');
   } catch (error) {
@@ -319,11 +287,11 @@ const getWeeklyTimetable = async (req, res, next) => {
 
 const getTimetableByDay = async (req, res, next) => {
   try {
-    const { schoolId, classId, day } = req.params;
+    const { institutionId, classId, day } = req.params;
 
     // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -342,7 +310,7 @@ const getTimetableByDay = async (req, res, next) => {
     }
 
     logger.info('Fetching timetable for class ' + classId + ' on ' + day);
-    const timetable = await classTimetableService.getTimetableByDay(schoolId, classId, day);
+    const timetable = await classTimetableService.getTimetableByDay(institutionId, classId, day);
     
     return successResponse(res, timetable, 'Timetable fetched successfully', {
       day
@@ -358,7 +326,7 @@ const getTimetableByDay = async (req, res, next) => {
  */
 const exportTimetables = async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format = 'json', classId, academicYear } = req.query;
 
     // Validate format
@@ -368,8 +336,8 @@ const exportTimetables = async (req, res) => {
       errors.push({ field: 'format', message: 'Format must be one of: ' + validFormats.join(', ') });
     }
 
-    // Validate schoolId
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -392,7 +360,7 @@ const exportTimetables = async (req, res) => {
     }
 
     logger.info('Exporting timetables data in format: ' + format);
-    const data = await classTimetableService.exportTimetables(schoolId, { classId, academicYear, format });
+    const data = await classTimetableService.exportTimetables(institutionId, { classId, academicYear, format });
 
     if (format === 'json') {
       return successResponse(res, data, 'Timetables exported successfully', {
@@ -413,12 +381,12 @@ const exportTimetables = async (req, res) => {
  */
 const cloneTimetable = async (req, res) => {
   try {
-    const { schoolId, timetableId } = req.params;
+    const { institutionId, timetableId } = req.params;
     const { targetClassId, targetAcademicYear } = req.body;
 
     // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -447,7 +415,7 @@ const cloneTimetable = async (req, res) => {
     }
 
     logger.info('Cloning timetable ' + timetableId + ' to class ' + targetClassId);
-    const newTimetable = await classTimetableService.cloneTimetable(timetableId, schoolId, { targetClassId, targetAcademicYear });
+    const newTimetable = await classTimetableService.cloneTimetable(timetableId, institutionId, { targetClassId, targetAcademicYear });
 
     return createdResponse(res, newTimetable, 'Timetable cloned successfully');
   } catch (error) {
@@ -461,12 +429,12 @@ const cloneTimetable = async (req, res) => {
  */
 const getTimetableStatistics = async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { academicYear } = req.query;
 
-    // Validate schoolId
+    // Validate institutionId
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -480,8 +448,8 @@ const getTimetableStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info('Fetching timetable statistics for school: ' + schoolId);
-    const statistics = await classTimetableService.getTimetableStatistics(schoolId, academicYear);
+    logger.info('Fetching timetable statistics for school: ' + institutionId);
+    const statistics = await classTimetableService.getTimetableStatistics(institutionId, academicYear);
 
     return successResponse(res, statistics, 'Timetable statistics fetched successfully', {
       academicYear: academicYear || 'all'
@@ -497,12 +465,12 @@ const getTimetableStatistics = async (req, res) => {
  */
 const bulkUpdateStatus = async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { timetableIds, status } = req.body;
 
-    // Validate schoolId
+    // Validate institutionId
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -532,7 +500,7 @@ const bulkUpdateStatus = async (req, res) => {
     }
 
     logger.info('Bulk updating status for ' + timetableIds.length + ' timetables');
-    const result = await classTimetableService.bulkUpdateStatus(schoolId, timetableIds, status);
+    const result = await classTimetableService.bulkUpdateStatus(institutionId, timetableIds, status);
 
     return successResponse(res, result, timetableIds.length + ' timetables status updated successfully');
   } catch (error) {
@@ -546,12 +514,12 @@ const bulkUpdateStatus = async (req, res) => {
  */
 const getTimetableConflicts = async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, teacherId } = req.query;
 
-    // Validate schoolId
+    // Validate institutionId
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -577,7 +545,7 @@ const getTimetableConflicts = async (req, res) => {
     }
 
     logger.info('Checking for timetable conflicts');
-    const conflicts = await classTimetableService.getTimetableConflicts(schoolId, { classId, teacherId });
+    const conflicts = await classTimetableService.getTimetableConflicts(institutionId, { classId, teacherId });
 
     return successResponse(res, conflicts, 'Timetable conflicts fetched successfully', {
       conflictCount: conflicts.length
@@ -593,21 +561,16 @@ const getTimetableConflicts = async (req, res) => {
  */
 const addPeriod = async (req, res) => {
   try {
-    const { schoolId, timetableId } = req.params;
-    const { day, startTime, endTime, subjectId, teacherId, roomId } = req.body;
+    const institutionId = resolveinstitutionId(req);
+    const { timetableId } = req.params;
+    const { day, startTime, endTime, subjectId, teacherId } = req.body;
 
-    // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
-    if (!schoolValidation.valid) {
-      errors.push(schoolValidation.error);
-    }
     const timetableValidation = validateObjectId(timetableId, 'timetableId');
     if (!timetableValidation.valid) {
       errors.push(timetableValidation.error);
     }
 
-    // Validate period fields
     if (!day) {
       errors.push({ field: 'day', message: 'Day is required' });
     } else if (!VALID_DAYS.includes(day.toLowerCase())) {
@@ -635,19 +598,13 @@ const addPeriod = async (req, res) => {
         errors.push(validation.error);
       }
     }
-    if (roomId) {
-      const validation = validateObjectId(roomId, 'roomId');
-      if (!validation.valid) {
-        errors.push(validation.error);
-      }
-    }
 
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
 
     logger.info('Adding period to timetable: ' + timetableId);
-    const timetable = await classTimetableService.addPeriod(timetableId, schoolId, req.body);
+    const timetable = await classTimetableService.addPeriod(timetableId, institutionId, req.body);
 
     if (!timetable) {
       return notFoundResponse(res, 'Timetable not found');
@@ -665,14 +622,10 @@ const addPeriod = async (req, res) => {
  */
 const removePeriod = async (req, res) => {
   try {
-    const { schoolId, timetableId, periodId } = req.params;
+    const institutionId = resolveinstitutionId(req);
+    const { timetableId, periodId } = req.params;
 
-    // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
-    if (!schoolValidation.valid) {
-      errors.push(schoolValidation.error);
-    }
     const timetableValidation = validateObjectId(timetableId, 'timetableId');
     if (!timetableValidation.valid) {
       errors.push(timetableValidation.error);
@@ -687,7 +640,7 @@ const removePeriod = async (req, res) => {
     }
 
     logger.info('Removing period ' + periodId + ' from timetable ' + timetableId);
-    const timetable = await classTimetableService.removePeriod(timetableId, schoolId, periodId);
+    const timetable = await classTimetableService.removePeriod(timetableId, institutionId, periodId);
 
     if (!timetable) {
       return notFoundResponse(res, 'Timetable or period not found');
@@ -705,12 +658,12 @@ const removePeriod = async (req, res) => {
  */
 const getTeacherTimetable = async (req, res) => {
   try {
-    const { schoolId, teacherId } = req.params;
+    const { institutionId, teacherId } = req.params;
     const { academicYear } = req.query;
 
     // Validate IDs
     const errors = [];
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       errors.push(schoolValidation.error);
     }
@@ -729,7 +682,7 @@ const getTeacherTimetable = async (req, res) => {
     }
 
     logger.info('Fetching timetable for teacher: ' + teacherId);
-    const timetable = await classTimetableService.getTeacherTimetable(schoolId, teacherId, academicYear);
+    const timetable = await classTimetableService.getTeacherTimetable(institutionId, teacherId, academicYear);
 
     return successResponse(res, timetable, 'Teacher timetable fetched successfully');
   } catch (error) {

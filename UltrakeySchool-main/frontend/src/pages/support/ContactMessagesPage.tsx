@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import apiClient from '../../api/client';
 
 interface ContactMessage {
   _id: string;
@@ -46,43 +47,12 @@ const ContactMessagesPage: React.FC = () => {
         params.search = searchTerm;
       }
 
-      // TODO: Replace with actual API endpoint when backend is ready
-      // const response = await apiClient.get('/contact-messages', { params });
+      const response = await apiClient.get('/contact-messages', { params });
       
-      // Mock data for now
-      const mockMessages: ContactMessage[] = [
-        {
-          _id: '1',
-          name: 'Teresa Johnson',
-          phone: '+1 82392 37359',
-          email: 'teresa@example.com',
-          subject: 'Staff Meeting Reminder',
-          message: 'Reminder: Staff meeting tomorrow at 10 AM in the main conference room.',
-          status: 'read',
-          createdAt: new Date('2024-03-25'),
-          updatedAt: new Date('2024-03-25')
-        },
-        {
-          _id: '2',
-          name: 'Aaron Smith',
-          phone: '+1 26267 80542',
-          email: 'aaron@example.com',
-          subject: 'Missing Assignment',
-          message: 'You have a missing assignment for Math class. Please submit by end of week.',
-          status: 'unread',
-          createdAt: new Date('2024-07-10'),
-          updatedAt: new Date('2024-07-10')
-        }
-      ];
-
-      setMessages(mockMessages);
-      setTotal(mockMessages.length);
-
-      // When backend is ready:
-      // if (response.data.success) {
-      //   setMessages(response.data.data.messages || []);
-      //   setTotal(response.data.data.total || 0);
-      // }
+      if (response.data.success) {
+        setMessages(response.data.data.messages || []);
+        setTotal(response.data.data.total || 0);
+      }
     } catch (error: any) {
       console.error('Failed to fetch contact messages:', error);
       toast.error(error.response?.data?.message || 'Failed to fetch contact messages');
@@ -97,10 +67,22 @@ const ContactMessagesPage: React.FC = () => {
     try {
       setSaving(true);
       
-      toast.success('Contact message added successfully');
-      setShowAddModal(false);
-      fetchMessages();
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+        phone: formData.get('phone') as string,
+        subject: formData.get('subject') as string,
+        message: formData.get('message') as string,
+      };
 
+      const response = await apiClient.post('/contact-messages', data);
+      
+      if (response.data.success) {
+        toast.success('Contact message added successfully');
+        setShowAddModal(false);
+        fetchMessages();
+      }
     } catch (error: any) {
       console.error('Failed to add contact message:', error);
       toast.error(error.response?.data?.message || 'Failed to add contact message');
@@ -116,20 +98,22 @@ const ContactMessagesPage: React.FC = () => {
     try {
       setSaving(true);
       
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+        phone: formData.get('phone') as string,
+        subject: formData.get('subject') as string,
+        message: formData.get('message') as string,
+      };
 
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await apiClient.put(`/contact-messages/${selectedMessage._id}`, messageData);
+      const response = await apiClient.put(`/contact-messages/${selectedMessage._id}`, data);
       
-      toast.success('Contact message updated successfully');
-      setShowEditModal(false);
-      fetchMessages();
-
-      // When backend is ready:
-      // if (response.data.success) {
-      //   toast.success('Contact message updated successfully');
-      //   setShowEditModal(false);
-      //   fetchMessages();
-      // }
+      if (response.data.success) {
+        toast.success('Contact message updated successfully');
+        setShowEditModal(false);
+        fetchMessages();
+      }
     } catch (error: any) {
       console.error('Failed to update contact message:', error);
       toast.error(error.response?.data?.message || 'Failed to update contact message');
@@ -142,19 +126,13 @@ const ContactMessagesPage: React.FC = () => {
     if (!selectedMessage) return;
 
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await apiClient.delete(`/contact-messages/${selectedMessage._id}`);
+      const response = await apiClient.delete(`/contact-messages/${selectedMessage._id}`);
       
-      toast.success('Contact message deleted successfully');
-      setShowDeleteModal(false);
-      fetchMessages();
-
-      // When backend is ready:
-      // if (response.data.success) {
-      //   toast.success('Contact message deleted successfully');
-      //   setShowDeleteModal(false);
-      //   fetchMessages();
-      // }
+      if (response.data.success) {
+        toast.success('Contact message deleted successfully');
+        setShowDeleteModal(false);
+        fetchMessages();
+      }
     } catch (error: any) {
       console.error('Failed to delete contact message:', error);
       toast.error(error.response?.data?.message || 'Failed to delete contact message');
@@ -163,17 +141,12 @@ const ContactMessagesPage: React.FC = () => {
 
   const handleMarkAsRead = async (_id: string) => {
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const response = await apiClient.patch(`/contact-messages/${messageId}/status`, { status: 'read' });
+      const response = await apiClient.put(`/contact-messages/${_id}/read`);
       
-      toast.success('Message marked as read');
-      fetchMessages();
-
-      // When backend is ready:
-      // if (response.data.success) {
-      //   toast.success('Message marked as read');
-      //   fetchMessages();
-      // }
+      if (response.data.success) {
+        toast.success('Message marked as read');
+        fetchMessages();
+      }
     } catch (error: any) {
       console.error('Failed to update message status:', error);
       toast.error(error.response?.data?.message || 'Failed to update message status');
@@ -196,7 +169,7 @@ const ContactMessagesPage: React.FC = () => {
   };
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'

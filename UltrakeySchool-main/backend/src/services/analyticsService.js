@@ -435,7 +435,7 @@ class AnalyticsService {
       ]);
       summary.revenue = {
         total: revenue[0]?.total || 0,
-        currency: 'USD'
+        currency: 'INR'
       };
     }
 

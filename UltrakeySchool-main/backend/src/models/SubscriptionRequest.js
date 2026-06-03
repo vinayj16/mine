@@ -18,7 +18,7 @@ const subscriptionRequestSchema = new mongoose.Schema({
   currency: {
     type: String,
     default: 'INR',
-    enum: ['INR', 'USD']
+    enum: ['INR']
   },
   paymentMethod: {
     type: String,

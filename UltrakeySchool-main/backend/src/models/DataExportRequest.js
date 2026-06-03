@@ -30,11 +30,6 @@ const dataExportRequestSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: {}
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    default: null
-  },
   status: {
     type: String,
     enum: ['pending', 'processing', 'completed', 'failed'],

@@ -12,7 +12,7 @@ const MAX_NAME_LENGTH = 100;
 const MAX_CODE_LENGTH = 20;
 const MAX_DESCRIPTION_LENGTH = 1000;
 const MIN_CREDITS = 0;
-const MAX_CREDITS = 20;
+const MAX_CREDITS = 100;
 
 // Helper function to validate MongoDB ObjectId
 const validateObjectId = (id, fieldName = 'ID') => {
@@ -30,10 +30,10 @@ const createSubject = async (req, res) => {
   try {
     logger.info('Creating subject');
     
-    // Get schoolId from params first, then body, then JWT
-    let schoolId = req.params.schoolId || req.body.schoolId || req.body.institutionId;
-    if (!schoolId) {
-      schoolId = req.user?.institutionId || req.user?.institution;
+    // Get institutionId from params first, then body, then JWT
+    let institutionId = req.params.institutionId || req.body.institutionId || req.body.institutionId;
+    if (!institutionId) {
+      institutionId = req.user?.institutionId || req.user?.institution;
     }
     
     const { name, code, type, department, credits, description, status } = req.body;
@@ -41,8 +41,8 @@ const createSubject = async (req, res) => {
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!name || name.trim().length === 0) {
       errors.push('Subject name is required');
@@ -84,7 +84,7 @@ const createSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.createSubject(schoolId, req.body);
+    const subject = await subjectService.createSubject(institutionId, req.body);
     
     logger.info('Subject created successfully:', { subjectId: subject._id, name });
     return createdResponse(res, subject, 'Subject created successfully');
@@ -99,19 +99,19 @@ const getSubjects = async (req, res) => {
   try {
     logger.info('Fetching subjects');
     
-    const { schoolId: paramSchoolId } = req.params;
-    const { schoolId: querySchoolId, department, type, status, search, page, limit, sortBy, sortOrder } = req.query;
+    const { institutionId: paraminstitutionId } = req.params;
+    const { institutionId: queryinstitutionId, department, type, status, search, page, limit, sortBy, sortOrder } = req.query;
     
-    // Use schoolId from params or query params
-    const schoolId = paramSchoolId || querySchoolId;
+    // Use institutionId from params or query params
+    const institutionId = paraminstitutionId || queryinstitutionId;
     
     // Validation
     const errors = [];
     
-    // Only validate schoolId if it's provided
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    // Only validate institutionId if it's provided
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     const pageNum = parseInt(page) || 1;
@@ -121,8 +121,8 @@ const getSubjects = async (req, res) => {
       errors.push('Page must be greater than 0');
     }
     
-    if (limitNum < 1 || limitNum > 100) {
-      errors.push('Limit must be between 1 and 100');
+    if (limitNum < 1 || limitNum > 200) {
+      errors.push('Limit must be between 1 and 200');
     }
     
     if (department) {
@@ -163,7 +163,7 @@ const getSubjects = async (req, res) => {
       sortOrder: sortOrder || 'asc'
     };
     
-    const result = await subjectService.getSubjects(schoolId, filters, options);
+    const result = await subjectService.getSubjects(institutionId, filters, options);
     
     logger.info('Subjects fetched successfully:', { count: result.subjects.length });
     return successResponse(res, {
@@ -181,13 +181,13 @@ const getSubjectById = async (req, res) => {
   try {
     logger.info('Fetching subject by ID');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -196,7 +196,7 @@ const getSubjectById = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.getSubjectById(subjectId, schoolId);
+    const subject = await subjectService.getSubjectById(subjectId, institutionId);
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -215,14 +215,14 @@ const updateSubject = async (req, res) => {
   try {
     logger.info('Updating subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     const { name, code, type, department, credits, description, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -270,7 +270,7 @@ const updateSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.updateSubject(subjectId, schoolId, req.body);
+    const subject = await subjectService.updateSubject(subjectId, institutionId, req.body);
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -289,13 +289,13 @@ const deleteSubject = async (req, res) => {
   try {
     logger.info('Deleting subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -304,7 +304,7 @@ const deleteSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subjectService.deleteSubject(subjectId, schoolId);
+    const result = await subjectService.deleteSubject(subjectId, institutionId);
     
     if (!result) {
       return notFoundResponse(res, 'Subject not found');
@@ -323,13 +323,13 @@ const getSubjectsByDepartment = async (req, res) => {
   try {
     logger.info('Fetching subjects by department');
     
-    const { schoolId, department } = req.params;
+    const { institutionId, department } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!department || department.trim().length === 0) {
       errors.push('Department is required');
@@ -339,7 +339,7 @@ const getSubjectsByDepartment = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subjects = await subjectService.getSubjectsByDepartment(schoolId, department);
+    const subjects = await subjectService.getSubjectsByDepartment(institutionId, department);
     
     logger.info('Subjects fetched by department successfully:', { department, count: subjects.length });
     return successResponse(res, subjects, 'Subjects retrieved successfully');
@@ -354,14 +354,14 @@ const searchSubjects = async (req, res) => {
   try {
     logger.info('Searching subjects');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { q } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!q || q.trim().length === 0) {
       errors.push('Search query is required');
@@ -373,7 +373,7 @@ const searchSubjects = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subjects = await subjectService.searchSubjects(schoolId, q);
+    const subjects = await subjectService.searchSubjects(institutionId, q);
     
     logger.info('Subjects searched successfully:', { query: q, count: subjects.length });
     return successResponse(res, subjects, 'Search results retrieved successfully');
@@ -388,13 +388,13 @@ const getSubjectsByType = async (req, res) => {
   try {
     logger.info('Fetching subjects by type');
     
-    const { schoolId, type } = req.params;
+    const { institutionId, type } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!type) {
       errors.push('Subject type is required');
@@ -406,7 +406,7 @@ const getSubjectsByType = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subjects = await subjectService.getSubjectsByType(schoolId, type);
+    const subjects = await subjectService.getSubjectsByType(institutionId, type);
     
     logger.info('Subjects fetched by type successfully:', { type, count: subjects.length });
     return successResponse(res, subjects, 'Subjects retrieved successfully');
@@ -421,13 +421,13 @@ const getSubjectsByStatus = async (req, res) => {
   try {
     logger.info('Fetching subjects by status');
     
-    const { schoolId, status } = req.params;
+    const { institutionId, status } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!status) {
       errors.push('Status is required');
@@ -439,7 +439,7 @@ const getSubjectsByStatus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subjects = await subjectService.getSubjectsByStatus(schoolId, status);
+    const subjects = await subjectService.getSubjectsByStatus(institutionId, status);
     
     logger.info('Subjects fetched by status successfully:', { status, count: subjects.length });
     return successResponse(res, subjects, 'Subjects retrieved successfully');
@@ -454,14 +454,14 @@ const updateSubjectStatus = async (req, res) => {
   try {
     logger.info('Updating subject status');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     const { status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -476,7 +476,7 @@ const updateSubjectStatus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.updateSubject(subjectId, schoolId, { status });
+    const subject = await subjectService.updateSubject(subjectId, institutionId, { status });
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -495,14 +495,14 @@ const bulkUpdateSubjects = async (req, res) => {
   try {
     logger.info('Bulk updating subjects');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { subjectIds, updates } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!subjectIds || !Array.isArray(subjectIds)) {
       errors.push('Subject IDs must be an array');
@@ -535,7 +535,7 @@ const bulkUpdateSubjects = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subjectService.bulkUpdateSubjects(schoolId, subjectIds, updates);
+    const result = await subjectService.bulkUpdateSubjects(institutionId, subjectIds, updates);
     
     logger.info('Subjects bulk updated successfully:', { count: result.modifiedCount });
     return successResponse(res, { modifiedCount: result.modifiedCount }, 'Subjects updated successfully');
@@ -550,14 +550,14 @@ const bulkDeleteSubjects = async (req, res) => {
   try {
     logger.info('Bulk deleting subjects');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { subjectIds } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!subjectIds || !Array.isArray(subjectIds)) {
       errors.push('Subject IDs must be an array');
@@ -579,7 +579,7 @@ const bulkDeleteSubjects = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await subjectService.bulkDeleteSubjects(schoolId, subjectIds);
+    const result = await subjectService.bulkDeleteSubjects(institutionId, subjectIds);
     
     logger.info('Subjects bulk deleted successfully:', { count: result.deletedCount });
     return successResponse(res, { deletedCount: result.deletedCount }, 'Subjects deleted successfully');
@@ -594,19 +594,19 @@ const getSubjectStatistics = async (req, res) => {
   try {
     logger.info('Fetching subject statistics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const statistics = await subjectService.getSubjectStatistics(schoolId);
+    const statistics = await subjectService.getSubjectStatistics(institutionId);
     
     logger.info('Subject statistics fetched successfully');
     return successResponse(res, statistics, 'Subject statistics retrieved successfully');
@@ -621,14 +621,14 @@ const exportSubjects = async (req, res) => {
   try {
     logger.info('Exporting subjects');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, department, type, status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
@@ -653,7 +653,7 @@ const exportSubjects = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await subjectService.exportSubjects(schoolId, {
+    const exportData = await subjectService.exportSubjects(institutionId, {
       format: format.toLowerCase(),
       department,
       type,
@@ -673,19 +673,19 @@ const getActiveSubjects = async (req, res) => {
   try {
     logger.info('Fetching active subjects');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const subjects = await subjectService.getSubjectsByStatus(schoolId, 'active');
+    const subjects = await subjectService.getSubjectsByStatus(institutionId, 'active');
     
     logger.info('Active subjects fetched successfully:', { count: subjects.length });
     return successResponse(res, subjects, 'Active subjects retrieved successfully');
@@ -700,13 +700,13 @@ const archiveSubject = async (req, res) => {
   try {
     logger.info('Archiving subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -715,7 +715,7 @@ const archiveSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.updateSubject(subjectId, schoolId, { status: 'archived' });
+    const subject = await subjectService.updateSubject(subjectId, institutionId, { status: 'archived' });
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -734,13 +734,13 @@ const restoreSubject = async (req, res) => {
   try {
     logger.info('Restoring archived subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -749,7 +749,7 @@ const restoreSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.updateSubject(subjectId, schoolId, { status: 'active' });
+    const subject = await subjectService.updateSubject(subjectId, institutionId, { status: 'active' });
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -768,13 +768,13 @@ const duplicateSubject = async (req, res) => {
   try {
     logger.info('Duplicating subject');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -783,7 +783,7 @@ const duplicateSubject = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const subject = await subjectService.duplicateSubject(subjectId, schoolId);
+    const subject = await subjectService.duplicateSubject(subjectId, institutionId);
     
     if (!subject) {
       return notFoundResponse(res, 'Subject not found');
@@ -802,13 +802,13 @@ const getSubjectTeachers = async (req, res) => {
   try {
     logger.info('Fetching subject teachers');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -817,7 +817,7 @@ const getSubjectTeachers = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const teachers = await subjectService.getSubjectTeachers(subjectId, schoolId);
+    const teachers = await subjectService.getSubjectTeachers(subjectId, institutionId);
     
     logger.info('Subject teachers fetched successfully:', { subjectId, count: teachers.length });
     return successResponse(res, teachers, 'Subject teachers retrieved successfully');
@@ -832,13 +832,13 @@ const getSubjectStudents = async (req, res) => {
   try {
     logger.info('Fetching subject students');
     
-    const { schoolId, subjectId } = req.params;
+    const { institutionId, subjectId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
@@ -847,7 +847,7 @@ const getSubjectStudents = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const students = await subjectService.getSubjectStudents(subjectId, schoolId);
+    const students = await subjectService.getSubjectStudents(subjectId, institutionId);
     
     logger.info('Subject students fetched successfully:', { subjectId, count: students.length });
     return successResponse(res, students, 'Subject students retrieved successfully');

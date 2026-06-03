@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils'
 import branchService, { type Branch } from '../../services/branchService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const BranchesMonitoringPage: React.FC = () => {
+  const navigate = useNavigate()
   const [selectedBranches, setSelectedBranches] = useState<string[]>([])
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterInstitutionType, setFilterInstitutionType] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(true)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
   const safeBranches = branches || []
 
@@ -47,15 +53,15 @@ const BranchesMonitoringPage: React.FC = () => {
   }
 
   const handleViewDetails = (branchId: string) => {
-    window.location.href = `/super-admin/branches/${branchId}`
+    navigate(`/super-admin/branches/${branchId}`)
   }
 
   const handleEditBranch = (branchId: string) => {
-    window.location.href = `/super-admin/branches/${branchId}/edit`
+    navigate(`/super-admin/branches/${branchId}/edit`)
   }
 
   const handleManageStudents = (branchId: string) => {
-    window.location.href = `/super-admin/branches/${branchId}/students`
+    navigate(`/super-admin/branches/${branchId}/students`)
   }
 
   const handleToggleStatus = async (branchId: string) => {
@@ -78,27 +84,45 @@ const BranchesMonitoringPage: React.FC = () => {
           (b.id || b._id) === branchId ? { ...b, status: b.status === 'Active' ? 'Suspended' : 'Active' } : b
         ))
       }
-      alert(`Branch ${branch.status === 'Active' ? 'suspended' : 'activated'} successfully!`)
+      toast.success(`Branch ${branch.status === 'Active' ? 'suspended' : 'activated'} successfully!`)
     } catch (err) {
       console.error('Failed to toggle status:', err)
-      alert('Failed to toggle branch status')
+      toast.error('Failed to toggle branch status')
     }
   }
 
-  const handleDeleteBranch = async (branchId: string) => {
-    if (window.confirm('Are you sure you want to delete this branch? This action cannot be undone.')) {
-      try {
+  const handleDeleteBranch = (branchId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'single', id: branchId })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      if (deleteTarget.type === 'single') {
         try {
-          await branchService.deleteBranch(branchId)
+          await branchService.deleteBranch(deleteTarget.id)
         } catch {
           // Demo mode - just remove locally
         }
-        setBranches(safeBranches.filter(b => (b.id || b._id) !== branchId))
-        alert('Branch deleted successfully!')
-      } catch (err) {
-        console.error('Failed to delete branch:', err)
-        alert('Failed to delete branch')
+        setBranches(safeBranches.filter(b => (b.id || b._id) !== deleteTarget.id))
+        toast.success('Branch deleted successfully!')
+      } else if (deleteTarget.type === 'bulk') {
+        try {
+          await branchService.bulkDelete(selectedBranches)
+        } catch {
+          // Demo mode - just remove locally
+        }
+        setBranches(safeBranches.filter(b => !selectedBranches.includes(b.id || b._id)))
+        setSelectedBranches([])
+        toast.success('Branches deleted successfully!')
       }
+    } catch (err) {
+      console.error('Failed to delete branch(s):', err)
+      toast.error('Failed to delete branch(s)')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -116,10 +140,10 @@ const BranchesMonitoringPage: React.FC = () => {
         ))
       }
       setSelectedBranches([])
-      alert('Branches activated successfully!')
+      toast.success('Branches activated successfully!')
     } catch (err) {
       console.error('Failed to activate branches:', err)
-      alert('Failed to activate selected branches')
+      toast.error('Failed to activate selected branches')
     }
   }
 
@@ -137,29 +161,16 @@ const BranchesMonitoringPage: React.FC = () => {
         ))
       }
       setSelectedBranches([])
-      alert('Branches suspended successfully!')
+      toast.success('Branches suspended successfully!')
     } catch (err) {
       console.error('Failed to suspend branches:', err)
-      alert('Failed to suspend selected branches')
+      toast.error('Failed to suspend selected branches')
     }
   }
 
-  const handleBulkDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedBranches.length} selected branches? This action cannot be undone.`)) {
-      try {
-        try {
-          await branchService.bulkDelete(selectedBranches)
-        } catch {
-          // Demo mode - just remove locally
-        }
-        setBranches(safeBranches.filter(b => !selectedBranches.includes(b.id || b._id)))
-        setSelectedBranches([])
-        alert('Branches deleted successfully!')
-      } catch (err) {
-        console.error('Failed to delete branches:', err)
-        alert('Failed to delete selected branches')
-      }
-    }
+  const handleBulkDelete = () => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'bulk' })
   }
 
   const handleClearSelection = () => {
@@ -254,7 +265,7 @@ const BranchesMonitoringPage: React.FC = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <button className="btn btn-outline-light bg-white btn-icon me-1">
+            <button className="btn btn-outline-light bg-white btn-icon me-1" onClick={() => { const fetch = async () => { try { setLoading(true); const response = await branchService.getBranches({ limit: 100 }); if (response?.branches) setBranches(response.branches); toast.success('Branches refreshed'); } catch { toast.error('Failed to refresh'); } finally { setLoading(false); } }; fetch(); }}>
               <i className="ti ti-refresh"></i>
             </button>
           </div>
@@ -265,12 +276,12 @@ const BranchesMonitoringPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => { const data = filteredBranches.map(b => ({ Name: b.name, Code: b.code, Institution: b.institutionName, Type: b.institutionType, City: b.address?.city || '', State: b.address?.state || '', Students: b.students || 0, Status: b.status })); const cols: ExportColumn[] = [{ key: 'Name', label: 'Name' }, { key: 'Code', label: 'Code' }, { key: 'Institution', label: 'Institution' }, { key: 'Type', label: 'Type' }, { key: 'City', label: 'City' }, { key: 'State', label: 'State' }, { key: 'Students', label: 'Students' }, { key: 'Status', label: 'Status' }]; exportToPDF(data, 'branches-list', cols, 'Branches List', true); }}>
                   <i className="ti ti-file-type-pdf me-2"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => { const data = filteredBranches.map(b => ({ Name: b.name, Code: b.code, Institution: b.institutionName, Type: b.institutionType, City: b.address?.city || '', State: b.address?.state || '', Students: b.students || 0, Status: b.status })); const cols: ExportColumn[] = [{ key: 'Name', label: 'Name' }, { key: 'Code', label: 'Code' }, { key: 'Institution', label: 'Institution' }, { key: 'Type', label: 'Type' }, { key: 'City', label: 'City' }, { key: 'State', label: 'State' }, { key: 'Students', label: 'Students' }, { key: 'Status', label: 'Status' }]; exportToExcel(data, 'branches-list', cols); }}>
                   <i className="ti ti-file-type-xls me-2"></i>Export as Excel
                 </button>
               </li>
@@ -383,7 +394,7 @@ const BranchesMonitoringPage: React.FC = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h4 className="text-white mb-1">${totalCapacity.toLocaleString()}</h4>
+                  <h4 className="text-white mb-1">₹{totalCapacity.toLocaleString()}</h4>
                   <p className="text-white mb-0">Total Monthly Revenue</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -398,7 +409,7 @@ const BranchesMonitoringPage: React.FC = () => {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h4 className="text-white mb-1">${avgRevenue.toLocaleString()}</h4>
+                  <h4 className="text-white mb-1">₹{avgRevenue.toLocaleString()}</h4>
                   <p className="text-white mb-0">Avg Revenue per Branch</p>
                 </div>
                 <div className="avatar avatar-lg bg-white bg-opacity-20 rounded-circle">
@@ -590,7 +601,7 @@ const BranchesMonitoringPage: React.FC = () => {
                     </td>
                     <td>
                       <div className="fw-medium">{branch.institutionName || 'N/A'}</div>
-                      <small className="text-muted">ID: {branch.institutionId || 'N/A'}</small>
+                      <small className="text-muted">ID: {String(branch.institutionId || 'N/A')}</small>
                     </td>
                     <td>
                       <span className={`badge ${getInstitutionTypeBadge(branch.institutionType)}`}>
@@ -605,7 +616,7 @@ const BranchesMonitoringPage: React.FC = () => {
                     </td>
                     <td>{branch.students}</td>
                     <td>
-                      <div className="fw-medium">${(branch.capacity?.maxStudents || 0).toLocaleString()}</div>
+                      <div className="fw-medium">₹{(branch.capacity?.maxStudents || 0).toLocaleString()}</div>
                       <small className="text-muted">Max Capacity</small>
                     </td>
                     <td>
@@ -711,6 +722,7 @@ const BranchesMonitoringPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this branch? This action cannot be undone." />
     </>
   )
 }

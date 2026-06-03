@@ -1,9 +1,11 @@
 // Import required models and services
 import Teacher from '../models/Teacher.js';
+import User from '../models/User.js';
 import teacherService from '../services/teacherService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 // Validation constants
 const VALID_STATUSES = ['active', 'inactive', 'on_leave', 'suspended', 'terminated', 'retired'];
@@ -80,93 +82,40 @@ const validateDateRange = (startDate, endDate) => {
   return null;
 };
 
-// CRUD Operations - List all teachers
+// CRUD Operations - List all teachers (from users collection)
 export const getAllTeachers = async (req, res) => {
   try {
     logger.info('Fetching all teachers');
     
-    const { schoolId, page, limit, search, department, subject, status, gender, sortBy, sortOrder } = req.query;
+    const { institutionId: queryInstitutionId, page, limit, search, status, sortBy, sortOrder } = req.query;
+    const institutionId = queryInstitutionId || req.user?.institutionId || req.tenantId;
     
-    // Validation
     const errors = [];
-    
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
     
-    if (pageNum < 1) {
-      errors.push('Page must be greater than 0');
-    }
+    if (pageNum < 1) errors.push('Page must be greater than 0');
+    if (limitNum < 1 || limitNum > 100) errors.push('Limit must be between 1 and 100');
+    if (status && !VALID_STATUSES.includes(status)) errors.push('Invalid status');
+    if (sortOrder && !VALID_SORT_ORDERS.includes(sortOrder)) errors.push('Invalid sort order');
+    if (errors.length > 0) return validationErrorResponse(res, errors);
     
-    if (limitNum < 1 || limitNum > 100) {
-      errors.push('Limit must be between 1 and 100');
-    }
-    
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
-    
-    if (department) {
-      const departmentError = validateObjectId(department, 'Department ID');
-      if (departmentError) errors.push(departmentError);
-    }
-    
-    if (subject) {
-      const subjectError = validateObjectId(subject, 'Subject ID');
-      if (subjectError) errors.push(subjectError);
-    }
-    
-    if (status && !VALID_STATUSES.includes(status)) {
-      errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
-    }
-    
-    if (gender && !VALID_GENDERS.includes(gender)) {
-      errors.push('Invalid gender. Must be one of: ' + VALID_GENDERS.join(', '));
-    }
-    
-    if (search && search.length > 200) {
-      errors.push('Search query must not exceed 200 characters');
-    }
-    
-    if (sortOrder && !VALID_SORT_ORDERS.includes(sortOrder)) {
-      errors.push('Invalid sort order. Must be one of: ' + VALID_SORT_ORDERS.join(', '));
-    }
-    
-    if (errors.length > 0) {
-      return validationErrorResponse(res, errors);
-    }
-    
-    const query = {};
-    
-    if (schoolId) {
-      query.schoolId = schoolId;
-    }
+    const query = { institutionId };
+    if (status) query.status = status;
     
     if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = { $regex: escaped, $options: 'i' };
+      const matchingUserIds = await User.find({
+        institutionId,
+        $or: [{ name: re }, { email: re }]
+      }).distinct('_id');
       query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { employeeId: { $regex: search, $options: 'i' } }
+        { firstName: re },
+        { lastName: re },
+        { employeeId: re },
+        { userId: { $in: matchingUserIds } }
       ];
-    }
-    
-    if (department) {
-      query.departmentId = department;
-    }
-    
-    if (subject) {
-      query.subjects = subject;
-    }
-    
-    if (status) {
-      query.status = status;
-    } else {
-      query.isActive = true;
-    }
-    
-    if (gender) {
-      query.gender = gender;
     }
     
     const skip = (pageNum - 1) * limitNum;
@@ -175,24 +124,46 @@ export const getAllTeachers = async (req, res) => {
     
     const [teachers, total] = await Promise.all([
       Teacher.find(query)
-        .populate('departmentId', 'name code')
-        .populate('subjects', 'name code')
+        .populate('userId')
         .sort({ [sortField]: sortDirection })
         .skip(skip)
         .limit(limitNum),
       Teacher.countDocuments(query)
     ]);
     
-    logger.info('Teachers fetched successfully:', { count: teachers.length });
-    return successResponse(res, {
-      teachers,
+    const mapped = teachers.map(t => {
+      const u = t.userId || {};
+      return {
+        _id: t._id,
+        userId: u._id,
+        firstName: t.firstName,
+        lastName: t.lastName,
+        name: u.name || t.name,
+        email: u.email,
+        phone: u.phone,
+        photo: u.avatar || u.profilePhoto || '',
+        employeeId: t.employeeId,
+        designation: u.designation,
+        department: t.department,
+        departmentId: t.department ? { name: t.department } : undefined,
+        subjects: t.subjects || [],
+        status: t.status,
+        isActive: t.isActive,
+        joinDate: t.joiningDate || t.createdAt,
+        createdAt: t.createdAt,
+        institutionId: t.institutionId,
+      };
+    });
+    
+    logger.info('Teachers fetched successfully:', { count: mapped.length });
+    return successResponse(res, mapped, 'Teachers retrieved successfully', {
       pagination: {
         page: pageNum,
         limit: limitNum,
         total,
         pages: Math.ceil(total / limitNum)
       }
-    }, 'Teachers retrieved successfully');
+    });
   } catch (error) {
     logger.error('Error fetching teachers:', error);
     return errorResponse(res, error.message);
@@ -205,7 +176,7 @@ export const getTeacherById = async (req, res) => {
     logger.info('Fetching teacher by ID');
     
     const { id } = req.params;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -213,9 +184,9 @@ export const getTeacherById = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
@@ -223,20 +194,61 @@ export const getTeacherById = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) {
-      query.schoolId = schoolId;
+    if (institutionId) {
+      query.institutionId = institutionId;
     }
     
-    const teacher = await Teacher.findOne(query)
+    let teacher = await Teacher.findOne(query)
       .populate('departmentId', 'name code')
-      .populate('designationId', 'name code')
       .populate('subjects', 'name code')
       .populate('classes.classId', 'name grade')
       .populate('classes.sectionId', 'name')
       .populate('classes.subjectId', 'name code');
     
     if (!teacher) {
-      return notFoundResponse(res, 'Teacher not found');
+      // Fallback: try looking up by userId field (the ID might be a User ID)
+      const userIdQuery = { userId: id };
+      if (institutionId) {
+        userIdQuery.institutionId = institutionId;
+      }
+      teacher = await Teacher.findOne(userIdQuery)
+        .populate('departmentId', 'name code')
+        .populate('subjects', 'name code')
+        .populate('classes.classId', 'name grade')
+        .populate('classes.sectionId', 'name')
+        .populate('classes.subjectId', 'name code');
+    }
+
+    if (!teacher) {
+      // Fallback: check User model
+      let user = await User.findById(id).select('name email phone avatar department designation').lean();
+      
+      // If not in User, check UserCredential (for users not yet migrated to User model)
+      if (!user) {
+        const UserCredential = (await import('../models/UserCredential.js')).default;
+        user = await UserCredential.findById(id).select('fullName email phone avatar').lean();
+        if (user) {
+          user.name = user.fullName || user.name;
+        }
+      }
+      
+      if (user) {
+        teacher = {
+          _id: user._id,
+          userId: user._id,
+          firstName: user.name?.split(' ')[0] || user.name,
+          lastName: user.name?.split(' ').slice(1).join(' ') || '',
+          email: user.email,
+          phone: user.phone || '',
+          department: user.department || '',
+          designation: user.designation || 'Teacher',
+          avatar: user.avatar || '',
+          institutionId: query.institutionId,
+          status: 'active'
+        };
+      } else {
+        return notFoundResponse(res, 'Teacher not found');
+      }
     }
     
     logger.info('Teacher fetched successfully:', { teacherId: id });
@@ -252,7 +264,7 @@ export const createTeacher = async (req, res) => {
   try {
     logger.info('Creating teacher');
     
-    const { firstName, lastName, email, phone, employeeId, gender, dateOfBirth, joiningDate, schoolId, departmentId } = req.body;
+    const { firstName, lastName, email, phone, employeeId, gender, dateOfBirth, joiningDate, institutionId, departmentId } = req.body;
     
     // Validation
     const errors = [];
@@ -295,9 +307,9 @@ export const createTeacher = async (req, res) => {
       if (joiningDateError) errors.push(joiningDateError);
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (departmentId) {
@@ -323,12 +335,36 @@ export const createTeacher = async (req, res) => {
       }
     }
     
-    const teacher = await Teacher.create(req.body);
+    const resolvedInstitutionId = institutionId || req.user?.institutionId;
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      const defaultPassword = 'Teacher@123';
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      user = await User.create({
+        name: `${firstName} ${lastName}`,
+        email,
+        phone,
+        password: hashedPassword,
+        role: 'teacher',
+        institutionId: resolvedInstitutionId,
+        status: 'active'
+      });
+    }
+
+    const teacherData = { ...req.body, userId: user._id, institutionId: resolvedInstitutionId };
+    const teacher = await Teacher.create(teacherData);
     
     logger.info('Teacher created successfully:', { teacherId: teacher._id, email });
-    return createdResponse(res, teacher, 'Teacher created successfully');
+    const result = teacher.toObject ? teacher.toObject() : { ...teacher };
+    result.credentials = { email: user.email, password: 'Teacher@123' };
+    return createdResponse(res, result, 'Teacher created successfully');
   } catch (error) {
     logger.error('Error creating teacher:', error);
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return validationErrorResponse(res, messages);
+    }
     return errorResponse(res, error.message);
   }
 };
@@ -340,7 +376,7 @@ export const updateTeacher = async (req, res) => {
     
     const { id } = req.params;
     const { firstName, lastName, email, phone, employeeId, gender, status } = req.body;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -348,9 +384,9 @@ export const updateTeacher = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (firstName !== undefined) {
@@ -396,8 +432,8 @@ export const updateTeacher = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) {
-      query.schoolId = schoolId;
+    if (institutionId) {
+      query.institutionId = institutionId;
     }
     
     const teacher = await Teacher.findOne(query);
@@ -443,7 +479,7 @@ export const deleteTeacher = async (req, res) => {
     logger.info('Deleting teacher');
     
     const { id } = req.params;
-    const { schoolId, hardDelete } = req.query;
+    const { institutionId, hardDelete } = req.query;
     
     // Validation
     const errors = [];
@@ -451,9 +487,9 @@ export const deleteTeacher = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
@@ -461,8 +497,8 @@ export const deleteTeacher = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) {
-      query.schoolId = schoolId;
+    if (institutionId) {
+      query.institutionId = institutionId;
     }
     
     const teacher = await Teacher.findOne(query);
@@ -492,7 +528,7 @@ export const getTeacherDetails = async (req, res) => {
     logger.info('Fetching teacher details');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     
     // Validation
     const errors = [];
@@ -500,16 +536,16 @@ export const getTeacherDetails = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const teacher = await teacherService.getTeacherDetails(teacherId, schoolId);
+    const teacher = await teacherService.getTeacherDetails(teacherId, institutionId);
     
     if (!teacher) {
       return notFoundResponse(res, 'Teacher not found');
@@ -528,7 +564,7 @@ export const getTeacherRoutine = async (req, res) => {
     logger.info('Fetching teacher routine');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { academicYear, term, dayOfWeek } = req.query;
     
     // Validation
@@ -537,9 +573,9 @@ export const getTeacherRoutine = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (dayOfWeek && !['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(dayOfWeek.toLowerCase())) {
@@ -550,7 +586,7 @@ export const getTeacherRoutine = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const routine = await teacherService.getTeacherRoutine(teacherId, schoolId, {
+    const routine = await teacherService.getTeacherRoutine(teacherId, institutionId, {
       academicYear,
       term,
       dayOfWeek
@@ -568,9 +604,31 @@ export const getTeacherLeaves = async (req, res) => {
   try {
     logger.info('Fetching teacher leaves');
     
-    const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    let { teacherId } = req.params;
+    const { institutionId } = req.user;
     const { status, leaveType, startDate, endDate } = req.query;
+    const userRole = req.user?.role;
+    
+    // For teachers, always use their own ID - no override allowed
+    if (userRole === 'teacher') {
+      const Teacher = (await import('../models/Teacher.js')).default;
+      const teacher = await Teacher.findOne({ userId: req.user.id || req.user._id });
+      if (teacher) {
+        teacherId = teacher._id;
+      } else {
+        teacherId = req.user.id || req.user._id;
+      }
+    }
+    // For principal, admin, institution admin - allow viewing all teacher leaves
+    // No restriction needed for these roles
+    else if (['principal', 'admin', 'institution_admin', 'superadmin'].includes(userRole)) {
+      // These roles can view all teacher leaves in the school
+      // No additional filtering needed
+    }
+    // For other roles, restrict access
+    else {
+      return errorResponse(res, 'You do not have permission to view teacher leaves', 403);
+    }
     
     // Validation
     const errors = [];
@@ -578,9 +636,9 @@ export const getTeacherLeaves = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (status && !VALID_LEAVE_STATUSES.includes(status)) {
@@ -610,7 +668,7 @@ export const getTeacherLeaves = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leaves = await teacherService.getTeacherLeaves(teacherId, schoolId, {
+    const leaves = await teacherService.getTeacherLeaves(teacherId, institutionId, {
       status,
       leaveType,
       startDate,
@@ -630,7 +688,7 @@ export const applyLeave = async (req, res) => {
     logger.info('Applying leave for teacher');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { leaveType, startDate, endDate, reason } = req.body;
     
     // Validation
@@ -639,9 +697,9 @@ export const applyLeave = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!leaveType) {
@@ -677,7 +735,7 @@ export const applyLeave = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leave = await teacherService.applyLeave(teacherId, schoolId, req.body);
+    const leave = await teacherService.applyLeave(teacherId, institutionId, req.body);
     
     logger.info('Leave applied successfully:', { teacherId, leaveId: leave._id });
     return createdResponse(res, leave, 'Leave application submitted successfully');
@@ -692,7 +750,7 @@ export const reviewLeave = async (req, res) => {
     logger.info('Reviewing leave');
     
     const { leaveId } = req.params;
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { status, remarks } = req.body;
     
     // Validation
@@ -701,9 +759,9 @@ export const reviewLeave = async (req, res) => {
     const leaveIdError = validateObjectId(leaveId, 'Leave ID');
     if (leaveIdError) errors.push(leaveIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!status) {
@@ -720,7 +778,7 @@ export const reviewLeave = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leave = await teacherService.reviewLeave(leaveId, schoolId, req.body, userId);
+    const leave = await teacherService.reviewLeave(leaveId, institutionId, req.body, userId);
     
     if (!leave) {
       return notFoundResponse(res, 'Leave not found');
@@ -739,7 +797,7 @@ export const getTeacherAttendance = async (req, res) => {
     logger.info('Fetching teacher attendance');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { startDate, endDate, status, limit } = req.query;
     
     // Validation
@@ -748,9 +806,9 @@ export const getTeacherAttendance = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (startDate) {
@@ -777,7 +835,7 @@ export const getTeacherAttendance = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const attendance = await teacherService.getTeacherAttendance(teacherId, schoolId, {
+    const attendance = await teacherService.getTeacherAttendance(teacherId, institutionId, {
       startDate,
       endDate,
       status,
@@ -797,7 +855,7 @@ export const getTeacherSalary = async (req, res) => {
     logger.info('Fetching teacher salary');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { month, year, paymentStatus, limit } = req.query;
     
     // Validation
@@ -806,9 +864,9 @@ export const getTeacherSalary = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (month && (parseInt(month) < 1 || parseInt(month) > 12)) {
@@ -832,7 +890,7 @@ export const getTeacherSalary = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const salary = await teacherService.getTeacherSalary(teacherId, schoolId, {
+    const salary = await teacherService.getTeacherSalary(teacherId, institutionId, {
       month,
       year,
       paymentStatus,
@@ -852,7 +910,7 @@ export const createSalary = async (req, res) => {
     logger.info('Creating salary record');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { month, year, basicSalary, allowances, deductions } = req.body;
     
     // Validation
@@ -861,9 +919,9 @@ export const createSalary = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!month) {
@@ -896,7 +954,7 @@ export const createSalary = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const salary = await teacherService.createSalary(teacherId, schoolId, req.body);
+    const salary = await teacherService.createSalary(teacherId, institutionId, req.body);
     
     logger.info('Salary record created successfully:', { teacherId, salaryId: salary._id });
     return createdResponse(res, salary, 'Salary record created successfully');
@@ -911,7 +969,7 @@ export const updateSalaryStatus = async (req, res) => {
     logger.info('Updating salary status');
     
     const { salaryId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { paymentStatus } = req.body;
     
     // Validation
@@ -920,9 +978,9 @@ export const updateSalaryStatus = async (req, res) => {
     const salaryIdError = validateObjectId(salaryId, 'Salary ID');
     if (salaryIdError) errors.push(salaryIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!paymentStatus) {
@@ -935,7 +993,7 @@ export const updateSalaryStatus = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const salary = await teacherService.updateSalaryStatus(salaryId, schoolId, req.body);
+    const salary = await teacherService.updateSalaryStatus(salaryId, institutionId, req.body);
     
     if (!salary) {
       return notFoundResponse(res, 'Salary record not found');
@@ -954,7 +1012,7 @@ export const getTeacherLibraryRecords = async (req, res) => {
     logger.info('Fetching teacher library records');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { status } = req.query;
     
     // Validation
@@ -963,16 +1021,16 @@ export const getTeacherLibraryRecords = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const library = await teacherService.getTeacherLibraryRecords(teacherId, schoolId, {
+    const library = await teacherService.getTeacherLibraryRecords(teacherId, institutionId, {
       status
     });
     
@@ -989,7 +1047,7 @@ export const getTeacherDashboardData = async (req, res) => {
     logger.info('Fetching teacher dashboard data');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     
     // Validation
     const errors = [];
@@ -997,16 +1055,16 @@ export const getTeacherDashboardData = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const dashboardData = await teacherService.getTeacherDashboardData(teacherId, schoolId);
+    const dashboardData = await teacherService.getTeacherDashboardData(teacherId, institutionId);
     
     logger.info('Teacher dashboard data fetched successfully:', { teacherId });
     return successResponse(res, dashboardData, 'Teacher dashboard data retrieved successfully');
@@ -1021,7 +1079,7 @@ export const getTeacherSidebarData = async (req, res) => {
     logger.info('Fetching teacher sidebar data');
     
     const { teacherId } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     
     // Validation
     const errors = [];
@@ -1029,16 +1087,16 @@ export const getTeacherSidebarData = async (req, res) => {
     const teacherIdError = validateObjectId(teacherId, 'Teacher ID');
     if (teacherIdError) errors.push(teacherIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const sidebarData = await teacherService.getTeacherSidebarData(teacherId, schoolId);
+    const sidebarData = await teacherService.getTeacherSidebarData(teacherId, institutionId);
     
     logger.info('Teacher sidebar data fetched successfully:', { teacherId });
     return successResponse(res, sidebarData, 'Teacher sidebar data retrieved successfully');
@@ -1055,7 +1113,7 @@ const getTeachersByDepartment = async (req, res) => {
     logger.info('Fetching teachers by department');
     
     const { departmentId } = req.params;
-    const { schoolId, status } = req.query;
+    const { institutionId, status } = req.query;
     
     // Validation
     const errors = [];
@@ -1063,9 +1121,9 @@ const getTeachersByDepartment = async (req, res) => {
     const departmentIdError = validateObjectId(departmentId, 'Department ID');
     if (departmentIdError) errors.push(departmentIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (status && !VALID_STATUSES.includes(status)) {
@@ -1077,7 +1135,7 @@ const getTeachersByDepartment = async (req, res) => {
     }
     
     const query = { departmentId: departmentId };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     if (status) query.status = status;
     else query.isActive = true;
     
@@ -1100,7 +1158,7 @@ const getTeachersBySubject = async (req, res) => {
     logger.info('Fetching teachers by subject');
     
     const { subjectId } = req.params;
-    const { schoolId, status } = req.query;
+    const { institutionId, status } = req.query;
     
     // Validation
     const errors = [];
@@ -1108,9 +1166,9 @@ const getTeachersBySubject = async (req, res) => {
     const subjectIdError = validateObjectId(subjectId, 'Subject ID');
     if (subjectIdError) errors.push(subjectIdError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (status && !VALID_STATUSES.includes(status)) {
@@ -1122,7 +1180,7 @@ const getTeachersBySubject = async (req, res) => {
     }
     
     const query = { subjects: subjectId };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     if (status) query.status = status;
     else query.isActive = true;
     
@@ -1146,7 +1204,7 @@ const updateTeacherStatus = async (req, res) => {
     
     const { id } = req.params;
     const { status } = req.body;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -1154,9 +1212,9 @@ const updateTeacherStatus = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!status) {
@@ -1170,7 +1228,7 @@ const updateTeacherStatus = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     const teacher = await Teacher.findOneAndUpdate(
       query,
@@ -1197,7 +1255,7 @@ const assignSubjects = async (req, res) => {
     
     const { id } = req.params;
     const { subjectIds } = req.body;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -1205,9 +1263,9 @@ const assignSubjects = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!subjectIds || !Array.isArray(subjectIds)) {
@@ -1229,7 +1287,7 @@ const assignSubjects = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     const teacher = await Teacher.findOneAndUpdate(
       query,
@@ -1256,7 +1314,7 @@ const assignClasses = async (req, res) => {
     
     const { id } = req.params;
     const { classes } = req.body;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -1264,9 +1322,9 @@ const assignClasses = async (req, res) => {
     const idError = validateObjectId(id, 'Teacher ID');
     if (idError) errors.push(idError);
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!classes || !Array.isArray(classes)) {
@@ -1299,7 +1357,7 @@ const assignClasses = async (req, res) => {
     }
     
     const query = { _id: id };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     const teacher = await Teacher.findOneAndUpdate(
       query,
@@ -1328,14 +1386,14 @@ const bulkUpdateStatus = async (req, res) => {
     logger.info('Bulk updating teacher status');
     
     const { teacherIds, status } = req.body;
-    const { schoolId } = req.query;
+    const { institutionId } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!teacherIds || !Array.isArray(teacherIds)) {
@@ -1365,7 +1423,7 @@ const bulkUpdateStatus = async (req, res) => {
     }
     
     const query = { _id: { $in: teacherIds } };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     const result = await Teacher.updateMany(
       query,
@@ -1386,14 +1444,14 @@ const bulkDeleteTeachers = async (req, res) => {
     logger.info('Bulk deleting teachers');
     
     const { teacherIds } = req.body;
-    const { schoolId, hardDelete } = req.query;
+    const { institutionId, hardDelete } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (!teacherIds || !Array.isArray(teacherIds)) {
@@ -1417,7 +1475,7 @@ const bulkDeleteTeachers = async (req, res) => {
     }
     
     const query = { _id: { $in: teacherIds } };
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     let result;
     if (hardDelete === 'true') {
@@ -1440,7 +1498,7 @@ const exportTeachers = async (req, res) => {
   try {
     logger.info('Exporting teachers');
     
-    const { format, schoolId, department, subject, status } = req.query;
+    const { format, institutionId, department, subject, status } = req.query;
     
     // Validation
     const errors = [];
@@ -1451,9 +1509,9 @@ const exportTeachers = async (req, res) => {
       errors.push('Invalid export format. Must be one of: ' + VALID_EXPORT_FORMATS.join(', '));
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (department) {
@@ -1475,7 +1533,7 @@ const exportTeachers = async (req, res) => {
     }
     
     const query = {};
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     if (department) query.departmentId = department;
     if (subject) query.subjects = subject;
     if (status) query.status = status;
@@ -1506,14 +1564,14 @@ const getTeacherStatistics = async (req, res) => {
   try {
     logger.info('Fetching teacher statistics');
     
-    const { schoolId, departmentId } = req.query;
+    const { institutionId, departmentId } = req.query;
     
     // Validation
     const errors = [];
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (departmentId) {
@@ -1526,7 +1584,7 @@ const getTeacherStatistics = async (req, res) => {
     }
     
     const query = {};
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     if (departmentId) query.departmentId = departmentId;
     
     const [total, active, inactive, byDepartment, byGender] = await Promise.all([
@@ -1564,7 +1622,7 @@ const searchTeachers = async (req, res) => {
   try {
     logger.info('Searching teachers');
     
-    const { q, schoolId } = req.query;
+    const { q, institutionId } = req.query;
     
     // Validation
     const errors = [];
@@ -1575,9 +1633,9 @@ const searchTeachers = async (req, res) => {
       errors.push('Search query must not exceed 200 characters');
     }
     
-    if (schoolId) {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+    if (institutionId) {
+      const institutionIdError = validateObjectId(institutionId, 'School ID');
+      if (institutionIdError) errors.push(institutionIdError);
     }
     
     if (errors.length > 0) {
@@ -1593,7 +1651,7 @@ const searchTeachers = async (req, res) => {
       ]
     };
     
-    if (schoolId) query.schoolId = schoolId;
+    if (institutionId) query.institutionId = institutionId;
     
     const teachers = await Teacher.find(query)
       .populate('departmentId', 'name code')

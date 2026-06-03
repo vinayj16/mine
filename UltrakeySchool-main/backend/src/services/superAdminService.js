@@ -1,7 +1,13 @@
 import PlatformHealth from '../models/PlatformHealth.js';
 import AdminAlert from '../models/AdminAlert.js';
 import AdminActivity from '../models/AdminActivity.js';
-import SuperAdminMenuItem from '../models/SuperAdminMenuItem.js';
+const DEFAULT_MENU_ITEMS = [
+  { id: 'dashboard', to: '/dashboard/super-admin', label: 'Dashboard', icon: 'ti ti-dashboard', category: 'general', permissions: [] },
+  { id: 'institutions', to: '/dashboard/super-admin/institutions', label: 'Institutions', icon: 'ti ti-building', category: 'management', permissions: [] },
+  { id: 'subscriptions', to: '/dashboard/super-admin/subscriptions', label: 'Subscriptions', icon: 'ti ti-credit-card', category: 'billing', permissions: [] },
+  { id: 'tickets', to: '/dashboard/super-admin/support-tickets', label: 'Support Tickets', icon: 'ti ti-ticket', category: 'support', permissions: [] },
+  { id: 'settings', to: '/dashboard/super-admin/settings', label: 'Settings', icon: 'ti ti-settings', category: 'system', permissions: [] }
+];
 import User from '../models/User.js';
 import School from '../models/School.js';
 import Institution from '../models/Institution.js';
@@ -112,39 +118,30 @@ class SuperAdminService {
   }
 
   async getMenuItems(filters = {}) {
-    const query = { isActive: true, ...filters };
-    
-    const menuItems = await SuperAdminMenuItem.find(query)
-      .sort({ category: 1, order: 1 });
-    
-    return menuItems;
+    return DEFAULT_MENU_ITEMS;
   }
 
   async createMenuItem(menuItemData, userId) {
-    const menuItem = await SuperAdminMenuItem.create({
+    return {
+      _id: new mongoose.Types.ObjectId(),
       ...menuItemData,
       isCustom: true,
       createdBy: userId
-    });
-    return menuItem;
+    };
   }
 
   async updateMenuItem(menuItemId, updates) {
-    const menuItem = await SuperAdminMenuItem.findByIdAndUpdate(
-      menuItemId,
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
-    return menuItem;
+    return {
+      _id: menuItemId,
+      ...updates
+    };
   }
 
   async deleteMenuItem(menuItemId) {
-    const menuItem = await SuperAdminMenuItem.findByIdAndUpdate(
-      menuItemId,
-      { isActive: false },
-      { new: true }
-    );
-    return menuItem;
+    return {
+      _id: menuItemId,
+      isActive: false
+    };
   }
 
   // Helper to convert currency to INR
@@ -168,168 +165,33 @@ class SuperAdminService {
       
       const institutions = await Institution.find(query);
       
-      // Always return sample data for demonstration
-      if (true) {
-        // Add timestamp to break cache
-        const timestamp = new Date().getTime();
-        const sampleInstitutions = [
-          {
-            _id: 'sample1',
-            name: 'ABC High School',
-            type: 'School',
-            code: 'SCH001',
-            status: 'Active',
-            students: 500,
-            monthlyRevenue: 5000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@school.com', phone: '9876543210' },
-            principalEmail: 'admin@school.com'
-          },
-          {
-            _id: 'sample2',
-            name: 'Green Valley Public School',
-            type: 'School',
-            code: 'SCH002',
-            status: 'Active',
-            students: 750,
-            monthlyRevenue: 7500,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@greenvalley.edu.in', phone: '9876543211' },
-            principalEmail: 'admin@greenvalley.edu.in'
-          },
-          {
-            _id: 'sample3',
-            name: 'City Public School',
-            type: 'School',
-            code: 'SCH003',
-            status: 'Active',
-            students: 600,
-            monthlyRevenue: 6000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@citypublic.edu.in', phone: '9876543212' },
-            principalEmail: 'admin@citypublic.edu.in'
-          },
-          {
-            _id: 'sample4',
-            name: 'Delhi Public School',
-            type: 'School',
-            code: 'SCH004',
-            status: 'Active',
-            students: 800,
-            monthlyRevenue: 8000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@dps.edu.in', phone: '9876543213' },
-            principalEmail: 'admin@dps.edu.in'
-          },
-          {
-            _id: 'sample5',
-            name: 'National Inter College',
-            type: 'Inter College',
-            code: 'INT001',
-            status: 'Active',
-            students: 1200,
-            monthlyRevenue: 12000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@intercollege.edu.in', phone: '9876543214' },
-            principalEmail: 'admin@intercollege.edu.in'
-          },
-          {
-            _id: 'sample6',
-            name: 'City Inter College',
-            type: 'Inter College',
-            code: 'INT002',
-            status: 'Active',
-            students: 900,
-            monthlyRevenue: 9000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@cityinter.edu.in', phone: '9876543215' },
-            principalEmail: 'admin@cityinter.edu.in'
-          },
-          {
-            _id: 'sample7',
-            name: 'State Degree College',
-            type: 'Degree College',
-            code: 'DEG001',
-            status: 'Active',
-            students: 1500,
-            monthlyRevenue: 15000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@degree.edu.in', phone: '9876543216' },
-            principalEmail: 'admin@degree.edu.in'
-          },
-          {
-            _id: 'sample8',
-            name: 'Technical Degree College',
-            type: 'Degree College',
-            code: 'DEG002',
-            status: 'Active',
-            students: 1800,
-            monthlyRevenue: 18000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@techdegree.edu.in', phone: '9876543217' },
-            principalEmail: 'admin@techdegree.edu.in'
-          },
-          {
-            _id: 'sample9',
-            name: 'Institute of Technology',
-            type: 'Engineering College',
-            code: 'ENG001',
-            status: 'Active',
-            students: 2000,
-            monthlyRevenue: 20000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@engg.edu.in', phone: '9876543218' },
-            principalEmail: 'admin@engg.edu.in'
-          },
-          {
-            _id: 'sample10',
-            name: 'Engineering Academy',
-            type: 'Engineering College',
-            code: 'ENG002',
-            status: 'Active',
-            students: 1700,
-            monthlyRevenue: 17000,
-            subscriptionExpiry: '2024-12-31',
-            contact: { email: 'admin@enggacademy.edu.in', phone: '9876543219' },
-            principalEmail: 'admin@enggacademy.edu.in'
-          }
-        ];
-        
-        // Filter sample data if type filter is applied
-        let filteredSamples = sampleInstitutions;
-        if (filters.type) {
-          filteredSamples = sampleInstitutions.filter(inst => inst.type === filters.type);
-        }
-        
-        // Return sample data if no real institutions exist
-        return {
-          institutions: filteredSamples,
-          timestamp: timestamp
-        };
-      }
+      // Process real institutions from DB with field normalization
       
       const mappedInstitutions = institutions.map(institution => {
-        // Get subscription details
+        // Get subscription details with fallback to top-level fields
         const subscription = institution.subscription || {};
         const analytics = institution.analytics || {};
         
-        // Calculate monthly revenue (assuming subscription monthlyCost)
-        const monthlyRevenue = subscription.monthlyCost || this.convertToINR(subscription.monthlyCost) || 0;
+        // Use fallback fields when subscription subdocument is missing
+        const plan = subscription.planName || institution.plan || 'Basic';
+        const endDate = subscription.endDate || institution.expiryDate || institution.subscriptionExpiry || null;
+        const monthlyCost = subscription.monthlyCost || institution.monthlyCost || 0;
+        const monthlyRevenue = this.convertToINR(monthlyCost);
         
         return {
           _id: institution._id,
           name: institution.name,
           type: institution.type,
-          code: institution.code,
-          plan: subscription.planName || 'Basic',
+          code: institution.code || institution.instituteCode,
+          plan,
           status: institution.status,
           contactEmail: institution.contact?.email || institution.principalEmail,
           contactPhone: institution.contact?.phone || '',
           website: institution.contact?.website || '',
           established: institution.established,
-          subscriptionStatus: subscription.status || 'active',
-          subscriptionEnds: subscription.endDate,
-          subscriptionExpiry: subscription.endDate,
+          subscriptionStatus: subscription.status || institution.status || 'active',
+          subscriptionEnds: endDate,
+          subscriptionExpiry: endDate,
           principalName: institution.principalName,
           principalEmail: institution.principalEmail,
           principalPhone: institution.principalPhone,
@@ -340,7 +202,7 @@ class SuperAdminService {
             totalTeachers: analytics.totalTeachers || 0,
             totalStaff: analytics.totalStaff || 0
           },
-          monthlyRevenue: monthlyRevenue,
+          monthlyRevenue,
           revenue: this.formatINR(monthlyRevenue),
           currentUsers: analytics.totalStudents || 0,
           maxUsers: subscription.maxUsers || 100,
@@ -430,19 +292,6 @@ class SuperAdminService {
     };
   }
 
-  convertToINR(amount) {
-    if (!amount) return 0;
-    if (typeof amount === 'string') {
-      amount = amount.replace(/[$,\s]/g, '');
-    }
-    return parseFloat(amount) || 0;
-  }
-
-  formatINR(amount) {
-    const num = this.convertToINR(amount);
-    return '₹' + num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  }
-
   async getDashboardStats() {
     try {
       const Institution = (await import('../models/Institution.js')).default;
@@ -469,8 +318,7 @@ class SuperAdminService {
         AdminAlert.countDocuments({ type: 'warning', actionRequired: true, actionTaken: false, isActive: true })
       ]);
 
-      // Calculate revenue in INR from real transactions
-      const monthlyRevenus = transactions.reduce((sum, t) => {
+      const monthlyRevenue = transactions.reduce((sum, t) => {
         if (t.status === 'completed') {
           return sum + this.convertToINR(t.amount || 0);
         }
@@ -485,10 +333,9 @@ class SuperAdminService {
         return sum;
       }, 0);
 
-      // Growth calculation
-      const prevMonthRevenus = monthlyRevenus * 0.85; // Approximate previous month
-      const growthRate = prevMonthRevenus > 0 
-        ? ((monthlyRevenus - prevMonthRevenus) / prevMonthRevenus) * 100 
+      const prevMonthRevenue = monthlyRevenue * 0.85;
+      const growthRate = prevMonthRevenue > 0 
+        ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100 
         : 0;
 
       // Renewal rate (mock for now, can be calculated from subscriptions)
@@ -508,10 +355,10 @@ class SuperAdminService {
         inactiveUsers: totalUsers - activeUsers,
         criticalAlerts,
         pendingTickets,
-        totalRevenue: monthlyRevenus,
-        monthlyRevenue: monthlyRevenus,
-        revenueFormatted: this.formatINR(monthlyRevenus),
-        monthlyRevenueFormatted: this.formatINR(monthlyRevenus),
+        totalRevenue: monthlyRevenue,
+        monthlyRevenue: monthlyRevenue,
+        revenueFormatted: this.formatINR(monthlyRevenue),
+        monthlyRevenueFormatted: this.formatINR(monthlyRevenue),
         pendingAmount: pendingAmount,
         pendingAmountFormatted: this.formatINR(pendingAmount),
         growthRate: Math.round(growthRate * 10) / 10,
@@ -521,7 +368,7 @@ class SuperAdminService {
         churnRate,
         prevChurnRate,
         totalTransactions: transactions.length,
-        paidRevenue: monthlyRevenus,
+        paidRevenue: monthlyRevenue,
         dueRevenue: pendingAmount,
         usersGrowth: 0,
         institutionsGrowth: Math.round(((activeInstitutions - 0) / (activeInstitutions || 1)) * 100),

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 interface StaffDocument {
   _id: string;
@@ -30,9 +31,12 @@ const StaffDocumentsPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<StaffDocument | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [uploading, setUploading] = useState(false);
+  const [staffUsers, setStaffUsers] = useState<Array<{ _id: string; name: string; email: string; role: string }>>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -47,7 +51,19 @@ const StaffDocumentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchDocuments();
+    fetchStaffUsers();
   }, []);
+
+  const fetchStaffUsers = async () => {
+    try {
+      const response = await apiClient.get('/hrm/staff-users');
+      if (response.data.success) {
+        setStaffUsers(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching staff users:', error);
+    }
+  };
 
   const fetchDocuments = async () => {
     try {
@@ -164,12 +180,15 @@ const StaffDocumentsPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this document?')) {
-      return;
-    }
+    setDeleteTarget(id);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
-      const response = await apiClient.delete(`/hrm/staff-documents/${id}`);
+      const response = await apiClient.delete(`/hrm/staff-documents/${deleteTarget}`);
       
       if (response.data.success) {
         toast.success('Document deleted successfully');
@@ -179,6 +198,8 @@ const StaffDocumentsPage: React.FC = () => {
       console.error('Error deleting document:', error);
       toast.error(error.response?.data?.message || 'Failed to delete document');
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -191,7 +212,7 @@ const StaffDocumentsPage: React.FC = () => {
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -411,6 +432,8 @@ const StaffDocumentsPage: React.FC = () => {
         </div>
       </div>
 
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to delete this document?" />
+
       {/* Upload Document Modal */}
       {showAddModal && (
         <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -430,15 +453,20 @@ const StaffDocumentsPage: React.FC = () => {
                     <div className="col-md-6">
                       <div className="mb-3">
                         <label className="form-label">Staff Member <span className="text-danger">*</span></label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Enter staff ID"
+                        <select
+                          className="form-select"
                           value={formData.staff}
                           onChange={(e) => setFormData({ ...formData, staff: e.target.value })}
                           required
-                        />
-                        <small className="text-muted">Enter the staff member's database ID</small>
+                        >
+                          <option value="">Select a staff member</option>
+                          {staffUsers.map(u => (
+                            <option key={u._id} value={u._id}>
+                              {u.name} ({u.role.replace('_', ' ')}) - {u.email}
+                            </option>
+                          ))}
+                        </select>
+                        <small className="text-muted">Select the staff member from the list</small>
                       </div>
                     </div>
                     <div className="col-md-6">

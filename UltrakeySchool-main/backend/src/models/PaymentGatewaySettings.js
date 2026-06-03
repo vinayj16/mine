@@ -76,7 +76,7 @@ const paymentGatewaySettingsSchema = new mongoose.Schema({
     settings: {
       currency: {
         type: String,
-        default: 'USD'
+        default: 'INR'
       },
       acceptedPaymentMethods: [{
         type: String

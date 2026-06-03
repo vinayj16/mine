@@ -63,7 +63,7 @@ const StudentDetailsPage: React.FC = () => {
   const [student, setStudent] = useState<Student | null>(null);
   const [showAddFeesModal, setShowAddFeesModal] = useState(false);
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchStudent = async () => {
     if (!id) {
@@ -77,7 +77,7 @@ const StudentDetailsPage: React.FC = () => {
       setError(null);
 
       const response = await apiClient.get(`/students/${id}`, {
-        params: { schoolId }
+        params: { institutionId }
       });
 
       if (response.data.success) {
@@ -108,7 +108,7 @@ const StudentDetailsPage: React.FC = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const capitalize = (str?: string) => {

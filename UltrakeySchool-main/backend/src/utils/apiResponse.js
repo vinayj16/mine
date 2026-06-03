@@ -1,8 +1,3 @@
-/**
- * Standardized API Response Helper
- * Provides consistent response format across all endpoints
- */
-
 export const successResponse = (res, data, message = 'Success', meta = null) => {
   const response = {
     success: true,
@@ -174,6 +169,7 @@ const getErrorCode = (statusCode) => {
 };
 
 export default {
+  // Full names
   successResponse,
   createdResponse,
   updatedResponse,
@@ -185,5 +181,18 @@ export default {
   notFoundResponse,
   conflictResponse,
   badRequestResponse,
-  tooManyRequestsResponse
+  tooManyRequestsResponse,
+  // Short-name aliases for legacy controller compatibility
+  success: successResponse,
+  created: createdResponse,
+  updated: updatedResponse,
+  deleted: deletedResponse,
+  error: errorResponse,
+  validationError: validationErrorResponse,
+  unauthorized: unauthorizedResponse,
+  forbidden: forbiddenResponse,
+  notFound: notFoundResponse,
+  conflict: conflictResponse,
+  badRequest: badRequestResponse,
+  tooManyRequests: tooManyRequestsResponse
 };

@@ -110,7 +110,7 @@ const FinancePage: React.FC = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <h5 className="card-title mb-0">Total Revenue</h5>
-                  <h3 className="mb-0">${financeData.totalRevenue.toLocaleString()}</h3>
+                  <h3 className="mb-0">₹{financeData.totalRevenue.toLocaleString()}</h3>
                 </div>
                 <div className="avatar avatar-md bg-white bg-opacity-20 rounded-circle">
                   <i className="ti ti-cash fs-20" />
@@ -125,7 +125,7 @@ const FinancePage: React.FC = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <h5 className="card-title mb-0">Total Expenses</h5>
-                  <h3 className="mb-0">${financeData.totalExpenses.toLocaleString()}</h3>
+                  <h3 className="mb-0">₹{financeData.totalExpenses.toLocaleString()}</h3>
                 </div>
                 <div className="avatar avatar-md bg-white bg-opacity-20 rounded-circle">
                   <i className="ti ti-wallet fs-20" />
@@ -140,7 +140,7 @@ const FinancePage: React.FC = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <h5 className="card-title mb-0">Net Income</h5>
-                  <h3 className="mb-0">${financeData.netIncome.toLocaleString()}</h3>
+                  <h3 className="mb-0">₹{financeData.netIncome.toLocaleString()}</h3>
                 </div>
                 <div className="avatar avatar-md bg-white bg-opacity-20 rounded-circle">
                   <i className="ti ti-chart-line fs-20" />
@@ -155,7 +155,7 @@ const FinancePage: React.FC = () => {
               <div className="d-flex align-items-center">
                 <div className="flex-grow-1">
                   <h5 className="card-title mb-0">Pending Payments</h5>
-                  <h3 className="mb-0">${financeData.pendingPayments.toLocaleString()}</h3>
+                  <h3 className="mb-0">₹{financeData.pendingPayments.toLocaleString()}</h3>
                 </div>
                 <div className="avatar avatar-md bg-white bg-opacity-20 rounded-circle">
                   <i className="ti ti-clock fs-20" />
@@ -201,7 +201,7 @@ const FinancePage: React.FC = () => {
                           <td className={
                             transaction.type === 'income' ? 'text-success' : 'text-danger'
                           }>
-                            ${Math.abs(transaction.amount).toLocaleString()}
+                            ₹{Math.abs(transaction.amount).toLocaleString()}
                           </td>
                           <td>
                             <span className={`badge ${
@@ -237,12 +237,12 @@ const FinancePage: React.FC = () => {
                       <div className="d-flex justify-content-between align-items-center mb-2">
                         <strong>{month.month}</strong>
                         <span className="badge bg-primary">
-                          Net: ${(month.revenue - month.expenses).toLocaleString()}
+                          Net: ₹{(month.revenue - month.expenses).toLocaleString()}
                         </span>
                       </div>
                       <div className="d-flex justify-content-between text-sm">
-                        <span className="text-success">Revenue: ${month.revenue.toLocaleString()}</span>
-                        <span className="text-danger">Expenses: ${month.expenses.toLocaleString()}</span>
+                        <span className="text-success">Revenue: ₹{month.revenue.toLocaleString()}</span>
+                        <span className="text-danger">Expenses: ₹{month.expenses.toLocaleString()}</span>
                       </div>
                     </div>
                   ))}

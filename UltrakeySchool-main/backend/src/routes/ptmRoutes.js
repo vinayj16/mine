@@ -1,61 +1,39 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
-import { authorize } from '../middleware/authGuard.js';
-import ptmController from '../controllers/ptmController.js';
-const {
-  getPTMSlots,
-  createPTMSlots,
-  getPTMSlotById,
-  updatePTMSlot,
-  deletePTMSlot,
-  bookPTMSlot,
-  cancelPTMBooking,
-  scheduleVideoMeeting,
-  sendPTMReminder,
-  sendAutomatedReminders,
-  getPTMStatistics,
-  completePTMSlot
-} = ptmController;
+import { validateTenantAccess } from '../middleware/multiTenant.js';
+import {
+  getPTMSlots, getPTMSlotById, createPTMSlots, updatePTMSlot,
+  deletePTMSlot, bulkDeletePTMSlots, bookPTMSlot, cancelPTMBooking,
+  reschedulePTMSlot, completePTMSlot, sendPTMReminder, scheduleVideoMeeting,
+  getPTMStatistics, getPTMSlotsByTeacher, getPTMBookingsByParent,
+  getAvailablePTMSlots, exportPTMData, getPTMAttendanceReport,
+  assignPTMToParent,
+} from '../controllers/ptmController.js';
 
 const router = express.Router();
 
-// Apply authentication middleware to all routes (TESTED & VERIFIED)
-router.use(protect);  
+router.use(protect);
+router.use(validateTenantAccess);
 
-// Get PTM slots (TESTED & VERIFIED)
-router.get('/slots', getPTMSlots);  
+router.get('/stats', getPTMStatistics);
+router.get('/available', getAvailablePTMSlots);
+router.get('/export', exportPTMData);
+router.get('/report/attendance', getPTMAttendanceReport);
+router.get('/teacher/:teacherId', getPTMSlotsByTeacher);
+router.get('/parent/:parentId', getPTMBookingsByParent);
 
-// Create PTM slots (teachers and admins only) (TESTED & VERIFIED)
-router.post('/slots', authorize(['admin', 'teacher', 'principal']), createPTMSlots);  
-
-// Get slot details (TESTED & VERIFIED)
-router.get('/slots/:id', getPTMSlotById);  
-
-// Update slot (teachers and admins only) (TESTED & VERIFIED)
-router.put('/slots/:id', authorize(['admin', 'teacher', 'principal']), updatePTMSlot);  
-
-// Delete slot (admins only) (TESTED & VERIFIED)
-router.delete('/slots/:id', authorize(['admin', 'principal']), deletePTMSlot);  
-
-// Book PTM slot (parents and students) (TESTED & VERIFIED)
-router.post('/slots/:id/book', bookPTMSlot);  
-
-// Cancel booking (TESTED & VERIFIED)
-router.put('/slots/:id/cancel', cancelPTMBooking);  
-
-// Schedule video meeting (teachers and admins only) (TESTED & VERIFIED)
-router.post('/slots/:id/video-meeting', authorize(['admin', 'teacher', 'principal']), scheduleVideoMeeting);  
-
-// Send PTM reminder (teachers and admins only) (TESTED & VERIFIED)
-router.post('/slots/:id/reminder', authorize(['admin', 'teacher', 'principal']), sendPTMReminder);  
-
-// Send automated reminders (admins only) (TESTED & VERIFIED)
-router.post('/reminders/automated', authorize(['admin', 'principal']), sendAutomatedReminders);  
-
-// Get PTM statistics (admins and teachers) (TESTED & VERIFIED)
-router.get('/statistics', authorize(['admin', 'teacher', 'principal']), getPTMStatistics);  
-
-// Complete PTM slot (teachers and admins only) (TESTED & VERIFIED)
-router.put('/slots/:id/complete', authorize(['admin', 'teacher', 'principal']), completePTMSlot);  
+router.get('/', getPTMSlots);
+router.get('/:id', getPTMSlotById);
+router.post('/', createPTMSlots);
+router.put('/:id', updatePTMSlot);
+router.delete('/bulk', bulkDeletePTMSlots);
+router.delete('/:id', deletePTMSlot);
+router.post('/:id/book', bookPTMSlot);
+router.post('/:id/assign', assignPTMToParent);
+router.post('/:id/cancel', cancelPTMBooking);
+router.post('/:id/reschedule', reschedulePTMSlot);
+router.post('/:id/complete', completePTMSlot);
+router.post('/:id/reminder', sendPTMReminder);
+router.post('/:id/meeting', scheduleVideoMeeting);
 
 export default router;

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { transportAssignmentService } from '../../services/transportAssignmentService';
 import apiClient from '../../api/client';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../store/authStore';
 
 interface AssignedVehicle {
   _id: string;
@@ -53,7 +54,8 @@ const TransportAssignVehiclePage = () => {
   const [pickupPoints, setPickupPoints] = useState<PickupPointOption[]>([]);
   const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
 
-  const institutionId = '507f1f77bcf86cd799439011';
+  const { user } = useAuth();
+  const institutionId = user?.institutionId || user?.institution || '';
 
   useEffect(() => {
     fetchAssignments();
@@ -62,10 +64,11 @@ const TransportAssignVehiclePage = () => {
 
   const fetchFormOptions = async () => {
     try {
+      const query = institutionId ? `?institutionId=${institutionId}&tenant=${institutionId}` : '';
       const [routesRes, pickupRes, vehiclesRes] = await Promise.all([
-        apiClient.get('/transport/routes'),
-        apiClient.get('/transport/pickup-points'),
-        apiClient.get('/transport/vehicles')
+        apiClient.get(`/transport/routes${query}`),
+        apiClient.get(`/transport/pickup-points${query}`),
+        apiClient.get(`/transport/vehicles${query}`)
       ]);
       
       const extractArray = (res: any) => {
@@ -175,25 +178,40 @@ const TransportAssignVehiclePage = () => {
   };
 
   const handleDeleteVehicle = async () => {
+    const idsToDelete = selectedVehicles.length > 0 ? [...selectedVehicles] : (editingVehicle ? [editingVehicle._id] : []);
+    if (idsToDelete.length === 0) return;
+
+    // Save original data for potential rollback
+    const originalData = [...vehicles];
+
+    // Optimistically remove from UI immediately
+    setVehicles(prev => prev.filter(v => !idsToDelete.includes(v._id)));
+    setShowDeleteModal(false);
+    setEditingVehicle(null);
+    setSelectedVehicles([]);
+    setSelectAll(false);
+    setLoading(true);
+
     try {
-      setLoading(true);
       if (selectedVehicles.length > 0) {
-        const response = await transportAssignmentService.bulkDeleteAssignments(selectedVehicles, institutionId);
+        const response = await transportAssignmentService.bulkDeleteAssignments(idsToDelete, institutionId);
         if (response.success) {
           toast.success(response.message);
-          setSelectedVehicles([]);
-          setSelectAll(false);
+        } else {
+          throw new Error(response.message || 'Bulk delete failed');
         }
       } else if (editingVehicle) {
         const response = await transportAssignmentService.deleteAssignment(editingVehicle._id, institutionId);
         if (response.success) {
           toast.success('Assignment deleted successfully');
+        } else {
+          throw new Error(response.message || 'Delete failed');
         }
       }
-      setShowDeleteModal(false);
-      setEditingVehicle(null);
       fetchAssignments();
     } catch (error: any) {
+      // Rollback optimistic removal on failure
+      setVehicles(originalData);
       toast.error(error.response?.data?.message || error.message || 'Failed to delete assignment');
     } finally {
       setLoading(false);
@@ -246,10 +264,10 @@ const TransportAssignVehiclePage = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/transport/routes">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Assign Vehicle</li>
             </ol>

@@ -48,14 +48,16 @@ const getAllGuardians = async (req, res, next) => {
   try {
     logger.info('Fetching all guardians');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
+    const { institutionId: queryInstitutionId } = req.query;
+    const resolvedinstitutionId = institutionId || queryInstitutionId || req.user?.institutionId || req.user?.institutionId;
     const { status, search, page, limit, relationship, hasPermission } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(resolvedinstitutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (status && !VALID_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_STATUSES.join(', '));
@@ -85,7 +87,7 @@ const getAllGuardians = async (req, res, next) => {
     }
     
     const filters = { status, search, page: pageNum, limit: limitNum, relationship, hasPermission };
-    const result = await guardianService.getAllGuardians(schoolId, filters);
+    const result = await guardianService.getAllGuardians(resolvedinstitutionId, filters);
     
     logger.info('Guardians fetched successfully');
     return successResponse(res, result, 'Guardians retrieved successfully');
@@ -99,13 +101,13 @@ const getGuardianById = async (req, res, next) => {
   try {
     logger.info('Fetching guardian by ID');
     
-    const { schoolId, guardianId } = req.params;
+    const { institutionId, guardianId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -114,7 +116,7 @@ const getGuardianById = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.getGuardianById(guardianId, schoolId);
+    const guardian = await guardianService.getGuardianById(guardianId, institutionId);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -132,13 +134,13 @@ const getGuardiansByStudentId = async (req, res, next) => {
   try {
     logger.info('Fetching guardians by student ID');
     
-    const { schoolId, studentId } = req.params;
+    const { institutionId, studentId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
@@ -147,7 +149,7 @@ const getGuardiansByStudentId = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardians = await guardianService.getGuardiansByStudentId(studentId, schoolId);
+    const guardians = await guardianService.getGuardiansByStudentId(studentId, institutionId);
     
     logger.info('Guardians fetched successfully for student:', { studentId });
     return successResponse(res, guardians, 'Guardians retrieved successfully');
@@ -161,13 +163,13 @@ const getPrimaryGuardian = async (req, res, next) => {
   try {
     logger.info('Fetching primary guardian');
     
-    const { schoolId, studentId } = req.params;
+    const { institutionId, studentId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
@@ -176,7 +178,7 @@ const getPrimaryGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.getPrimaryGuardian(studentId, schoolId);
+    const guardian = await guardianService.getPrimaryGuardian(studentId, institutionId);
     
     if (!guardian) {
       return notFoundResponse(res, 'Primary guardian not found');
@@ -194,13 +196,13 @@ const getEmergencyContacts = async (req, res, next) => {
   try {
     logger.info('Fetching emergency contacts');
     
-    const { schoolId, studentId } = req.params;
+    const { institutionId, studentId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
@@ -209,7 +211,7 @@ const getEmergencyContacts = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardians = await guardianService.getEmergencyContacts(studentId, schoolId);
+    const guardians = await guardianService.getEmergencyContacts(studentId, institutionId);
     
     logger.info('Emergency contacts fetched successfully:', { studentId });
     return successResponse(res, guardians, 'Emergency contacts retrieved successfully');
@@ -223,14 +225,14 @@ const createGuardian = async (req, res, next) => {
   try {
     logger.info('Creating guardian');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { firstName, lastName, email, phone, relationship, address, occupation, emergencyContact } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!firstName || firstName.trim().length === 0) {
       errors.push('First name is required');
@@ -266,11 +268,11 @@ const createGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardianData = { ...req.body, schoolId };
-    const guardian = await guardianService.createGuardian(guardianData);
+    const guardianData = { ...req.body, institutionId };
+    const result = await guardianService.createGuardian(guardianData);
     
-    logger.info('Guardian created successfully:', { guardianId: guardian._id });
-    return createdResponse(res, guardian, 'Guardian created successfully');
+    logger.info('Guardian created successfully:', { guardianId: result._id });
+    return createdResponse(res, result, 'Guardian created successfully');
   } catch (error) {
     logger.error('Error creating guardian:', error);
     next(error);
@@ -281,14 +283,14 @@ const updateGuardian = async (req, res, next) => {
   try {
     logger.info('Updating guardian');
     
-    const { schoolId, guardianId } = req.params;
+    const { institutionId, guardianId } = req.params;
     const { firstName, lastName, email, phone, relationship, address, occupation, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -339,7 +341,7 @@ const updateGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.updateGuardian(guardianId, schoolId, req.body);
+    const guardian = await guardianService.updateGuardian(guardianId, institutionId, req.body);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -357,13 +359,13 @@ const deleteGuardian = async (req, res, next) => {
   try {
     logger.info('Deleting guardian');
     
-    const { schoolId, guardianId } = req.params;
+    const { institutionId, guardianId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -372,7 +374,7 @@ const deleteGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.deleteGuardian(guardianId, schoolId);
+    const guardian = await guardianService.deleteGuardian(guardianId, institutionId);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -390,14 +392,14 @@ const addChildToGuardian = async (req, res, next) => {
   try {
     logger.info('Adding child to guardian');
     
-    const { schoolId, guardianId } = req.params;
+    const { institutionId, guardianId } = req.params;
     const { studentId, relationship, isPrimary, isEmergencyContact } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -413,7 +415,7 @@ const addChildToGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.addChildToGuardian(guardianId, schoolId, req.body);
+    const guardian = await guardianService.addChildToGuardian(guardianId, institutionId, req.body);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -431,13 +433,13 @@ const removeChildFromGuardian = async (req, res, next) => {
   try {
     logger.info('Removing child from guardian');
     
-    const { schoolId, guardianId, studentId } = req.params;
+    const { institutionId, guardianId, studentId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -449,7 +451,7 @@ const removeChildFromGuardian = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.removeChildFromGuardian(guardianId, schoolId, studentId);
+    const guardian = await guardianService.removeChildFromGuardian(guardianId, institutionId, studentId);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -467,14 +469,14 @@ const updateChildRelationship = async (req, res, next) => {
   try {
     logger.info('Updating child relationship');
     
-    const { schoolId, guardianId, studentId } = req.params;
+    const { institutionId, guardianId, studentId } = req.params;
     const { relationship, isPrimary, isEmergencyContact } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -490,7 +492,7 @@ const updateChildRelationship = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.updateChildRelationship(guardianId, schoolId, studentId, req.body);
+    const guardian = await guardianService.updateChildRelationship(guardianId, institutionId, studentId, req.body);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -508,14 +510,14 @@ const updateGuardianPermissions = async (req, res, next) => {
   try {
     logger.info('Updating guardian permissions');
     
-    const { schoolId, guardianId } = req.params;
+    const { institutionId, guardianId } = req.params;
     const { permissions } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const guardianIdError = validateObjectId(guardianId, 'Guardian ID');
     if (guardianIdError) errors.push(guardianIdError);
@@ -533,7 +535,7 @@ const updateGuardianPermissions = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardian = await guardianService.updateGuardianPermissions(guardianId, schoolId, req.body);
+    const guardian = await guardianService.updateGuardianPermissions(guardianId, institutionId, req.body);
     
     if (!guardian) {
       return notFoundResponse(res, 'Guardian not found');
@@ -551,15 +553,15 @@ const getGuardianStats = async (req, res, next) => {
   try {
     logger.info('Fetching guardian statistics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) {
-      return validationErrorResponse(res, [schoolIdError]);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) {
+      return validationErrorResponse(res, [institutionIdError]);
     }
     
-    const stats = await guardianService.getGuardianStats(schoolId);
+    const stats = await guardianService.getGuardianStats(institutionId);
     
     logger.info('Guardian statistics fetched successfully');
     return successResponse(res, stats, 'Statistics retrieved successfully');
@@ -573,14 +575,14 @@ const searchGuardians = async (req, res, next) => {
   try {
     logger.info('Searching guardians');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { q, page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!q || q.trim().length === 0) {
       errors.push('Search query (q) is required');
@@ -603,7 +605,7 @@ const searchGuardians = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardians = await guardianService.searchGuardians(schoolId, q, { page: pageNum, limit: limitNum });
+    const guardians = await guardianService.searchGuardians(institutionId, q, { page: pageNum, limit: limitNum });
     
     logger.info('Guardian search completed successfully');
     return successResponse(res, guardians, 'Guardians retrieved successfully');
@@ -617,13 +619,13 @@ const getGuardiansWithPermission = async (req, res, next) => {
   try {
     logger.info('Fetching guardians with specific permission');
     
-    const { schoolId, permission } = req.params;
+    const { institutionId, permission } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!permission || permission.trim().length === 0) {
       errors.push('Permission is required');
@@ -635,7 +637,7 @@ const getGuardiansWithPermission = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const guardians = await guardianService.getGuardiansWithPermission(schoolId, permission);
+    const guardians = await guardianService.getGuardiansWithPermission(institutionId, permission);
     
     logger.info('Guardians with permission fetched successfully:', { permission });
     return successResponse(res, guardians, 'Guardians retrieved successfully');
@@ -649,14 +651,14 @@ const bulkUpdateStatus = async (req, res, next) => {
   try {
     logger.info('Bulk updating guardian statuses');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { guardianIds, status } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!guardianIds || !Array.isArray(guardianIds) || guardianIds.length === 0) {
       errors.push('Guardian IDs array is required and must not be empty');
@@ -684,7 +686,7 @@ const bulkUpdateStatus = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await guardianService.bulkUpdateStatus(schoolId, guardianIds, status);
+    const result = await guardianService.bulkUpdateStatus(institutionId, guardianIds, status);
     
     logger.info('Guardian statuses updated successfully:', { count: result.modifiedCount });
     return successResponse(res, result, 'Guardian statuses updated successfully');
@@ -698,14 +700,14 @@ const exportGuardians = async (req, res, next) => {
   try {
     logger.info('Exporting guardians');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, status, relationship } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
@@ -725,7 +727,7 @@ const exportGuardians = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await guardianService.exportGuardians(schoolId, format.toLowerCase(), { status, relationship });
+    const exportData = await guardianService.exportGuardians(institutionId, format.toLowerCase(), { status, relationship });
     
     logger.info('Guardians exported successfully:', { format });
     return successResponse(res, exportData, 'Guardians exported successfully');
@@ -739,14 +741,14 @@ const getGuardiansByRelationship = async (req, res, next) => {
   try {
     logger.info('Fetching guardians by relationship');
     
-    const { schoolId, relationship } = req.params;
+    const { institutionId, relationship } = req.params;
     const { page, limit } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!relationship || relationship.trim().length === 0) {
       errors.push('Relationship is required');
@@ -769,7 +771,7 @@ const getGuardiansByRelationship = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await guardianService.getGuardiansByRelationship(schoolId, relationship, { page: pageNum, limit: limitNum });
+    const result = await guardianService.getGuardiansByRelationship(institutionId, relationship, { page: pageNum, limit: limitNum });
     
     logger.info('Guardians fetched successfully by relationship:', { relationship });
     return successResponse(res, result, 'Guardians retrieved successfully');

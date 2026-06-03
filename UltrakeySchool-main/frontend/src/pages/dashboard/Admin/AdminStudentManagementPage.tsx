@@ -46,11 +46,11 @@ const AdminStudentManagementPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || '' : '';
       
-      const response = await apiClient.get('/students', { params: { schoolId } });
+      const response = await apiClient.get('/students', { params: { institutionId } });
       
       // Store raw students for the table
       const studentsArray = response.data?.data || [];
@@ -491,6 +491,7 @@ const AdminStudentManagementPage: React.FC = () => {
                           <option value="">Select Gender</option>
                           <option value="male">Male</option>
                           <option value="female">Female</option>
+                          <option value="other">Other</option>
                         </select>
                       </div>
                     </div>

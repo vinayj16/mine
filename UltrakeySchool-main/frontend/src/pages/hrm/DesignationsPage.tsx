@@ -50,7 +50,7 @@ const DesignationsPage = () => {
   const toggleSelectAll = () => {
     const next = !selectAll;
     setSelectAll(next);
-    setSelectedDesignations(next ? designations.map((designation) => designation.designationId) : []);
+    setSelectedDesignations(next ? designations.map((designation) => designation._id) : []);
   };
 
   const toggleDesignationSelection = (id: string) => {
@@ -132,7 +132,7 @@ const DesignationsPage = () => {
 
     try {
       setSubmitting(true);
-      await hrmService.updateDesignation(editingDesignation.designationId, updateData);
+      await hrmService.updateDesignation(editingDesignation._id, updateData);
       await loadDesignations();
       setShowEditModal(false);
       setEditingDesignation(null);
@@ -324,19 +324,19 @@ const DesignationsPage = () => {
                   </tr>
                 ) : (
                   designations.map((designation) => (
-                    <tr key={designation.designationId}>
+                    <tr key={designation._id}>
                       <td>
                         <div className="form-check form-check-md">
                           <input
                             className="form-check-input"
                             type="checkbox"
-                            checked={selectedDesignations.includes(designation.designationId)}
-                            onChange={() => toggleDesignationSelection(designation.designationId)}
+                            checked={selectedDesignations.includes(designation._id)}
+                            onChange={() => toggleDesignationSelection(designation._id)}
                           />
                         </div>
                       </td>
                       <td>
-                        <Link to="#" className="link-primary">{designation.designationId}</Link>
+                        <Link to="#" className="link-primary">{designation._id}</Link>
                       </td>
                       <td>{designation.name}</td>
                       <td>
@@ -370,7 +370,7 @@ const DesignationsPage = () => {
                                 <button
                                   className="dropdown-item rounded-1 text-danger"
                                   onClick={() => {
-                                    setSelectedDesignations([designation.designationId]);
+                                    setSelectedDesignations([designation._id]);
                                     setShowDeleteModal(true);
                                   }}
                                 >

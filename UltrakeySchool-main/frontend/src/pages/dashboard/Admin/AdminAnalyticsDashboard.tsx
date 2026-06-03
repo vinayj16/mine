@@ -124,7 +124,7 @@ const AdminAnalyticsDashboard = () => {
       deltaTone: 'bg-danger',
       icon: '/assets/img/icons/technology-06.svg',
       active: 'Overdue',
-      inactive: `$${feesData.pendingAmount || 0}K Due`,
+      inactive: `₹${feesData.pendingAmount || 0}K Due`,
       avatarTone: 'bg-danger-transparent'
     },
     {
@@ -140,7 +140,7 @@ const AdminAnalyticsDashboard = () => {
   ] : [
     { label: 'New Admissions (Month)', value: '64',    delta: '+8.1%',       deltaTone: 'bg-success',   icon: '/assets/img/icons/student.svg',       active: '46 Approved',  inactive: '18 Pending',  avatarTone: 'bg-success-transparent'  },
     { label: "Today's Attendance",     value: '94.2%', delta: '+1.2% vs avg',deltaTone: 'bg-primary',   icon: '/assets/img/icons/technology-05.svg', active: '3,442 Present',inactive: '212 Absent',  avatarTone: 'bg-primary-transparent'  },
-    { label: 'Pending Fee Reminders',  value: '124',   delta: '60+ Days',    deltaTone: 'bg-danger',    icon: '/assets/img/icons/technology-06.svg', active: 'Overdue',      inactive: '$32K Due',    avatarTone: 'bg-danger-transparent'   },
+    { label: 'Pending Fee Reminders',  value: '124',   delta: '60+ Days',    deltaTone: 'bg-danger',    icon: '/assets/img/icons/technology-06.svg', active: 'Overdue',      inactive: '₹32K Due',    avatarTone: 'bg-danger-transparent'   },
     { label: 'Open Complaints',        value: '7',     delta: '3 Urgent',    deltaTone: 'bg-secondary', icon: '/assets/img/icons/review.svg',        active: 'Open',         inactive: '33 Resolved', avatarTone: 'bg-secondary-transparent' },
   ]
 
@@ -537,7 +537,7 @@ const AdminAnalyticsDashboard = () => {
                   </ul>
                   <div className="alert alert-success d-flex align-items-center mt-3 mb-0" role="alert">
                     <i className="ti ti-info-square-rounded me-2 fs-14" />
-                    <div className="fs-12">School-wide attendance above 90% target ✓</div>
+                    <div className="fs-12">School-wide attendance above 90% target</div>
                   </div>
                 </div>
               </div>
@@ -613,8 +613,8 @@ const AdminAnalyticsDashboard = () => {
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v || 0)/1000}k`} />
-                      <Tooltip formatter={(v, n) => [`$${(v || 0).toLocaleString()}`, n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v || 0)/1000}k`} />
+                      <Tooltip formatter={(v, n) => [`₹${(v || 0).toLocaleString()}`, n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Area type="monotone" dataKey="collected" name="Collected" stroke="#6366f1" strokeWidth={2.5} fill="url(#colGrad)" dot={false} />
                       <Area type="monotone" dataKey="pending"   name="Pending"   stroke="#ef4444" strokeWidth={2}   fill="url(#penGrad)" dot={false} />
@@ -663,7 +663,7 @@ const AdminAnalyticsDashboard = () => {
                     disabled={reminderSent}
                   >
                     <i className="ti ti-send me-1" />
-                    {reminderSent ? 'Reminders Sent ✓' : 'Send Fee Reminders'}
+                    {reminderSent ? 'Reminders Sent' : 'Send Fee Reminders'}
                   </button>
                 </div>
                 <div className="card-body">
@@ -684,13 +684,13 @@ const AdminAnalyticsDashboard = () => {
                             <td>
                               <div className="d-flex align-items-center">
                                 <div className="avatar avatar-sm bg-primary text-white rounded-circle me-2">
-                                  {student.name.charAt(0).toUpperCase()}
+                                  {(student.name || '?').charAt(0).toUpperCase()}
                                 </div>
-                                <span className="fw-semibold">{student.name}</span>
+                                <span className="fw-semibold">{student.name || 'Unknown'}</span>
                               </div>
                             </td>
                             <td>{student.cls}</td>
-                            <td className="text-danger fw-semibold">${student.amount}</td>
+                            <td className="text-danger fw-semibold">₹{student.amount}</td>
                             <td>
                               <span className={`badge ${student.cls2}`}>{student.days}</span>
                             </td>

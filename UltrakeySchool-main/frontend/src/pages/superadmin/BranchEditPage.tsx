@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import branchService, { type Branch } from '../../services/branchService'
 
 const BranchEditPage: React.FC = () => {
@@ -33,10 +34,23 @@ const BranchEditPage: React.FC = () => {
 
     try {
       setSaving(true)
-      await branchService.updateBranch(id!, branch)
+      const payload: Record<string, any> = {
+        name: branch.name,
+        code: branch.code,
+        status: branch.status,
+        address: branch.address,
+        contact: branch.contact,
+        capacity: branch.capacity,
+        notes: branch.notes,
+        tags: branch.tags,
+      }
+      await branchService.updateBranch(id!, payload)
+      toast.success('Branch updated successfully')
       navigate(`/super-admin/branches/${id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update branch')
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err.message || 'Failed to update branch'
+      toast.error(message)
+      setError(message)
     } finally {
       setSaving(false)
     }
@@ -259,9 +273,9 @@ const BranchEditPage: React.FC = () => {
                     <div className="col-md-4">
                       <div className="mb-3">
                         <label className="form-label">Institution ID</label>
-                        <div className="form-control">{branch.institutionId}</div>
+                        <div className="form-control">{String(branch.institutionId || 'N/A')}</div>
                       </div>
-                    </div>
+                    </div> 
                   </div>
                 </div>
               </div>

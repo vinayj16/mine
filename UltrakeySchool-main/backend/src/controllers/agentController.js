@@ -60,23 +60,24 @@ const findAgentSettingsOwner = async (req, select = '') => {
   const agentId = req.user?._id || req.user?.id;
   const agentEmail = req.user?.email;
 
-  const userSelect = select || '-password';
   let owner = null;
 
+  // First try User collection (agents are stored as users with role 'agent')
   if (agentId && mongoose.Types.ObjectId.isValid(agentId)) {
-    owner = await User.findById(agentId).select(userSelect);
+    owner = await User.findById(agentId).select(select);
   }
 
   if (!owner && agentEmail) {
-    owner = await User.findOne({ email: agentEmail.toLowerCase() }).select(userSelect);
+    owner = await User.findOne({ email: agentEmail.toLowerCase() }).select(select);
   }
 
+  // If not found in User, try Agent collection
   if (!owner && agentId) {
-    owner = await Agent.findById(agentId).select(select || '-__v');
+    owner = await Agent.findById(agentId).select(select);
   }
 
   if (!owner && agentEmail) {
-    owner = await Agent.findOne({ email: agentEmail.toLowerCase() }).select(select || '-__v');
+    owner = await Agent.findOne({ email: agentEmail.toLowerCase() }).select(select);
   }
 
   return owner;
@@ -154,12 +155,12 @@ const createAgent = async (req, res) => {
       commissionRate,
       status: status || 'Active',
       notes,
-      tenantId: req.user.tenantId,
-      createdBy: req.user._id,
-      updatedBy: req.user._id
+      tenantId: req.user.tenantId || req.user.institutionId || 'default',
+      createdBy: req.user._id || req.user.id || 'system',
+      updatedBy: req.user._id || req.user.id || 'system'
     });
 
-    logger.info(`New agent created: ${agent._id} by user: ${req.user._id}`);
+    logger.info(`New agent created: ${agent._id} by user: ${req.user._id || req.user.id}`);
 
     return createdResponse(res, agent, 'Agent created successfully');
   } catch (error) {
@@ -168,6 +169,12 @@ const createAgent = async (req, res) => {
     // Handle duplicate key error
     if (error.code === 11000) {
       return errorResponse(res, 'An agent with this email already exists', 409);
+    }
+
+    // Handle Mongoose ValidationError
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return validationErrorResponse(res, messages);
     }
 
     return errorResponse(res, 'Error creating agent', 500);
@@ -559,7 +566,10 @@ const getAgentProfile = async (req, res) => {
     const agentEmail = req.user.email;
     
     // First try to find in User model (where agents are actually stored)
-    let user = await User.findById(agentId).select('-password');
+    let user = null;
+    if (mongoose.Types.ObjectId.isValid(agentId)) {
+      user = await User.findById(agentId).select('-password');
+    }
     
     // If not found in User model, try Agent model by ID
     if (!user) {
@@ -582,9 +592,12 @@ const getAgentProfile = async (req, res) => {
     const Institution = (await import('../models/Institution.js')).default;
     const institutions = await Institution.find({ agentId: user._id }).lean();
     
-    // Get commissions for this agent
+    // Get commissions for this agent (agentId is ObjectId in Commission, skip if UUID)
     const Commission = (await import('../models/Commission.js')).default;
-    const commissions = await Commission.find({ agentId: user._id }).lean();
+    let commissions = [];
+    if (mongoose.Types.ObjectId.isValid(user._id)) {
+      commissions = await Commission.find({ agentId: user._id }).lean();
+    }
     
     const totalCommission = commissions.reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
     const pendingCommission = commissions.filter(c => c.status === 'pending').reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
@@ -613,6 +626,62 @@ const getAgentProfile = async (req, res) => {
       message: 'Error retrieving profile',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
+  }
+};
+
+// @route   PUT /api/v1/agents/profile/me
+// @desc    Update agent's own profile
+// @access  Private (Agent)
+const updateAgentProfile = async (req, res) => {
+  try {
+    const { name, phone, address, city, state, country, postalCode, dateOfBirth, gender } = req.body;
+    
+    // Use the helper to find across User and Agent collections
+    const user = await findAgentSettingsOwner(req);
+    
+    if (!user) {
+      return notFoundResponse(res, 'Agent not found');
+    }
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (address) user.address = address;
+    if (city) user.city = city;
+    if (state) user.state = state;
+    if (country) user.country = country;
+    if (postalCode) user.postalCode = postalCode;
+    if (dateOfBirth) user.dateOfBirth = new Date(dateOfBirth);
+    if (gender) user.gender = gender;
+
+    if (user.constructor.modelName === 'Agent') {
+      const filter = mongoose.Types.ObjectId.isValid(user._id.toString()) 
+        ? { _id: new mongoose.Types.ObjectId(user._id.toString()) } 
+        : { _id: user._id.toString() };
+        
+      await Agent.collection.updateOne(filter, {
+        $set: {
+          name: user.name,
+          phone: user.phone,
+          address: user.address,
+          city: user.city,
+          state: user.state,
+          country: user.country,
+          postalCode: user.postalCode,
+          dateOfBirth: user.dateOfBirth,
+          gender: user.gender,
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      await user.save();
+    }
+
+    logger.info(`Agent profile updated for ${user._id}`);
+    return successResponse(res, user, 'Profile updated successfully');
+  } catch (error) {
+    logger.error('Error updating agent profile:', error);
+    return errorResponse(res, 'Failed to update profile', 500);
   }
 };
 
@@ -681,6 +750,7 @@ const updateSettings = async (req, res) => {
   try {
     const { notifications, privacy, preferences, security } = req.body;
 
+    // Use the helper to find across User and Agent collections
     const user = await findAgentSettingsOwner(req);
 
     if (!user) {
@@ -708,7 +778,21 @@ const updateSettings = async (req, res) => {
 
     // Mark settings as modified for Mongoose
     user.markModified('settings');
-    await user.save();
+    
+    if (user.constructor.modelName === 'Agent') {
+      const filter = mongoose.Types.ObjectId.isValid(user._id.toString()) 
+        ? { _id: new mongoose.Types.ObjectId(user._id.toString()) } 
+        : { _id: user._id.toString() };
+        
+      await Agent.collection.updateOne(filter, {
+        $set: { 
+          settings: user.settings,
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      await user.save();
+    }
 
     logger.info(`Agent settings updated for ${req.user?.id || req.user?.email}`);
     return successResponse(res, getDefaultAgentSettings(user), 'Agent settings updated successfully');
@@ -728,6 +812,7 @@ export default {
   getActiveAgents,
   completeAgentProfile,
   getAgentProfile,
+  updateAgentProfile,
   getSettings,
   updateSettings,
   logAgentActivity

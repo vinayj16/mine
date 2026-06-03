@@ -35,9 +35,9 @@ const PLANS = {
   }
 };
 
-export const getSchoolSubscription = async (schoolId) => {
+export const getSchoolSubscription = async (institutionId) => {
   const subscription = await Subscription.findOne({ 
-    schoolId, 
+    institutionId, 
     status: { $in: ['active', 'trial'] } 
   }).sort({ createdAt: -1 });
   
@@ -45,8 +45,8 @@ export const getSchoolSubscription = async (schoolId) => {
     return null;
   }
 
-  const studentCount = await Student.countDocuments({ schoolId });
-  const userCount = await User.countDocuments({ schoolId });
+  const studentCount = await Student.countDocuments({ institutionId });
+  const userCount = await User.countDocuments({ institutionId });
 
   subscription.usage = {
     studentCount,
@@ -82,16 +82,23 @@ export const getAllPlans = async () => {
         dependencyModules: []
       }));
       
+      const maxStudents = plan.limits?.students?.isUnlimited ? 999999 : (plan.limits?.students?.value || 0);
+      const price = plan.pricing?.monthly?.amount || 0;
+      const maxUsers = plan.limits?.teachers?.isUnlimited ? 999 : (plan.limits?.teachers?.value || 10);
+
       return {
         id: plan.planId,
         name: plan.displayName || plan.name,
         displayName: plan.displayName,
         description: plan.description,
         status: plan.status === 'active' ? 'Active' : 'Disabled',
-        monthlyPrice: plan.pricing?.monthly?.amount || 0,
+        price,
+        monthlyPrice: price,
         yearlyPrice: plan.pricing?.yearly?.amount || 0,
         currency: plan.pricing?.monthly?.currency || 'INR',
-        maxStudents: plan.limits?.students?.isUnlimited ? 999999 : (plan.limits?.students?.value || 0),
+        studentLimit: maxStudents,
+        maxStudents,
+        userLimit: maxUsers,
         maxBranches: plan.maxSchools || 0,
         storageLimit: storageGB,
         trialDays: plan.trialDays || 14,
@@ -110,19 +117,63 @@ export const getAllPlans = async () => {
   return Object.values(PLANS);
 };
 
+export const createPlan = async (planData) => {
+  const plan = new MembershipPlan(planData);
+  await plan.save();
+  return plan;
+};
+
+export const updatePlan = async (planId, planData) => {
+  const plan = await MembershipPlan.findOneAndUpdate(
+    { planId },
+    { $set: planData },
+    { new: true, runValidators: true }
+  );
+  return plan;
+};
+
+export const deletePlan = async (planId) => {
+  const plan = await MembershipPlan.findOneAndDelete({ planId });
+  return plan;
+};
+
 export const getPlanById = async (planId) => {
+  const dbPlan = await MembershipPlan.findOne({ planId });
+  if (dbPlan) {
+    return {
+      id: dbPlan.planId,
+      name: dbPlan.displayName || dbPlan.name,
+      price: dbPlan.pricing.monthly.amount,
+      studentLimit: dbPlan.limits.students.value || 1000,
+      userLimit: dbPlan.limits.teachers.value || 100,
+      features: (dbPlan.features || []).map(f => f.name),
+      enabledModules: dbPlan.enabledModules || []
+    };
+  }
   return PLANS[planId] || null;
 };
 
 export const createSubscription = async (subscriptionData) => {
-  const { schoolId, planId, billingCycle = 'monthly', paymentMethod, discount } = subscriptionData;
+  const { institutionId, planId, billingCycle = 'monthly', paymentMethod, discount } = subscriptionData;
 
-  const plan = PLANS[planId];
+  let plan = PLANS[planId];
+  const dbPlan = await MembershipPlan.findOne({ planId });
+  if (dbPlan) {
+    plan = {
+      id: dbPlan.planId,
+      name: dbPlan.displayName || dbPlan.name,
+      price: dbPlan.pricing.monthly.amount,
+      studentLimit: dbPlan.limits.students.value || 1000,
+      userLimit: dbPlan.limits.teachers.value || 100,
+      features: (dbPlan.features || []).map(f => f.name),
+      enabledModules: dbPlan.enabledModules || []
+    };
+  }
   if (!plan) {
     throw new Error('Invalid plan ID');
   }
 
-  const school = await School.findById(schoolId);
+  const school = await School.findById(institutionId);
   if (!school) {
     throw new Error('School not found');
   }
@@ -149,13 +200,14 @@ export const createSubscription = async (subscriptionData) => {
   }
 
   const subscription = new Subscription({
-    schoolId,
+    institutionId,
     planId,
     planName: plan.name,
-    status: 'active',
+    status: 'pending',
+    approvalStatus: 'pending',
     billingCycle,
     price,
-    currency: 'USD',
+    currency: 'INR',
     startDate,
     endDate,
     features: plan.features,
@@ -170,22 +222,23 @@ export const createSubscription = async (subscriptionData) => {
 
   await subscription.save();
 
-  school.subscriptionPlan = planId;
-  school.subscriptionExpiry = endDate;
-  await school.save();
+  // Don't activate school subscription until superadmin approves
+  // school.subscriptionPlan = planId;
+  // school.subscriptionExpiry = endDate;
+  // await school.save();
 
   const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const invoiceId = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
 
   const transaction = new Transaction({
     transactionId,
-    schoolId,
+    institutionId,
     subscriptionId: subscription._id,
     invoiceId,
     type: 'subscription',
     description: `${billingCycle === 'yearly' ? 'Annual' : 'Monthly'} subscription - ${plan.name} Plan`,
     amount: price,
-    currency: 'USD',
+    currency: 'INR',
     status: 'completed',
     paymentMethod: paymentMethod.type,
     paymentDetails: {
@@ -205,9 +258,9 @@ export const createSubscription = async (subscriptionData) => {
   return { subscription, transaction };
 };
 
-export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
+export const upgradeSubscription = async (institutionId, targetPlanId, userId) => {
   const currentSubscription = await Subscription.findOne({ 
-    schoolId, 
+    institutionId, 
     status: 'active' 
   }).sort({ createdAt: -1 });
 
@@ -219,7 +272,19 @@ export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
     throw new Error('Cannot upgrade to this plan');
   }
 
-  const targetPlan = PLANS[targetPlanId];
+  let targetPlan = PLANS[targetPlanId];
+  const dbPlan = await MembershipPlan.findOne({ planId: targetPlanId });
+  if (dbPlan) {
+    targetPlan = {
+      id: dbPlan.planId,
+      name: dbPlan.displayName || dbPlan.name,
+      price: dbPlan.pricing.monthly.amount,
+      studentLimit: dbPlan.limits.students.value || 1000,
+      userLimit: dbPlan.limits.teachers.value || 100,
+      features: (dbPlan.features || []).map(f => f.name),
+      enabledModules: dbPlan.enabledModules || []
+    };
+  }
   if (!targetPlan) {
     throw new Error('Invalid target plan');
   }
@@ -238,13 +303,13 @@ export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
   const endDate = new Date(currentSubscription.endDate);
 
   const newSubscription = new Subscription({
-    schoolId,
+    institutionId,
     planId: targetPlanId,
     planName: targetPlan.name,
     status: 'active',
     billingCycle: currentSubscription.billingCycle,
     price: targetPlan.price,
-    currency: 'USD',
+    currency: 'INR',
     startDate,
     endDate,
     features: targetPlan.features,
@@ -258,7 +323,7 @@ export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
 
   await newSubscription.save();
 
-  const school = await School.findById(schoolId);
+  const school = await School.findById(institutionId);
   school.subscriptionPlan = targetPlanId;
   await school.save();
 
@@ -267,13 +332,13 @@ export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
 
   const transaction = new Transaction({
     transactionId,
-    schoolId,
+    institutionId,
     subscriptionId: newSubscription._id,
     invoiceId,
     type: 'upgrade',
     description: `Upgrade from ${currentSubscription.planName} to ${targetPlan.name} Plan`,
     amount: newPrice,
-    currency: 'USD',
+    currency: 'INR',
     status: 'completed',
     paymentMethod: currentSubscription.paymentMethod.type,
     metadata: {
@@ -292,9 +357,9 @@ export const upgradeSubscription = async (schoolId, targetPlanId, userId) => {
   return { subscription: newSubscription, transaction };
 };
 
-export const cancelSubscription = async (schoolId, reason, userId) => {
+export const cancelSubscription = async (institutionId, reason, userId) => {
   const subscription = await Subscription.findOne({ 
-    schoolId, 
+    institutionId, 
     status: 'active' 
   }).sort({ createdAt: -1 });
 
@@ -311,9 +376,9 @@ export const cancelSubscription = async (schoolId, reason, userId) => {
   return subscription;
 };
 
-export const renewSubscription = async (schoolId) => {
+export const renewSubscription = async (institutionId) => {
   const subscription = await Subscription.findOne({ 
-    schoolId, 
+    institutionId, 
     status: 'active' 
   }).sort({ createdAt: -1 });
 
@@ -325,7 +390,19 @@ export const renewSubscription = async (schoolId) => {
     throw new Error('Auto-renewal is disabled');
   }
 
-  const plan = PLANS[subscription.planId];
+  let plan = PLANS[subscription.planId];
+  const dbPlan = await MembershipPlan.findOne({ planId: subscription.planId });
+  if (dbPlan) {
+    plan = {
+      id: dbPlan.planId,
+      name: dbPlan.displayName || dbPlan.name,
+      price: dbPlan.pricing.monthly.amount,
+      studentLimit: dbPlan.limits.students.value || 1000,
+      userLimit: dbPlan.limits.teachers.value || 100,
+      features: (dbPlan.features || []).map(f => f.name),
+      enabledModules: dbPlan.enabledModules || []
+    };
+  }
   const startDate = new Date(subscription.endDate);
   const endDate = new Date(startDate);
   
@@ -336,7 +413,7 @@ export const renewSubscription = async (schoolId) => {
   }
 
   const newSubscription = new Subscription({
-    schoolId,
+    institutionId,
     planId: subscription.planId,
     planName: subscription.planName,
     status: 'active',
@@ -353,7 +430,7 @@ export const renewSubscription = async (schoolId) => {
 
   await newSubscription.save();
 
-  const school = await School.findById(schoolId);
+  const school = await School.findById(institutionId);
   school.subscriptionExpiry = endDate;
   await school.save();
 
@@ -362,7 +439,7 @@ export const renewSubscription = async (schoolId) => {
 
   const transaction = new Transaction({
     transactionId,
-    schoolId,
+    institutionId,
     subscriptionId: newSubscription._id,
     invoiceId,
     type: 'subscription',
@@ -384,6 +461,42 @@ export const renewSubscription = async (schoolId) => {
   return { subscription: newSubscription, transaction };
 };
 
+// Approve or reject a subscription (superadmin action)
+export const approveSubscription = async (subscriptionId, action, notes) => {
+  const subscription = await Subscription.findById(subscriptionId);
+  if (!subscription) {
+    throw new Error('Subscription not found');
+  }
+
+  if (action === 'approve') {
+    subscription.status = 'active';
+    subscription.approvalStatus = 'approved';
+    subscription.notes = notes || 'Approved by SuperAdmin';
+    await subscription.save();
+
+    // Activate the school/institution subscription
+    try {
+      const School = (await import('../models/School.js')).default;
+      const school = await School.findById(subscription.institutionId);
+      if (school) {
+        school.subscriptionPlan = subscription.planId;
+        school.subscriptionExpiry = subscription.endDate;
+        await school.save();
+      }
+    } catch {
+      // School model might not exist or be accessible
+    }
+
+    return { subscription, status: 'active' };
+  } else {
+    subscription.status = 'rejected';
+    subscription.approvalStatus = 'rejected';
+    subscription.notes = notes || 'Rejected by SuperAdmin';
+    await subscription.save();
+    return { subscription, status: 'rejected' };
+  }
+};
+
 export const getExpiringSubscriptions = async (days = 7) => {
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + days);
@@ -391,7 +504,7 @@ export const getExpiringSubscriptions = async (days = 7) => {
   const subscriptions = await Subscription.find({
     status: 'active',
     endDate: { $lte: futureDate, $gte: new Date() }
-  }).populate('schoolId', 'name code contact');
+  }).populate('institutionId', 'name code contact');
 
   return subscriptions;
 };
@@ -422,8 +535,8 @@ export const getSubscriptionStats = async () => {
   };
 };
 
-export const checkSubscriptionLimits = async (schoolId) => {
-  const subscription = await getSchoolSubscription(schoolId);
+export const checkSubscriptionLimits = async (institutionId) => {
+  const subscription = await getSchoolSubscription(institutionId);
   
   if (!subscription) {
     return { valid: false, message: 'No active subscription' };

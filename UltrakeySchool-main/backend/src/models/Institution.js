@@ -299,11 +299,46 @@ const institutionSchema = new mongoose.Schema({
   },
 
   // Legacy reference
-  legacySchoolId: {
+  legacyInstitutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School'
+    ref: 'Institution'
+  },
+
+  // Institution settings (modules, security, notifications, etc.)
+  settings: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+
+  // Support contact (used across the institution for emails, receipts, help links)
+  support: {
+    email: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    helpdeskUrl: { type: String, default: '' },
+    hours: { type: String, default: '' },
+    whatsapp: { type: String, default: '' },
+    telegram: { type: String, default: '' },
+    address: { type: String, default: '' }
+  },
+
+  // Daily login tracking (per-user, per-day, last 90 days kept)
+  loginActivity: {
+    dailyLogins: [{
+      date: { type: String }, // YYYY-MM-DD
+      count: { type: Number, default: 0 },
+      users: [{
+        userId: { type: String },
+        name: { type: String },
+        role: { type: String },
+        timestamp: { type: Date }
+      }]
+    }],
+    totalLogins: { type: Number, default: 0 },
+    lastLoginAt: { type: Date, default: null },
+    uniqueLoginsLast30Days: { type: Number, default: 0 }
   }
-}, {
+},
+{
   timestamps: true
 });
 
@@ -334,7 +369,7 @@ institutionSchema.methods.isSubscriptionActive = function() {
     this.subscription.endDate > new Date();
 };
 
-// Pre-save middleware to calculate total revenue
+// Pre-save middleware to calculate total revenue and sync legacy/frontend fields
 institutionSchema.pre('save', function(next) {
   if (this.subscription && this.subscription.monthlyCost) {
     this.monthlyRevenue = this.subscription.monthlyCost;
@@ -343,6 +378,39 @@ institutionSchema.pre('save', function(next) {
                    this.subscription.billingCycle === 'quarterly' ? 3 : 1;
     this.totalRevenue = this.subscription.monthlyCost * months;
   }
+  
+  // Sync code and instituteCode
+  if (this.code && !this.instituteCode) {
+    this.instituteCode = this.code;
+  } else if (this.instituteCode && !this.code) {
+    this.code = this.instituteCode;
+  }
+  
+  // Sync contact fields
+  if (this.contact) {
+    if (this.contact.email && !this.contactEmail) this.contactEmail = this.contact.email;
+    if (this.contact.phone && !this.contactPhone) this.contactPhone = this.contact.phone;
+    if (this.contact.address?.street && !this.address) this.address = this.contact.address.street;
+    if (this.contact.address?.city && !this.city) this.city = this.contact.address.city;
+    if (this.contact.address?.state && !this.state) this.state = this.contact.address.state;
+    if (this.contact.address?.country && !this.country) this.country = this.contact.address.country;
+    if (this.contact.address?.postalCode && !this.postalCode) this.postalCode = this.contact.address.postalCode;
+  }
+  
+  // Sync subscription fields
+  if (this.subscription) {
+    if (this.subscription.planName && !this.plan) this.plan = this.subscription.planName;
+    if (this.subscription.endDate && !this.subscriptionExpiry) this.subscriptionExpiry = this.subscription.endDate;
+    if (this.subscription.endDate && !this.expiryDate) this.expiryDate = this.subscription.endDate.toISOString().split('T')[0];
+  }
+  
+  // Sync features
+  if (this.features) {
+    if (this.features.maxUsers && !this.maxUsers) this.maxUsers = this.features.maxUsers;
+    if (this.features.maxStudents && !this.maxStudents) this.maxStudents = this.features.maxStudents;
+    if (this.features.maxTeachers && !this.maxTeachers) this.maxTeachers = this.features.maxTeachers;
+  }
+  
   next();
 });
 
@@ -364,7 +432,16 @@ institutionSchema.add({
   workingHours: {
     start: { type: String, default: '08:00' },
     end: { type: String, default: '16:00' }
-  }
+  },
+  
+  // Legacy / School compatible fields
+  address: String,
+  city: String,
+  state: String,
+  country: String,
+  postalCode: String,
+  expiryDate: String
 });
 
+export { institutionSchema };
 export default mongoose.model('Institution', institutionSchema);

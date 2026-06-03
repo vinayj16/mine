@@ -66,7 +66,7 @@ export const createFeeStructureValidation = [
 ];
 
 export const getFeesOverviewValidation = [
-  query('schoolId').optional().isMongoId().withMessage('Invalid school ID'),
+  query('institutionId').optional().isMongoId().withMessage('Invalid school ID'),
   query('classId').optional().isMongoId().withMessage('Invalid class ID')
 ];
 
@@ -83,11 +83,11 @@ export const getStudentFeesValidation = [
 
 export const getPendingFeesValidation = [
   query('classId').optional().isMongoId().withMessage('Invalid class ID'),
-  query('schoolId').optional().isMongoId().withMessage('Invalid school ID')
+  query('institutionId').optional().isMongoId().withMessage('Invalid school ID')
 ];
 
 export const sendRemindersValidation = [
-  body('studentIds').isArray({ min: 1 }).withMessage('Student IDs array is required'),
+  body('feeIds').isArray({ min: 1 }).withMessage('Fee IDs array is required'),
   body('message').optional().isString().withMessage('Message must be a string')
 ];
 

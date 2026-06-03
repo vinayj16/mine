@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
-import StudentSelector from '../../components/students/StudentSelector';
 
 interface Student {
   _id: string;
@@ -45,21 +44,21 @@ const StudentLibraryPage: React.FC = () => {
   const [student, setStudent] = useState<Student | null>(null);
   const [libraryRecords, setLibraryRecords] = useState<LibraryRecord[]>([]);
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchStudent = async () => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
-
-      const response = await apiClient.get(`/students/${id}`, {
-        params: { schoolId }
-      });
+      
+      let response;
+      if (id) {
+        response = await apiClient.get(`/students/${id}`, {
+          params: { institutionId }
+        });
+      } else {
+        response = await apiClient.get('/students/me');
+      }
 
       if (response.data.success) {
         setStudent(response.data.data);
@@ -75,17 +74,18 @@ const StudentLibraryPage: React.FC = () => {
   };
 
   const fetchLibraryRecords = async () => {
-    if (!id) return;
+    const studentId = id || student?._id || student?._id;
+    if (!studentId) return;
 
     try {
       setLibraryLoading(true);
 
-      const response = await apiClient.get(`/students/${id}/library`, {
-        params: { schoolId }
+      const response = await apiClient.get(`/students/${studentId}/library`, {
+        params: { institutionId }
       });
 
       if (response.data.success) {
-        setLibraryRecords(response.data.data || []);
+        setLibraryRecords(response.data.data?.records || []);
       }
     } catch (err: any) {
       console.error('Error fetching library records:', err);
@@ -108,7 +108,7 @@ const StudentLibraryPage: React.FC = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const capitalize = (str?: string) => {
@@ -147,24 +147,15 @@ const StudentLibraryPage: React.FC = () => {
   }
 
   if (error || !student) {
-    if (!id && !error) {
-      return (
-        <StudentSelector
-          redirectPath="/students/library"
-          title="Select Student for Library"
-          description="Choose a student to view their library records"
-        />
-      );
-    }
     return (
       <div className="card">
         <div className="card-body text-center py-5">
           <i className="ti ti-alert-circle fs-1 text-danger mb-3"></i>
           <h4 className="mb-3">{error || 'Student not found'}</h4>
-          <button className="btn btn-primary" onClick={fetchStudent}>
+          <span style={{ cursor: 'pointer' }} className="btn btn-primary" onClick={fetchStudent}>
             <i className="ti ti-refresh me-2"></i>
             Retry
-          </button>
+          </span>
         </div>
       </div>
     );
@@ -203,7 +194,7 @@ const StudentLibraryPage: React.FC = () => {
             <i className="ti ti-lock me-2" />
             Login Details
           </button>
-          <Link to={`/students/edit/${id}`} className="btn btn-primary d-flex align-items-center mb-2">
+          <Link to={`/students/edit/${student._id || id}`} className="btn btn-primary d-flex align-items-center mb-2">
             <i className="ti ti-edit-circle me-2" />
             Edit Student
           </Link>
@@ -366,7 +357,7 @@ const StudentLibraryPage: React.FC = () => {
                                 <div className="col-sm-6">
                                   <div className="mb-3">
                                     <span className="fs-12 mb-1 text-muted">Fine</span>
-                                    <p className="text-danger mb-0">${record.fine.toFixed(2)}</p>
+                                    <p className="text-danger mb-0">₹{record.fine.toFixed(2)}</p>
                                   </div>
                                 </div>
                               )}

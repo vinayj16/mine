@@ -73,7 +73,7 @@ const chatSocketHandler = (io) => {
     socket.on('send_message', async (data) => {
       const { conversationId, senderId, recipientId, content, messageType = 'text' } = data;
       
-      logger.info(`📨 Message from ${socket.userId} to ${recipientId} in conversation ${conversationId}`);
+      logger.info(`[ChatSocket] Message from ${socket.userId} to ${recipientId} in conversation ${conversationId}`);
       
       try {
         // Verify user is part of the conversation
@@ -117,7 +117,7 @@ const chatSocketHandler = (io) => {
           message.deliveryStatus.delivered = true;
           message.deliveryStatus.deliveredAt = new Date();
           await message.save();
-          logger.debug(`✅ Message delivered immediately to online user ${recipientId}`);
+          logger.debug(`[ChatSocket] Message delivered immediately to online user ${recipientId}`);
         } else {
           // Create notification for offline user
           await Notification.create({
@@ -132,7 +132,7 @@ const chatSocketHandler = (io) => {
             actionUrl: `/chat?conversation=${conversationId}`,
             actionText: 'View Message'
           });
-          logger.debug(`📬 Notification created for offline user ${recipientId}`);
+          logger.debug(`[ChatSocket] Notification created for offline user ${recipientId}`);
         }
         
         // Update conversation's last message
@@ -164,7 +164,7 @@ const chatSocketHandler = (io) => {
         
         // Broadcast to conversation room
         chatNamespace.to(`conversation:${conversationId}`).emit('receive_message', messageData);
-        logger.debug(`📡 Message broadcasted to conversation room: ${conversationId}`);
+        logger.debug(`[ChatSocket] Message broadcasted to conversation room: ${conversationId}`);
 
         // Check if recipient is blocked from this conversation
         const isRecipientBlocked = conversation.blockedUsers?.includes(recipientId);
@@ -172,9 +172,9 @@ const chatSocketHandler = (io) => {
         // Only send to recipient's personal room if they're not blocked
         if (!isRecipientBlocked) {
           chatNamespace.to(`user:${recipientId}`).emit('receive_message', messageData);
-          logger.debug(`📡 Message sent to recipient's personal room: ${recipientId}`);
+          logger.debug(`[ChatSocket] Message sent to recipient's personal room: ${recipientId}`);
         } else {
-          logger.debug(`🚫 Recipient ${recipientId} is blocked from this conversation - message not sent`);
+          logger.debug(`[ChatSocket] Recipient ${recipientId} is blocked from this conversation - message not sent`);
         }
 
         // For global users, also broadcast to their institution room if applicable
@@ -183,24 +183,24 @@ const chatSocketHandler = (io) => {
           const recipientSocket = Array.from(chatNamespace.sockets.values()).find(s => s.userId === recipientId);
           if (recipientSocket?.institutionCode) {
             chatNamespace.to(`institution:${recipientSocket.institutionCode}`).emit('receive_message', messageData);
-            logger.debug(`📡 Message sent to institution room: ${recipientSocket.institutionCode}`);
+            logger.debug(`[ChatSocket] Message sent to institution room: ${recipientSocket.institutionCode}`);
           }
         }
 
         // Send confirmation to sender
         socket.emit('message_sent', messageData);
-        logger.debug(`✅ Confirmation sent to sender: ${socket.userId}`);
+        logger.debug(`[ChatSocket] Confirmation sent to sender: ${socket.userId}`);
 
-        logger.info(`📨 Message successfully sent from ${socket.userId} to ${recipientId}, delivered: ${isRecipientOnline}`);
+        logger.info(`[ChatSocket] Message successfully sent from ${socket.userId} to ${recipientId}, delivered: ${isRecipientOnline}`);
       } catch (error) {
-        logger.error('❌ Error sending message:', error);
+        logger.error('[ChatSocket] Error sending message:', error);
         socket.emit('message_error', { error: 'Failed to send message', details: error.message });
       }
     });
 
     // Typing indicators
     socket.on('typing', ({ conversationId, isTyping }) => {
-      logger.debug(`⌨️ ${socket.userId} is ${isTyping ? 'typing' : 'not typing'} in conversation ${conversationId}`);
+      logger.debug(`[ChatSocket] ${socket.userId} is ${isTyping ? 'typing' : 'not typing'} in conversation ${conversationId}`);
       
       const typingData = {
         userId: socket.userId,
@@ -221,7 +221,7 @@ const chatSocketHandler = (io) => {
 
     // Mark message as read
     socket.on('mark_message_read', async ({ messageId, conversationId }) => {
-      logger.debug(`📖 ${socket.userId} marking message ${messageId} as read`);
+      logger.debug(`[ChatSocket] ${socket.userId} marking message ${messageId} as read`);
       
       try {
         // Verify message exists and user is authorized to mark it as read
@@ -273,15 +273,15 @@ const chatSocketHandler = (io) => {
           }
         }
       } catch (error) {
-        logger.error('❌ Error marking message as read:', error);
+        logger.error('[ChatSocket] Error marking message as read:', error);
         socket.emit('message_error', { error: 'Failed to mark message as read', details: error.message });
       }
     });
 
     // Handle disconnection
     socket.on('disconnect', async (reason) => {
-      logger.info(`🔌 Chat socket disconnected: ${socket.userId}, reason: ${reason}`);
-      logger.debug(`🔌 Disconnect details:`, {
+      logger.info(`[ChatSocket] Disconnected: ${socket.userId}, reason: ${reason}`);
+      logger.debug(`[ChatSocket] Disconnect details:`, {
         reason,
         wasServerInitiated: reason === 'io server disconnect',
         wasClientInitiated: reason === 'io client disconnect',
@@ -305,7 +305,7 @@ const chatSocketHandler = (io) => {
           lastSeen: new Date()
         });
         
-        logger.debug(`📢 Offline status broadcasted for user: ${socket.userId}`);
+        logger.debug(`[ChatSocket] Offline status broadcasted for user: ${socket.userId}`);
         
         // Notify all active conversations that user disconnected
         socket.rooms.forEach(room => {
@@ -316,12 +316,12 @@ const chatSocketHandler = (io) => {
               conversationId,
               timestamp: new Date()
             });
-            logger.debug(`📢 Notified conversation ${conversationId} about user disconnection`);
+            logger.debug(`[ChatSocket] Notified conversation ${conversationId} about user disconnection`);
           }
         });
         
       } catch (error) {
-        logger.error('❌ Error updating user offline status:', error);
+        logger.error('[ChatSocket] Error updating user offline status:', error);
       }
     });
   });

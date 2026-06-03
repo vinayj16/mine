@@ -135,19 +135,19 @@ export function getFileIcon(filename: string): string {
   
   const iconMap: Record<string, string> = {
     // Images
-    jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️', webp: '🖼️', svg: '🖼️',
+    jpg: 'ti ti-photo', jpeg: 'ti ti-photo', png: 'ti ti-photo', gif: 'ti ti-photo', webp: 'ti ti-photo', svg: 'ti ti-photo',
     // Documents
-    pdf: '📄', doc: '📝', docx: '📝', txt: '📝',
-    xls: '📊', xlsx: '📊', csv: '📊',
-    ppt: '📊', pptx: '📊',
+    pdf: 'ti ti-file-text', doc: 'ti ti-file-description', docx: 'ti ti-file-description', txt: 'ti ti-file-description',
+    xls: 'ti ti-table', xlsx: 'ti ti-table', csv: 'ti ti-table',
+    ppt: 'ti ti-presentation', pptx: 'ti ti-presentation',
     // Media
-    mp4: '🎥', avi: '🎥', mov: '🎥', wmv: '🎥',
-    mp3: '🎵', wav: '🎵', ogg: '🎵',
+    mp4: 'ti ti-video', avi: 'ti ti-video', mov: 'ti ti-video', wmv: 'ti ti-video',
+    mp3: 'ti ti-music', wav: 'ti ti-music', ogg: 'ti ti-music',
     // Archives
-    zip: '📦', rar: '📦', '7z': '📦', tar: '📦', gz: '📦',
+    zip: 'ti ti-package', rar: 'ti ti-package', '7z': 'ti ti-package', tar: 'ti ti-package', gz: 'ti ti-package',
   };
   
-  return iconMap[extension || ''] || '📎';
+  return iconMap[extension || ''] || 'ti ti-file';
 }
 
 const uploadService = {
@@ -293,7 +293,7 @@ const uploadService = {
       formData.append('image', file);
       
       const endpoint = userId ? `/upload/profile/${userId}` : '/upload/profile';
-      
+
       const response = await apiClient.post<UploadedFile>(endpoint, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -305,9 +305,10 @@ const uploadService = {
           }
         },
       });
-      
+
       if (response.data.success && response.data.data) {
-        return { success: true, file: response.data.data };
+        const fileData = response.data.data.file || response.data.data;
+        return { success: true, file: fileData };
       }
       
       return { success: false, error: response.data.message || 'Upload failed' };

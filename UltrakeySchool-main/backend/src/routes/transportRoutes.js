@@ -33,15 +33,21 @@ const {
   getTrips,
   getTripById,
   createMaintenance,
+  updateMaintenance,
+  deleteMaintenance,
   getMaintenanceRecords,
   addFuelRecord,
   getFuelRecords,
-  getTransportStatistics,
+  getTransportStats,
   getTransportAnalytics,
   exportTransportData,
   searchTransport,
   bulkUpdateVehicles,
-  bulkDeleteVehicles
+  bulkDeleteVehicles,
+  getDashboardStats,
+  getDashboardRoutes,
+  getDashboardComplaints,
+  getDashboardStatus
 } = transportController;
 
 const router = express.Router();
@@ -49,10 +55,17 @@ const router = express.Router();
 // All routes require authentication (TESTED & VERIFIED)
 router.use(protect);  
 
+// Dashboard Routes (NEW)
+router.get('/dashboard/stats', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), getDashboardStats);
+router.get('/dashboard/routes', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), getDashboardRoutes);
+router.get('/dashboard/complaints', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), getDashboardComplaints);
+router.get('/dashboard/status', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), getDashboardStatus);
+
 // All routes with authorization - include institution_owner and institution_admin
 router.get('/export', authorize(['super_admin', 'admin', 'transport_manager', 'principal',   'institution_admin']), exportTransportData);  
 router.get('/analytics', authorize(['super_admin', 'admin', 'transport_manager', 'principal',   'institution_admin']), getTransportAnalytics);  
-router.get('/statistics', authorize(['super_admin', 'admin', 'transport_manager', 'principal',   'institution_admin']), getTransportStatistics);
+router.get('/statistics', authorize(['super_admin', 
+'admin', 'transport_manager', 'principal',   'institution_admin']), getTransportStats);
 
 // Bulk operations (must come before /) (TESTED & VERIFIED)
 router.post('/vehicles/bulk-update', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), bulkUpdateVehicles);  
@@ -87,15 +100,17 @@ router.get('/trips', getTrips);
 router.get('/trips/:id', getTripById);  
 
 // Vehicle Maintenance (TESTED & VERIFIED)
-router.post('/maintenance', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), createMaintenance);  
+router.post('/maintenance', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), createMaintenance);  
 router.get('/maintenance', getMaintenanceRecords);  
+router.put('/maintenance/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), updateMaintenance);  
+router.delete('/maintenance/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), deleteMaintenance);  
 
 // Fuel Management (TESTED & VERIFIED)
-router.post('/fuel', authorize(['super_admin', 'admin', 'transport_manager', 'driver', 'principal']), addFuelRecord);  
+router.post('/fuel', authorize(['super_admin', 'admin', 'transport_manager', 'driver', 'principal', 'institution_admin']), addFuelRecord);  
 router.get('/fuel', getFuelRecords);  
 
 // Report endpoints (TESTED & VERIFIED)
-router.get('/reports', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), async (req, res) => {
+router.get('/reports', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), async (req, res) => {
   try {
     const institutionId = req.user?.institutionId;
     const result = await transportService.getTransportReports(institutionId, req.query);
@@ -106,15 +121,15 @@ router.get('/reports', authorize(['super_admin', 'admin', 'transport_manager', '
   }
 });
 
-router.get('/reports/statistics', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), async (req, res) => {
-  try {
-    const institutionId = req.user?.institutionId;
-    const statistics = await transportService.getTransportStatistics(institutionId);
-    return successResponse(res, statistics, 'Transport statistics retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching transport statistics:', error);
-    return errorResponse(res, error.message);
-  }
+router.get('/reports/statistics', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), async (req, res) => {
+   try {
+     const institutionId = req.user?.institutionId;
+     const statistics = await transportService.getTransportStats(institutionId);
+     return successResponse(res, statistics, 'Transport statistics retrieved successfully');
+   } catch (error) {
+     logger.error('Error fetching transport statistics:', error);
+     return errorResponse(res, error.message);
+   }
 });
 
 // Dashboard endpoints (TESTED & VERIFIED)
@@ -122,16 +137,16 @@ router.get(
   '/dashboard/stats',
   authorize(['super_admin', 'admin', 'transport_manager', 'principal']),  
   async (req, res) => {
-    try {
-      const stats = await transportController.getTransportStatistics(req);
-      return stats;
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to retrieve dashboard stats',
-        error: error.message
-      });
-    }
+     try {
+       const stats = await transportController.getTransportStats(req);
+       return stats;
+     } catch (error) {
+       return res.status(500).json({
+         success: false,
+         message: 'Failed to retrieve dashboard stats',
+         error: error.message
+       });
+     }
   }
 );  
 
@@ -252,7 +267,7 @@ router.get(
 // Send transport email (TESTED & VERIFIED)
 router.post(
   '/send-email/:studentId',
-  authorize(['super_admin', 'admin', 'transport_manager']),  
+  authorize(['super_admin', 'admin', 'transport_manager', 'institution_admin']),  
   async (req, res) => {
     try {
       const { studentId } = req.params;
@@ -293,15 +308,15 @@ router.post(
 // Pickup Points (TESTED & VERIFIED)
 router.get('/pickup-points', pickupPointController.getAllPickupPoints);
 router.get('/pickup-points/:id', pickupPointController.getPickupPointById);
-router.post('/pickup-points', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), pickupPointController.createPickupPoint);
-router.put('/pickup-points/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), pickupPointController.updatePickupPoint);
-router.delete('/pickup-points/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), pickupPointController.deletePickupPoint);
+router.post('/pickup-points', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), pickupPointController.createPickupPoint);
+router.put('/pickup-points/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), pickupPointController.updatePickupPoint);
+router.delete('/pickup-points/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), pickupPointController.deletePickupPoint);
 
 // Drivers (TESTED & VERIFIED)
 router.get('/drivers', driverController.getAllDrivers);
 router.get('/drivers/:id', driverController.getDriverById);
-router.post('/drivers', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), driverController.createDriver);
-router.put('/drivers/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), driverController.updateDriver);
-router.delete('/drivers/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal']), driverController.deleteDriver);
+router.post('/drivers', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), driverController.createDriver);
+router.put('/drivers/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), driverController.updateDriver);
+router.delete('/drivers/:id', authorize(['super_admin', 'admin', 'transport_manager', 'principal', 'institution_admin']), driverController.deleteDriver);
 
 export default router;

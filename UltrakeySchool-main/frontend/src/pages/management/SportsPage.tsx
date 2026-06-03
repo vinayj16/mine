@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { getInstitutionId } from '../../utils/auth';
 
 interface Sport {
   _id: string;
@@ -51,7 +52,10 @@ const SportsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/sports');
+      const institutionId = getInstitutionId();
+      const response = await apiClient.get('/sports', {
+        params: { institution: institutionId }
+      });
       
       if (response.data.success) {
         setSports(response.data.data || []);
@@ -85,9 +89,11 @@ const SportsPage: React.FC = () => {
   const handleAddSport = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const institutionId = getInstitutionId();
       const sportData = {
         ...formData,
-        maxParticipants: parseInt(formData.maxParticipants)
+        maxParticipants: parseInt(formData.maxParticipants),
+        institution: institutionId
       };
 
       const response = await apiClient.post('/sports', sportData);

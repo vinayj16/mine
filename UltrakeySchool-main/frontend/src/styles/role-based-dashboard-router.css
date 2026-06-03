@@ -146,16 +146,14 @@
 }
 
 /* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-  .dashboard-router-loading {
+[data-bs-theme="dark"] .dashboard-router-loading {
     background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
   }
   
-  .dashboard-router-loading .error-title {
+  [data-bs-theme="dark"] .dashboard-router-loading .error-title {
     color: #ffffff;
   }
   
-  .dashboard-router-loading .error-message {
+  [data-bs-theme="dark"] .dashboard-router-loading .error-message {
     color: #adb5bd;
   }
-}

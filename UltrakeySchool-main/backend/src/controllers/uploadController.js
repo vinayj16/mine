@@ -5,7 +5,7 @@ import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
 // Validation constants
-const VALID_FOLDERS = ['uploads', 'documents', 'profile-images', 'attachments', 'media', 'exports', 'temp'];
+const VALID_FOLDERS = ['uploads', 'documents', 'profile-images', 'attachments', 'media', 'exports', 'temp', 'teachers', 'students', 'parents'];
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 const VALID_DOCUMENT_TYPES = [
   'application/pdf',
@@ -228,23 +228,20 @@ const uploadController = {
       // Validation
       const errors = [];
       
-      if (!institutionId) {
-        errors.push('Institution ID is required');
-      }
-      
-      const userIdError = validateObjectId(userId, 'User ID');
-      if (userIdError) errors.push(userIdError);
-      
+      // Profile pictures are user-scoped, not institution-scoped; do not require tenantId.
+      // Also do not require userId to be a valid ObjectId - UserCredential records use string ids.
+      if (!userId) errors.push('User ID is required');
+
       // Only allow users to upload their own profile image or admins to upload any
-      if (userId !== currentUserId && !['admin', 'institution_admin', 'superadmin'].includes(userRole)) {
+      if (String(userId) !== String(currentUserId) && !['admin', 'institution_admin', 'superadmin'].includes(userRole)) {
         return forbiddenResponse(res, 'You can only upload your own profile image');
       }
 
       // Validate file type
-      if (!req.file.mimetype.startsWith('image/')) {
+      if (!req.file.mimetype || !req.file.mimetype.startsWith('image/')) {
         errors.push('Only image files are allowed for profile pictures');
       }
-      
+
       if (errors.length > 0) {
         return validationErrorResponse(res, errors);
       }
@@ -252,8 +249,8 @@ const uploadController = {
       // Upload file
       const result = await storageService.uploadFile(req.file, {
         folder: 'profile-images',
-        fileName: 'profile_' + userId + '_' + Date.now() + '.jpg',
-        institutionId,
+        fileName: 'profile_' + String(userId).replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + Date.now() + '.jpg',
+        institutionId: institutionId || 'superadmin',
         isPublic: true,
         processImage: true,
         quality: 85
@@ -263,26 +260,97 @@ const uploadController = {
         return errorResponse(res, result.error);
       }
 
-      // Update user profile with image URL
-      const User = (await import('../models/User.js')).default;
-      await User.findByIdAndUpdate(userId, {
-        'profile.avatar': result.file.url
-      });
+      const imageUrl = result.file.url;
 
-      logger.info('Profile image uploaded successfully:', { 
+      // Persist the avatar URL on EVERY user collection that may hold this user.
+      // A single person can live in multiple collections (User vs UserCredential vs
+      // Student/Teacher). Updating them all keeps the header, sidebar, and dashboard
+      // in sync after refresh. Failures are non-fatal.
+      const User = (await import('../models/User.js')).default;
+      const UserCredential = (await import('../models/UserCredential.js')).default;
+      const Student = (await import('../models/Student.js')).default;
+      const Teacher = (await import('../models/Teacher.js')).default;
+
+      const updates = await Promise.allSettled([
+        User.findByIdAndUpdate(userId, { avatar: imageUrl }),
+        UserCredential.findByIdAndUpdate(userId, { avatar: imageUrl, photo: imageUrl }),
+        UserCredential.updateOne({ userId: String(userId) }, { $set: { avatar: imageUrl, photo: imageUrl } }),
+        UserCredential.updateOne({ email: (req.user && req.user.email || '').toLowerCase() }, { $set: { avatar: imageUrl, photo: imageUrl } }),
+        Student.findByIdAndUpdate(userId, { avatar: imageUrl, photo: imageUrl }),
+        Student.updateOne({ userId: String(userId) }, { $set: { avatar: imageUrl, photo: imageUrl } }),
+        Teacher.findByIdAndUpdate(userId, { avatar: imageUrl, photo: imageUrl }),
+        Teacher.updateOne({ userId: String(userId) }, { $set: { avatar: imageUrl, photo: imageUrl } })
+      ]);
+      // findByIdAndUpdate returns the updated document (no modifiedCount/matchedCount),
+      // while updateOne / updateMany return an acknowledged result with those fields.
+      const anyUpdate = updates.some(r =>
+        r.status === 'fulfilled' &&
+        r.value &&
+        (
+          // updateOne/updateMany result
+          r.value.modifiedCount ||
+          r.value.matchedCount ||
+          // findByIdAndUpdate result (document returned)
+          r.value._id
+        )
+      );
+      if (!anyUpdate) {
+        logger.warn('Profile image uploaded but no user record was updated. userId=' + userId);
+      }
+
+      logger.info('Profile image uploaded successfully:', {
         userId,
         institution: institutionId,
         uploadedBy: currentUserId,
-        imageUrl: result.file.url
+        imageUrl
       });
 
+      // Return BOTH imageUrl and avatar shapes for backwards compatibility.
       return successResponse(res, {
-        imageUrl: result.file.url,
+        imageUrl,
+        avatar: imageUrl,
+        url: imageUrl,
         file: result.file
       }, 'Profile image uploaded successfully');
     } catch (error) {
       logger.error('Profile image upload error:', error);
       return errorResponse(res, 'Failed to upload profile image');
+    }
+  },
+
+  // Delete profile image - clears the avatar on all user collections so the change persists
+  deleteProfileImage: async (req, res) => {
+    try {
+      const userId = req.params.userId || (req.user && req.user.id);
+      const currentUserId = req.user && req.user.id;
+      const userRole = req.user && req.user.role;
+      if (!userId) return validationErrorResponse(res, ['User ID is required']);
+
+      // Only allow users to delete their own avatar or admins to delete any
+      if (String(userId) !== String(currentUserId) && !['admin', 'institution_admin', 'superadmin'].includes(userRole)) {
+        return forbiddenResponse(res, 'You can only delete your own profile image');
+      }
+
+      const User = (await import('../models/User.js')).default;
+      const UserCredential = (await import('../models/UserCredential.js')).default;
+      const Student = (await import('../models/Student.js')).default;
+      const Teacher = (await import('../models/Teacher.js')).default;
+
+      await Promise.allSettled([
+        User.updateOne({ _id: userId }, { $unset: { avatar: '' } }),
+        UserCredential.updateOne({ _id: typeof userId === 'string' ? userId : userId.toString() }, { $unset: { avatar: '', photo: '' } }),
+        UserCredential.updateOne({ userId: String(userId) }, { $unset: { avatar: '', photo: '' } }),
+        UserCredential.updateOne({ email: (req.user && req.user.email || '').toLowerCase() }, { $unset: { avatar: '', photo: '' } }),
+        Student.updateOne({ _id: userId }, { $unset: { avatar: '', photo: '' } }),
+        Student.updateOne({ userId: String(userId) }, { $unset: { avatar: '', photo: '' } }),
+        Teacher.updateOne({ _id: userId }, { $unset: { avatar: '', photo: '' } }),
+        Teacher.updateOne({ userId: String(userId) }, { $unset: { avatar: '', photo: '' } })
+      ]);
+
+      return successResponse(res, null, 'Profile image removed');
+    } catch (error) {
+      logger.error('Profile image delete error:', error);
+      return errorResponse(res, 'Failed to delete profile image');
     }
   },
 
@@ -976,3 +1044,4 @@ export default {
   uploadController,
   uploadMiddleware
 };
+

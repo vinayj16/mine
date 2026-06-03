@@ -6,7 +6,7 @@ import { useAuth } from '../../store/authStore';
 
 const AcademicReasonsPage: React.FC = () => {
   const { user } = useAuth();
-  const schoolId = user?.institutionId || user?.schoolId || '';
+  const institutionId = user?.institutionId || user?.institutionId || '';
   
   const [reasons, setReasons] = useState<AcademicReason[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,11 +24,11 @@ const AcademicReasonsPage: React.FC = () => {
   // Fetch reasons from backend
   useEffect(() => {
     fetchReasons();
-  }, [schoolId]);
+  }, [institutionId]);
 
   const fetchReasons = async () => {
-    if (!schoolId) {
-      setError('School ID not found');
+    if (!institutionId) {
+      setError('Institution ID not found');
       setLoading(false);
       return;
     }
@@ -36,7 +36,7 @@ const AcademicReasonsPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await academicReasonService.getAll(schoolId);
+      const data = await academicReasonService.getAll(institutionId);
       setReasons(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Error fetching reasons:', err);
@@ -50,13 +50,13 @@ const AcademicReasonsPage: React.FC = () => {
   const handleAddReason = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!schoolId) {
-      setError('School ID not found');
+    if (!institutionId) {
+      setError('Institution ID not found');
       return;
     }
 
     try {
-      await academicReasonService.create(schoolId, newReason);
+      await academicReasonService.create(institutionId, newReason);
       setShowAddModal(false);
       setNewReason({ 
         role: '', 
@@ -72,10 +72,10 @@ const AcademicReasonsPage: React.FC = () => {
 
   const handleEditReason = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedReason || !schoolId) return;
+    if (!selectedReason || !institutionId) return;
     
     try {
-      await academicReasonService.update(schoolId, selectedReason._id, newReason);
+      await academicReasonService.update(institutionId, selectedReason._id, newReason);
       setShowEditModal(false);
       await fetchReasons(); // Refresh the list
     } catch (err: any) {
@@ -85,10 +85,10 @@ const AcademicReasonsPage: React.FC = () => {
   };
 
   const handleDeleteReason = async () => {
-    if (!selectedReason || !schoolId) return;
+    if (!selectedReason || !institutionId) return;
     
     try {
-      await academicReasonService.delete(schoolId, selectedReason._id);
+      await academicReasonService.delete(institutionId, selectedReason._id);
       setShowDeleteModal(false);
       await fetchReasons(); // Refresh the list
     } catch (err: any) {

@@ -1,8 +1,3 @@
-/**
- * JWT Configuration and Token Management
- * Provides secure token generation, validation, and management
- */
-
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
@@ -11,23 +6,23 @@ export const jwtConfig = {
   // Secrets (should be loaded from environment variables)
   secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
   refreshSecret: process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production',
-  
+
   // Token expiry times
   accessExpiry: process.env.JWT_ACCESS_EXPIRY || '24h', // 24 hours for better UX
   refreshExpiry: process.env.JWT_REFRESH_EXPIRY || '7d', // 7 days
   resetPasswordExpiry: process.env.JWT_RESET_PASSWORD_EXPIRY || '1h', // 1 hour
   verifyEmailExpiry: process.env.JWT_VERIFY_EMAIL_EXPIRY || '24h', // 24 hours
-  
+
   // Token metadata
   issuer: process.env.JWT_ISSUER || 'edusearch-backend',
   audience: process.env.JWT_AUDIENCE || 'edusearch-client',
-  
+
   // Algorithm
   algorithm: 'HS256',
-  
+
   // Token rotation
   rotateRefreshTokens: process.env.JWT_ROTATE_REFRESH_TOKENS === 'true',
-  
+
   // Blacklist (for token revocation)
   enableBlacklist: process.env.JWT_ENABLE_BLACKLIST !== 'false',
 };
@@ -35,10 +30,10 @@ export const jwtConfig = {
 // Validate configuration
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-secret-key-change-in-production') {
-    console.error('⚠️  WARNING: JWT_SECRET not set or using default value in production!');
+    console.error('[JWT] WARNING: JWT_SECRET not set or using default value in production!');
   }
   if (!process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_SECRET === 'your-refresh-secret-key-change-in-production') {
-    console.error('⚠️  WARNING: JWT_REFRESH_SECRET not set or using default value in production!');
+    console.error('[JWT] WARNING: JWT_REFRESH_SECRET not set or using default value in production!');
   }
 }
 
@@ -168,7 +163,6 @@ export const generateTokenPair = (user) => {
     email: user.email,
     role: user.role,
     institutionId: user.institutionId,
-    schoolId: user.schoolId,
     permissions: user.permissions || [],
     plan: user.plan || 'free'
   };
@@ -207,7 +201,6 @@ export const refreshAccessToken = async (refreshToken) => {
       email: decoded.email,
       role: decoded.role,
       institutionId: decoded.institutionId,
-      schoolId: decoded.schoolId,
       permissions: decoded.permissions || [],
       plan: decoded.plan || 'free'
     };
@@ -294,13 +287,13 @@ export const generateMagicLinkToken = (user) => {
  */
 export const blacklistToken = (token) => {
   if (!jwtConfig.enableBlacklist) return;
-  
+
   const decoded = decodeToken(token);
   if (decoded && decoded.payload) {
     // Store token ID with expiry time
     const expiryTime = decoded.payload.exp * 1000; // Convert to milliseconds
     tokenBlacklist.add(token);
-    
+
     // Auto-remove from blacklist after expiry
     setTimeout(() => {
       tokenBlacklist.delete(token);
@@ -331,14 +324,14 @@ export const clearBlacklist = () => {
  */
 export const getTokenFromHeader = (req) => {
   const authHeader = req.headers.authorization || req.headers.Authorization;
-  
+
   if (!authHeader) return null;
-  
+
   // Check for Bearer token
   if (authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7);
   }
-  
+
   // Check for simple token
   return authHeader;
 };
@@ -365,10 +358,10 @@ export const parseExpiry = (expiry) => {
     d: 86400,
     w: 604800
   };
-  
+
   const match = expiry.match(/^(\d+)([smhdw])$/);
   if (!match) return 3600; // Default 1 hour
-  
+
   const [, value, unit] = match;
   return parseInt(value) * units[unit];
 };
@@ -383,11 +376,11 @@ export const isTokenExpiringSoon = (token, thresholdSeconds = 300) => {
   try {
     const decoded = decodeToken(token);
     if (!decoded || !decoded.payload || !decoded.payload.exp) return false;
-    
+
     const expiryTime = decoded.payload.exp * 1000; // Convert to milliseconds
     const currentTime = Date.now();
     const timeUntilExpiry = expiryTime - currentTime;
-    
+
     return timeUntilExpiry < (thresholdSeconds * 1000);
   } catch (error) {
     return false;
@@ -403,7 +396,7 @@ export const getTokenExpiry = (token) => {
   try {
     const decoded = decodeToken(token);
     if (!decoded || !decoded.payload || !decoded.payload.exp) return null;
-    
+
     return new Date(decoded.payload.exp * 1000);
   } catch (error) {
     return null;
@@ -419,11 +412,11 @@ export const getTokenRemainingTime = (token) => {
   try {
     const decoded = decodeToken(token);
     if (!decoded || !decoded.payload || !decoded.payload.exp) return 0;
-    
+
     const expiryTime = decoded.payload.exp * 1000;
     const currentTime = Date.now();
     const remaining = Math.max(0, expiryTime - currentTime);
-    
+
     return Math.floor(remaining / 1000);
   } catch (error) {
     return 0;
@@ -438,7 +431,7 @@ export const getTokenRemainingTime = (token) => {
  */
 export const validateTokenPayload = (payload, requiredFields = ['userId', 'email', 'role']) => {
   if (!payload || typeof payload !== 'object') return false;
-  
+
   return requiredFields.every(field => payload.hasOwnProperty(field));
 };
 
@@ -455,7 +448,7 @@ export const createTokenResponse = (tokens, user = null) => {
     tokenType: tokens.tokenType || 'Bearer',
     expiresIn: tokens.expiresIn || parseExpiry(jwtConfig.accessExpiry)
   };
-  
+
   if (user) {
     response.user = {
       id: user._id || user.id,
@@ -465,7 +458,7 @@ export const createTokenResponse = (tokens, user = null) => {
       avatar: user.avatar
     };
   }
-  
+
   return response;
 };
 

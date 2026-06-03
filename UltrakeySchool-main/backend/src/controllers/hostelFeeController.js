@@ -9,7 +9,7 @@ const VALID_PAYMENT_METHODS = ['cash', 'card', 'bank_transfer', 'online', 'chequ
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 
 // Helper function to get institution ID
-const getInstitutionId = (req) => req.user?.schoolId || req.user?.institutionId || req.tenantId;
+const getInstitutionId = (req) => req.user?.institutionId || req.user?.institutionId || req.tenantId;
 
 // Helper function to validate MongoDB ObjectId
 const validateObjectId = (id, fieldName = 'ID') => {

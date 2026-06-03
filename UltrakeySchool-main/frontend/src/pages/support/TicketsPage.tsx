@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 interface Ticket {
   _id: string;
@@ -54,6 +55,8 @@ const TicketsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page] = useState(1);
   const [limit] = useState(10);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTickets();
@@ -133,12 +136,15 @@ const TicketsPage: React.FC = () => {
   };
 
   const handleDeleteTicket = async (ticketId: string) => {
-    if (!window.confirm('Are you sure you want to delete this ticket?')) {
-      return;
-    }
+    setDeleteTarget(ticketId);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
-      const response = await apiClient.delete(`/support-tickets/${ticketId}`);
+      const response = await apiClient.delete(`/support-tickets/${deleteTarget}`);
 
       if (response.data.success) {
         toast.success('Ticket deleted successfully');
@@ -149,6 +155,8 @@ const TicketsPage: React.FC = () => {
       console.error('Failed to delete ticket:', error);
       toast.error(error.response?.data?.message || 'Failed to delete ticket');
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -446,6 +454,8 @@ const TicketsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to delete this ticket?" />
 
       {/* Add Ticket Modal */}
       {showAddModal && (

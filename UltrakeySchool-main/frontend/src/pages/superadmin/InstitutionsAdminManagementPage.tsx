@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { getInstitutionConfigFromPath } from '../../utils/institutionUtils'
+import superAdminService from '../../services/superAdminService'
 import { apiService } from '../../services/api'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface AdminUser {
   id: string
@@ -27,10 +29,10 @@ const InstitutionsAdminManagementPage: React.FC = () => {
   const params = useParams<{ id?: string }>()
   const location = useLocation()
   const institutionConfig = getInstitutionConfigFromPath(location.pathname)
-  const schoolId = params.id
+  const institutionId = params.id
   
   console.log('URL params:', params) // Debug log
-  console.log('Extracted schoolId:', schoolId) // Debug log
+  console.log('Extracted institutionId:', institutionId) // Debug log
   
   // Get institution by ID and type from the current path
   // const institutionType = location.pathname.includes('/inter-colleges') ? 'inter-colleges' : 
@@ -43,6 +45,8 @@ const InstitutionsAdminManagementPage: React.FC = () => {
   const [selectedAdmins, setSelectedAdmins] = useState<string[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState<AdminUser | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchSchoolAndAdmins = async () => {
@@ -50,23 +54,29 @@ const InstitutionsAdminManagementPage: React.FC = () => {
         setLoading(true)
         setError(null)
         
-        // Fetch school from API based on institution type
-        const schoolResponse = await apiService.get(`/schools/${schoolId}`)
+        const schoolData: any = await superAdminService.getInstitutionById(institutionId!)
+        const addr = typeof schoolData.address === 'object' && schoolData.address
+          ? [schoolData.address.street, schoolData.address.city, schoolData.address.state, schoolData.address.country, schoolData.address.postalCode].filter(Boolean).join(', ')
+          : (schoolData.address || '')
+        setSchool({
+          id: schoolData._id || schoolData.id || '',
+          name: schoolData.name || '',
+          address: addr,
+          city: schoolData.address?.city || schoolData.city || '',
+          state: schoolData.address?.state || schoolData.state || '',
+          adminName: schoolData.adminName || schoolData.contactPerson || schoolData.principalName || '',
+          adminEmail: schoolData.email || schoolData.contactEmail || schoolData.principalEmail || '',
+        } as School)
         
-        if (schoolResponse.success && schoolResponse.data) {
-          setSchool(schoolResponse.data as School)
-          
-          // Fetch admin users for this school
-          const adminsResponse = await apiService.get(`/schools/${schoolId}/admins`)
-          
+        try {
+          const adminsResponse = await apiService.get(`/super-admin/users`, { institutionId: institutionId })
           if (adminsResponse.success && adminsResponse.data) {
             setAdminUsers(Array.isArray(adminsResponse.data) ? adminsResponse.data : [])
           } else {
-            // If API fails, set empty array
             setAdminUsers([])
           }
-        } else {
-          setError('Failed to fetch school details')
+        } catch {
+          setAdminUsers([])
         }
       } catch (err) {
         console.error('Error fetching school or admins:', err)
@@ -76,10 +86,10 @@ const InstitutionsAdminManagementPage: React.FC = () => {
       }
     }
 
-    if (schoolId) {
+    if (institutionId) {
       fetchSchoolAndAdmins()
     }
-  }, [schoolId])
+  }, [institutionId])
 
   if (loading) {
     return (
@@ -113,7 +123,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
               <div className="card-body">
                 <i className="ti ti-exclamation-triangle text-warning fs-1 mb-3"></i>
                 <h4>{institutionConfig?.singularName || 'Institution'} Not Found</h4>
-                <p className="text-muted">The {institutionConfig?.singularName?.toLowerCase() || 'institution'} with ID "{schoolId}" could not be found.</p>
+                <p className="text-muted">The {institutionConfig?.singularName?.toLowerCase() || 'institution'} with ID "{institutionId}" could not be found.</p>
                 <div className="alert alert-info mt-3">
                   <strong>Available {institutionConfig?.name || 'Institutions'} IDs:</strong>
                   <ul className="list-unstyled mb-0">
@@ -145,12 +155,15 @@ const InstitutionsAdminManagementPage: React.FC = () => {
 
   const handleToggleStatus = async (adminId: string) => {
     try {
-      const response = await apiService.patch(`/schools/${schoolId}/admins/${adminId}/toggle-status`)
+      const response = await apiService.patch(`/schools/${institutionId}/admins/${adminId}/toggle-status`)
       if (response.success) {
         // Refresh admin users list
-        const adminsResponse = await apiService.get(`/schools/${schoolId}/admins`)
-        if (adminsResponse.success && adminsResponse.data) {
-          setAdminUsers(Array.isArray(adminsResponse.data) ? adminsResponse.data : [])
+        const adminsResponse = await apiService.get(`/schools/${institutionId}/admins`)
+        if (adminsResponse.success) {
+          const users = Array.isArray(adminsResponse.data) ? adminsResponse.data : (adminsResponse.data?.users || [])
+          setAdminUsers(users)
+        } else {
+          setAdminUsers([])
         }
       }
     } catch (err) {
@@ -158,20 +171,26 @@ const InstitutionsAdminManagementPage: React.FC = () => {
     }
   }
 
-  const handleDeleteAdmin = async (adminId: string) => {
-    if (window.confirm('Are you sure you want to delete this admin user?')) {
-      try {
-        const response = await apiService.delete(`/schools/${schoolId}/admins/${adminId}`)
-        if (response.success) {
-          // Refresh admin users list
-          const adminsResponse = await apiService.get(`/schools/${schoolId}/admins`)
-          if (adminsResponse.success && adminsResponse.data) {
-            setAdminUsers(adminsResponse.data as AdminUser[])
-          }
+  const handleDeleteAdmin = (adminId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget(adminId)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      const response = await apiService.delete(`/schools/${institutionId}/admins/${deleteTarget}`)
+      if (response.success) {
+        const adminsResponse = await apiService.get(`/schools/${institutionId}/admins`)
+        if (adminsResponse.success && adminsResponse.data) {
+          setAdminUsers(adminsResponse.data as AdminUser[])
         }
-      } catch (err) {
-        console.error('Error deleting admin:', err)
       }
+    } catch (err) {
+      console.error('Error deleting admin:', err)
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -215,7 +234,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
                 <Link to={institutionConfig?.basePath || '#'}>{institutionConfig?.name || 'Institutions'}</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to={`${institutionConfig?.basePath || '#'}/${schoolId}`}>{school.name}</Link>
+                <Link to={`${institutionConfig?.basePath || '#'}/${institutionId}`}>{school.name}</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">Admin Management</li>
             </ol>
@@ -460,7 +479,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
                     if (editingAdmin) {
                       // Update existing admin
                       try {
-                        const response = await apiService.put(`/schools/${schoolId}/admins/${editingAdmin.id}`, {
+                        const response = await apiService.put(`/schools/${institutionId}/admins/${editingAdmin.id}`, {
                           name: editingAdmin.name,
                           email: editingAdmin.email,
                           role: editingAdmin.role,
@@ -468,7 +487,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
                         })
                         if (response.success) {
                           // Refresh admin users list
-                          const adminsResponse = await apiService.get(`/schools/${schoolId}/admins`)
+                          const adminsResponse = await apiService.get(`/schools/${institutionId}/admins`)
                           if (adminsResponse.success) {
                             setAdminUsers(Array.isArray(adminsResponse.data) ? adminsResponse.data : [])
                           } else {
@@ -481,7 +500,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
                     } else {
                       // Create new admin
                       try {
-                        const response = await apiService.post(`/schools/${schoolId}/admins`, {
+                        const response = await apiService.post(`/schools/${institutionId}/admins`, {
                           name: 'New Admin',
                           email: 'new.admin@school.edu',
                           role: 'Viewer',
@@ -489,7 +508,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
                         })
                         if (response.success) {
                           // Refresh admin users list
-                          const adminsResponse = await apiService.get(`/schools/${schoolId}/admins`)
+                          const adminsResponse = await apiService.get(`/schools/${institutionId}/admins`)
                           if (adminsResponse.success) {
                             setAdminUsers(Array.isArray(adminsResponse.data) ? adminsResponse.data : [])
                           } else {
@@ -512,6 +531,7 @@ const InstitutionsAdminManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this admin user?" />
     </>
   )
 }

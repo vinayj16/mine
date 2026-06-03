@@ -107,13 +107,22 @@ export const API_ENDPOINTS = {
 
   // Library
   LIBRARY: {
+    ROOT: 'library',
+    OVERVIEW: 'library/overview',
     BOOKS: {
-      LIST: 'library/books',
-      DETAIL: (id: string) => `library/books/${id}`,
-      CREATE: 'library/books',
-      UPDATE: (id: string) => `library/books/${id}`,
-      DELETE: (id: string) => `library/books/${id}`,
+      LIST: 'library',
+      DETAIL: (id: string) => `library/${id}`,
+      CREATE: 'library',
+      UPDATE: (id: string) => `library/${id}`,
+      DELETE: (id: string) => `library/${id}`,
     },
+    ISSUES: 'library/issues',
+    OVERDUE: 'library/overdue',
+    AVAILABLE: 'library/available',
+    STATISTICS: 'library/statistics',
+    STATS: 'library/stats',
+    EXPORT: 'library/export',
+    SEARCH: 'library/search',
     AUTHORS: {
       LIST: 'library/authors',
       CREATE: 'library/authors',
@@ -123,10 +132,10 @@ export const API_ENDPOINTS = {
       CREATE: 'library/categories',
     },
     BORROWINGS: {
-      LIST: 'library/borrowings',
-      ISSUE: 'library/borrowings/issue',
-      RETURN: (id: string) => `library/borrowings/${id}/return`,
-      RENEW: (id: string) => `library/borrowings/${id}/renew`,
+      LIST: 'library/issues',
+      ISSUE: 'library/issues',
+      RETURN: (id: string) => `library/issues/${id}/return`,
+      RENEW: (id: string) => `library/issues/${id}/renew`,
       MY_BORROWINGS: 'library/my-borrowings',
     },
     FINES: {
@@ -134,7 +143,7 @@ export const API_ENDPOINTS = {
       PAY: (id: string) => `library/fines/${id}/pay`,
     },
     DASHBOARD: 'library/dashboard',
-    SEARCH: 'library/search',
+    MEMBERS: 'library/members',
   },
 
   // Hostel
@@ -172,13 +181,13 @@ export const API_ENDPOINTS = {
   SUBJECTS: {
     LIST: 'subjects',
     DETAIL: (id: string) => `subjects/${id}`,
-    CREATE: (schoolId: string) => `subjects/${schoolId}`,
+    CREATE: (institutionId: string) => `subjects/${institutionId}`,
     UPDATE: (id: string) => `subjects/${id}`,
     DELETE: (id: string) => `subjects/schools/${id}`,
   },
   
   // Syllabi
-  SYLLABI: 'syllabi/schools/:schoolId',
+  SYLLABI: 'syllabi/schools/:institutionId',
   
   // Timetable
   TIMETABLE: {
@@ -292,7 +301,7 @@ export const API_ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: 'notifications',
     MARK_READ: (id: string) => `notifications/${id}/read`,
-    MARK_ALL_READ: 'notifications/read-all',
+    MARK_ALL_READ: 'notifications/mark-all-read',
     SEND: 'notifications/send',
   },
   
@@ -426,7 +435,7 @@ export const API_ENDPOINTS = {
     VERIFY_DATA_ERASURE: (requestId: string) => `dsr/data-erasure/${requestId}/verify`,
     REVIEW_DATA_ERASURE: (requestId: string) => `dsr/data-erasure/${requestId}/review`,
     COMPLETE_DATA_ERASURE: (requestId: string) => `dsr/data-erasure/${requestId}/complete`,
-    AUDIT_LOGS: 'dsr/audit-logs',
+    AUDIT_LOGS: 'audit',
     DATA_RETENTION_COMPLIANCE: 'dsr/data-retention/compliance',
   },
 

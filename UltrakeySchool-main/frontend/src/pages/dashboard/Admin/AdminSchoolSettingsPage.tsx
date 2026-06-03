@@ -1,79 +1,70 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import apiClient from '../../../api/client';
 
-interface SchoolSettingsData {
-  general: {
-    schoolName: string;
-    schoolCode: string;
-    address: string;
-    phone: string;
-    email: string;
-    website: string;
-    establishedYear: string;
-    schoolType: string;
-    affiliation: string;
+interface InstitutionData {
+  name: string;
+  instituteCode: string;
+  type?: string;
+  established?: number;
+  description?: string;
+  contact?: {
+    email?: string;
+    phone?: string;
+    website?: string;
+    address?: { street?: string; city?: string; state?: string; country?: string; postalCode?: string };
   };
-  academic: {
-    currentAcademicYear: string;
-    semesterSystem: boolean;
-    gradingSystem: string;
-    attendanceRequirement: number;
-    minimumPassingMarks: number;
-    workingDays: string[];
-    schoolTimings: {
-      start: string;
-      end: string;
-      breakStart: string;
-      breakEnd: string;
-    };
-  };
-  system: {
-    timezone: string;
-    dateFormat: string;
-    timeFormat: string;
-    currency: string;
-    language: string;
-    autoBackup: boolean;
-    backupFrequency: string;
-    sessionTimeout: number;
-  };
-  features: {
-    onlineAdmissions: boolean;
-    feeManagement: boolean;
-    attendanceTracking: boolean;
-    examManagement: boolean;
-    libraryManagement: boolean;
-    transportManagement: boolean;
-    hostelManagement: boolean;
-    parentPortal: boolean;
-    studentPortal: boolean;
-  };
+  principalName?: string;
+  principalEmail?: string;
+  principalPhone?: string;
+  status?: string;
 }
 
 const AdminSchoolSettingsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [settingsData] = useState<SchoolSettingsData | null>(null);
+  const [institution, setInstitution] = useState<InstitutionData | null>(null);
   const [activeTab, setActiveTab] = useState<string>('general');
   const [isEditing, setIsEditing] = useState(false);
 
+  const institutionId = localStorage.getItem('institutionId') || '';
+
   useEffect(() => {
-    fetchSettingsData();
+    fetchInstitution();
   }, []);
 
-  const fetchSettingsData = async () => {
+  const fetchInstitution = async () => {
     try {
       setLoading(true);
+      const response = await apiClient.get(`/institutions/${institutionId}`);
+      if (response.data.success) {
+        setInstitution(response.data.data);
+      }
     } catch (error) {
-      console.error('Error fetching settings data:', error);
+      console.error('Error fetching institution data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveSettings = () => {
-    // Handle settings save logic
-    console.log('Saving settings...');
-    setIsEditing(false);
+  const handleSaveSettings = async () => {
+    try {
+      await apiClient.put(`/institutions/${institutionId}`, institution);
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
+  const formatAddress = () => {
+    const addr = institution?.contact?.address;
+    if (!addr) return 'N/A';
+    return [addr.street, addr.city, addr.state, addr.country, addr.postalCode].filter(Boolean).join(', ') || 'N/A';
+  };
+
+  const getTypeLabel = () => {
+    const t = institution?.type;
+    if (!t) return 'N/A';
+    return t.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   if (loading) {
@@ -101,7 +92,7 @@ const AdminSchoolSettingsPage: React.FC = () => {
           </nav>
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-          <button className="btn btn-outline-light bg-white btn-icon me-2" onClick={fetchSettingsData}>
+          <button className="btn btn-outline-light bg-white btn-icon me-2" onClick={fetchInstitution}>
             <i className="ti ti-refresh"></i>
           </button>
           {isEditing ? (
@@ -159,94 +150,57 @@ const AdminSchoolSettingsPage: React.FC = () => {
           </ul>
         </div>
         <div className="card-body">
-          {/* General Settings Tab */}
+          {/* General Settings Tab - Institution Information */}
           {activeTab === 'general' && (
             <div>
-              <h5 className="card-title mb-4">General School Information</h5>
+              <h5 className="card-title mb-4">General Institution Information</h5>
               <div className="row">
                 <div className="col-md-6">
                   <div className="mb-3">
-                    <label className="form-label">School Name</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={settingsData?.general.schoolName || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Institution Name</label>
+                    <p className="fw-medium">{institution?.name || 'N/A'}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">School Code</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={settingsData?.general.schoolCode || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Institution Code</label>
+                    <p className="fw-medium">{institution?.instituteCode || 'N/A'}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Phone Number</label>
-                    <input 
-                      type="tel" 
-                      className="form-control" 
-                      value={settingsData?.general.phone || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Phone Number</label>
+                    <p className="fw-medium">{institution?.contact?.phone || 'N/A'}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Email Address</label>
-                    <input 
-                      type="email" 
-                      className="form-control" 
-                      value={settingsData?.general.email || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Email Address</label>
+                    <p className="fw-medium">{institution?.contact?.email || 'N/A'}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Website</label>
-                    <input 
-                      type="url" 
-                      className="form-control" 
-                      value={settingsData?.general.website || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Website</label>
+                    <p className="fw-medium">{institution?.contact?.website || 'N/A'}</p>
                   </div>
                 </div>
                 <div className="col-md-6">
                   <div className="mb-3">
-                    <label className="form-label">Address</label>
-                    <textarea 
-                      className="form-control" 
-                      rows={3}
-                      value={settingsData?.general.address || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Address</label>
+                    <p className="fw-medium">{formatAddress()}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Established Year</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={settingsData?.general.establishedYear || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Established Year</label>
+                    <p className="fw-medium">{institution?.established || 'N/A'}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">School Type</label>
-                    <select className="form-select" disabled={!isEditing}>
-                      <option value="elementary" selected={settingsData?.general.schoolType === 'Elementary School'}>Elementary School</option>
-                      <option value="middle">Middle School</option>
-                      <option value="high">High School</option>
-                      <option value="k12">K-12 School</option>
-                    </select>
+                    <label className="form-label text-muted">Institution Type</label>
+                    <p className="fw-medium">{getTypeLabel()}</p>
                   </div>
                   <div className="mb-3">
-                    <label className="form-label">Affiliation</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      value={settingsData?.general.affiliation || ''}
-                      disabled={!isEditing}
-                    />
+                    <label className="form-label text-muted">Principal</label>
+                    <p className="fw-medium">{institution?.principalName || 'N/A'} {institution?.principalEmail ? `(${institution.principalEmail})` : ''}</p>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label text-muted">Status</label>
+                    <p className="fw-medium">
+                      <span className={`badge ${institution?.status === 'active' ? 'badge-soft-success' : 'badge-soft-warning'}`}>
+                        {institution?.status ? institution.status.charAt(0).toUpperCase() + institution.status.slice(1) : 'N/A'}
+                      </span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -420,7 +374,8 @@ const AdminSchoolSettingsPage: React.FC = () => {
                   <div className="mb-3">
                     <label className="form-label">Currency</label>
                     <select className="form-select" disabled={!isEditing}>
-                      <option value="USD" selected={settingsData?.system.currency === 'USD'}>USD ($)</option>
+                      <option value="INR" selected={settingsData?.system.currency === 'INR' || !settingsData?.system.currency}>INR (₹)</option>
+                      <option value="INR" selected={settingsData?.system.currency === 'INR'}>INR (₹)</option>
                       <option value="EUR">EUR (€)</option>
                       <option value="GBP">GBP (£)</option>
                     </select>

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { getRoleBasedDashboard } from '../../../utils/permissions'
 import { useAuthStore } from '../../../store/authStore'
 import AuthLeft from './authleft/AuthLeft'
-import AuthFooter from './authfooter/AuthFooter'
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('')
@@ -11,16 +11,10 @@ const Login: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
-
   const { isAuthenticated, user } = useAuthStore()
-
-  // Only redirect after a fresh login action, not on initial page load
-  // (prevents auto-redirect when user explicitly navigates to /login)
   const [hasInteracted, setHasInteracted] = useState(false)
 
   useEffect(() => {
-    // If user is already authenticated and visits login page, don't redirect automatically
-    // Only redirect after explicit login interaction
     if (isAuthenticated && user && hasInteracted) {
       navigate(getRoleBasedDashboard(user.role), { replace: true })
     }
@@ -32,6 +26,7 @@ const Login: React.FC = () => {
       const { login } = useAuthStore.getState()
       await login(email, password)
       setHasInteracted(true)
+      toast.success(`Welcome back!`, { autoClose: 3000 })
     } catch (err: any) {
       // error is set in store
     }
@@ -40,20 +35,16 @@ const Login: React.FC = () => {
   return (
     <div className="auth-root">
       <AuthLeft />
-
       <div className="auth-right">
+        <div className="auth-right-header">
+        </div>
         <div className="auth-right-scroll">
           <div className="auth-right-inner">
-
-            <div className="auth-right-logo">
-              <img src="/assets/img/Ultrakey_fav.png" alt="Ultrakey" />
-            </div>
-
             <h1>Welcome Back</h1>
-            <p className="auth-subtitle">Please enter your details to  Login</p>
+            <p className="auth-subtitle">Please enter your details to login</p>
 
             <form onSubmit={handleSubmit}>
-              <div className="auth-field has-label" style={{ animationDelay: '.5s' }}>
+              <div className="auth-field has-label">
                 <label>Email Address</label>
                 <i className="ti ti-mail auth-icon"></i>
                 <input
@@ -63,7 +54,7 @@ const Login: React.FC = () => {
                 />
               </div>
 
-              <div className="auth-field has-label" style={{ animationDelay: '.58s' }}>
+              <div className="auth-field has-label">
                 <label>Password</label>
                 <i className="ti ti-lock auth-icon"></i>
                 <input
@@ -88,28 +79,12 @@ const Login: React.FC = () => {
 
               <button type="submit" className="auth-btn-primary">LOGIN</button>
             </form>
-
-            <div className="auth-or">or </div>
-
-            <div className="auth-social-row">
-              <a href="javascript:void(0);" className="auth-social-btn" title="Facebook">
-                <i className="ti ti-brand-facebook"></i>
-              </a>
-              <a href="javascript:void(0);" className="auth-social-btn" title="Google">
-                <i className="ti ti-brand-google"></i>
-              </a>
-              <a href="javascript:void(0);" className="auth-social-btn" title="Apple">
-                <i className="ti ti-brand-apple"></i>
-              </a>
-            </div>
-
             <div className="auth-switch">
               Don't have an account?{' '}
               <Link to="/register">Create Account</Link>
             </div>
           </div>
         </div>
-        <AuthFooter />
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import schoolService from '../services/schoolService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import User from '../models/User.js';
 
 // Validation constants
 const VALID_TYPES = ['primary', 'secondary', 'high-school', 'college', 'university', 'institute', 'other'];
@@ -106,7 +107,7 @@ const createSchool = async (req, res) => {
     
     const school = await schoolService.createSchool(schoolData);
     
-    logger.info('School created successfully:', { schoolId: school._id, name });
+    logger.info('School created successfully:', { institutionId: school._id, name });
     return createdResponse(res, school, 'School created successfully');
   } catch (error) {
     logger.error('Error creating school:', error);
@@ -209,7 +210,7 @@ const getSchoolById = async (req, res) => {
       return notFoundResponse(res, 'School not found');
     }
     
-    logger.info('School fetched successfully:', { schoolId: id });
+    logger.info('School fetched successfully:', { institutionId: id });
     return successResponse(res, school, 'School retrieved successfully');
   } catch (error) {
     logger.error('Error fetching school:', error);
@@ -319,7 +320,7 @@ const updateSchool = async (req, res) => {
       return notFoundResponse(res, 'School not found');
     }
     
-    logger.info('School updated successfully:', { schoolId: id });
+    logger.info('School updated successfully:', { institutionId: id });
     return successResponse(res, school, 'School updated successfully');
   } catch (error) {
     logger.error('Error updating school:', error);
@@ -346,7 +347,7 @@ const deleteSchool = async (req, res) => {
     
     await schoolService.deleteSchool(id);
     
-    logger.info('School deleted successfully:', { schoolId: id });
+    logger.info('School deleted successfully:', { institutionId: id });
     return successResponse(res, null, 'School deleted successfully');
   } catch (error) {
     logger.error('Error deleting school:', error);
@@ -514,7 +515,7 @@ const getSchoolMetrics = async (req, res) => {
     
     const metrics = await schoolService.getSchoolMetrics(id);
     
-    logger.info('School metrics fetched successfully:', { schoolId: id });
+    logger.info('School metrics fetched successfully:', { institutionId: id });
     return successResponse(res, metrics, 'Metrics retrieved successfully');
   } catch (error) {
     logger.error('Error fetching school metrics:', error);
@@ -612,23 +613,147 @@ const getSubscriptionAnalytics = async (req, res) => {
   };
   
   const getAdmins = async (req, res) => {
-      return errorResponse(res, 'Not Implemented', 501);
+    try {
+      logger.info('Fetching admins');
+      const { page, limit, search, status } = req.query;
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 20;
+      const skip = (pageNum - 1) * limitNum;
+
+      const adminRoles = ['admin', 'institution_admin', 'principal'];
+      const filter = { role: { $in: adminRoles } };
+
+      if (status) filter['status'] = status;
+      if (search) {
+        filter['$or'] = [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      const [admins, total] = await Promise.all([
+        User.find(filter).select('-password').skip(skip).limit(limitNum).sort({ createdAt: -1 }),
+        User.countDocuments(filter)
+      ]);
+
+      logger.info(`Found ${total} admins`);
+      return successResponse(res, {
+        admins,
+        pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
+      }, 'Admins retrieved successfully');
+    } catch (error) {
+      logger.error('Error fetching admins:', error);
+      return errorResponse(res, error.message);
+    }
   };
   
   const createAdmin = async (req, res) => {
-      return errorResponse(res, 'Not Implemented', 501);
+    try {
+      logger.info('Creating admin');
+      const { name, email, password, role, phone } = req.body;
+      const errors = [];
+
+      if (!name || !name.trim()) errors.push('Name is required');
+      if (!email || !email.trim()) errors.push('Email is required');
+      if (!password || password.length < 6) errors.push('Password must be at least 6 characters');
+      if (role && !['admin', 'institution_admin', 'principal'].includes(role)) {
+        errors.push('Invalid admin role');
+      }
+
+      if (errors.length > 0) return validationErrorResponse(res, errors);
+
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing) return errorResponse(res, 'User with this email already exists', 409);
+
+      const admin = await User.create({
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        password,
+        role: role || 'admin',
+        phone,
+        status: 'active'
+      });
+
+      const adminData = await User.findById(admin._id).select('-password');
+      logger.info('Admin created:', { id: adminData._id, email: adminData.email });
+      return createdResponse(res, adminData, 'Admin created successfully');
+    } catch (error) {
+      logger.error('Error creating admin:', error);
+      return errorResponse(res, error.message);
+    }
   };
   
   const updateAdmin = async (req, res) => {
-      return errorResponse(res, 'Not Implemented', 501);
+    try {
+      const { id } = req.params;
+      logger.info(`Updating admin: ${id}`);
+
+      const validationError = validateObjectId(id, 'Admin ID');
+      if (validationError) return validationErrorResponse(res, [validationError]);
+
+      const allowedFields = ['name', 'email', 'phone', 'role', 'status'];
+      const updates = {};
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) updates[field] = req.body[field];
+      }
+
+      if (updates.email) updates.email = updates.email.toLowerCase().trim();
+      if (updates.role && !['admin', 'institution_admin', 'principal'].includes(updates.role)) {
+        return validationErrorResponse(res, ['Invalid admin role']);
+      }
+
+      const admin = await User.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true }).select('-password');
+      if (!admin) return notFoundResponse(res, 'Admin not found');
+
+      logger.info('Admin updated:', { id: admin._id });
+      return successResponse(res, admin, 'Admin updated successfully');
+    } catch (error) {
+      logger.error('Error updating admin:', error);
+      return errorResponse(res, error.message);
+    }
   };
   
   const deleteAdmin = async (req, res) => {
-      return errorResponse(res, 'Not Implemented', 501);
+    try {
+      const { id } = req.params;
+      logger.info(`Deleting admin: ${id}`);
+
+      const validationError = validateObjectId(id, 'Admin ID');
+      if (validationError) return validationErrorResponse(res, [validationError]);
+
+      const admin = await User.findByIdAndUpdate(id, { $set: { status: 'deleted', isActive: false } }, { new: true }).select('-password');
+      if (!admin) return notFoundResponse(res, 'Admin not found');
+
+      logger.info('Admin deactivated:', { id: admin._id });
+      return successResponse(res, admin, 'Admin deactivated successfully');
+    } catch (error) {
+      logger.error('Error deleting admin:', error);
+      return errorResponse(res, error.message);
+    }
   };
   
   const toggleAdminStatus = async (req, res) => {
-      return errorResponse(res, 'Not Implemented', 501);
+    try {
+      const { id } = req.params;
+      logger.info(`Toggling admin status: ${id}`);
+
+      const validationError = validateObjectId(id, 'Admin ID');
+      if (validationError) return validationErrorResponse(res, [validationError]);
+
+      const admin = await User.findById(id).select('-password');
+      if (!admin) return notFoundResponse(res, 'Admin not found');
+
+      const newStatus = admin.status === 'active' ? 'inactive' : 'active';
+      admin.status = newStatus;
+      admin.isActive = newStatus === 'active';
+      await admin.save();
+
+      logger.info('Admin status toggled:', { id: admin._id, status: newStatus });
+      return successResponse(res, admin, 'Admin status updated successfully');
+    } catch (error) {
+      logger.error('Error toggling admin status:', error);
+      return errorResponse(res, error.message);
+    }
   };
 
 // Export all functions

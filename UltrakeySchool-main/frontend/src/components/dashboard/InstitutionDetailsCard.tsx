@@ -2,30 +2,44 @@ import React from 'react';
 import { Card, Row, Col, Badge } from 'react-bootstrap';
 import { Building, Mail, Phone, MapPin, CreditCard, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface InstitutionDetailsCardProps {
-  institution?: {
-    id: string;
-    name: string;
-    instituteCode: string;
-    type: string;
-    status: string;
-    logo?: string;
-    contact?: {
-      email?: string;
-      phone?: string;
-      address?: {
-        street?: string;
-        city?: string;
-        state?: string;
-        country?: string;
-        postalCode?: string;
-      };
+type InstitutionLike = {
+  id?: string;
+  _id?: string;
+  institutionId?: string;
+  name?: string;
+  instituteCode?: string;
+  code?: string;
+  schoolCode?: string;
+  type?: string;
+  status?: string;
+  logo?: string;
+  contact?: {
+    email?: string;
+    phone?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      postalCode?: string;
     };
   };
+};
+
+interface InstitutionDetailsCardProps {
+  institution?: InstitutionLike | null;
   userRole?: string;
   plan?: string;
   lastUpdated?: string;
 }
+
+const resolveInstitutionId = (institution?: InstitutionLike | null): string => {
+  const raw = institution?.id ?? institution?._id ?? institution?.institutionId;
+  return raw != null ? String(raw) : '';
+};
+
+const resolveInstituteCode = (institution?: InstitutionLike | null): string =>
+  institution?.instituteCode || institution?.code || institution?.schoolCode || 'N/A';
 
 const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
   institution,
@@ -33,8 +47,8 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
   plan,
   lastUpdated
 }) => {
-  const getStatusVariant = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusVariant = (status?: string) => {
+    switch ((status || '').toLowerCase()) {
       case 'active':
         return 'bg-success';
       case 'inactive':
@@ -48,8 +62,8 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
+  const getStatusIcon = (status?: string) => {
+    switch ((status || '').toLowerCase()) {
       case 'active':
         return <CheckCircle size={14} className="me-1" />;
       case 'inactive':
@@ -61,24 +75,24 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
     }
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type.toLowerCase()) {
+  const getTypeIcon = (type?: string) => {
+    switch ((type || '').toLowerCase()) {
       case 'school':
-        return '🏫';
+        return <i className="ti ti-building"></i>;
       case 'college':
-        return '🎓';
+        return <i className="ti ti-school"></i>;
       case 'university':
-        return '🏛️';
+        return <i className="ti ti-building-arch"></i>;
       case 'degree':
-        return '📚';
+        return <i className="ti ti-books"></i>;
       case 'btech':
-        return '⚙️';
+        return <i className="ti ti-settings"></i>;
       case 'medical':
-        return '🏥';
+        return <i className="ti ti-building-hospital"></i>;
       case 'management':
-        return '💼';
+        return <i className="ti ti-briefcase"></i>;
       default:
-        return '🏢';
+        return <i className="ti ti-building"></i>;
     }
   };
 
@@ -95,8 +109,11 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
     }
   };
 
+  const instituteCode = resolveInstituteCode(institution);
+  const institutionName = institution?.name?.trim() || '';
+
   // If no institution data, show placeholder
-  if (!institution) {
+  if (!institution || !institutionName) {
     return (
       <Card className="mb-4 border-warning">
         <Card.Body className="p-3">
@@ -117,37 +134,41 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
       <Card.Body className="p-4">
         {/* Header Section */}
         <Row className="align-items-center mb-3">
-          <Col xs="auto">
-            <div className="institution-logo me-3">
-              {institution.logo ? (
-                <img
-                  src={institution.logo}
-                  alt={institution.name}
-                  style={{ width: '64px', height: '64px', objectFit: 'cover' }}
-                  className="rounded border"
-                />
-              ) : (
-                <div
-                  className="rounded d-flex align-items-center justify-content-center border"
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    backgroundColor: '#e3f2fd',
-                    fontSize: '32px'
-                  }}
-                >
-                  {getTypeIcon(institution.type)}
-                </div>
-              )}
-            </div>
-          </Col>
+           <Col xs="auto">
+             <div className="institution-logo me-3">
+               {institution.logo ? (
+                 <img
+                   src={institution.logo}
+                   alt={institution.name}
+                   style={{ width: '64px', height: '64px', objectFit: 'cover' }}
+                   className="rounded border"
+                   onError={(e) => {
+                     // Fallback to icon if image fails to load
+                     (e.currentTarget as HTMLImageElement).src = '';
+                   }}
+                 />
+               ) : (
+                 <div
+                   className="rounded d-flex align-items-center justify-content-center border"
+                   style={{
+                     width: '64px',
+                     height: '64px',
+                     backgroundColor: '#e3f2fd',
+                     fontSize: '32px'
+                   }}
+                 >
+                   {getTypeIcon(institution.type)}
+                 </div>
+               )}
+             </div>
+           </Col>
           
           <Col className="flex-grow-1">
             <div className="d-flex align-items-center mb-2">
-              <h4 className="mb-0 me-3">{institution.name}</h4>
-              <Badge className={`${getStatusVariant(institution.status)} me-2`}>
-                {getStatusIcon(institution.status)}
-                {institution.status}
+              <h4 className="mb-0 me-3">{institutionName}</h4>
+              <Badge className={`${getStatusVariant(institution?.status)} me-2`}>
+                {getStatusIcon(institution?.status)}
+                {institution?.status || 'active'}
               </Badge>
               {plan && (
                 <Badge className={`${getPlanVariant(plan)} d-flex align-items-center`}>
@@ -160,10 +181,10 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
             <div className="d-flex align-items-center text-muted small mb-2">
               <span className="me-3">
                 <Building size={14} className="me-1" />
-                Code: {institution.instituteCode}
+                Institution ID: {instituteCode}
               </span>
               <span className="me-3">
-                Type: {institution.type}
+                Type: {institution?.type || 'School'}
               </span>
               {userRole && (
                 <span className="me-3">
@@ -205,12 +226,6 @@ const InstitutionDetailsCard: React.FC<InstitutionDetailsCardProps> = ({
             </div>
           </Col>
 
-          <Col xs="auto">
-            <div className="text-end">
-              <div className="small text-muted mb-1">Institution ID</div>
-              <code className="small bg-light p-1 rounded">{institution.id.slice(-8)}</code>
-            </div>
-          </Col>
         </Row>
 
         {/* Address Section */}

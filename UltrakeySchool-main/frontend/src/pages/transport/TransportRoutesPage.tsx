@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { useAuth } from '../../store/authStore';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Route {
   _id: string;
@@ -23,6 +25,7 @@ interface Route {
 }
 
 const TransportRoutesPage = () => {
+  const { user } = useAuth();
   const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,8 @@ const TransportRoutesPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/transport/routes?_t=' + Date.now());
+      const instId = user?.institutionId || user?.institution || '';
+      const response = await apiClient.get(`/transport/routes?institutionId=${instId}&_t=${Date.now()}`);
 
       let routesData: Route[] = [];
       if (response.data?.success) {
@@ -85,7 +89,13 @@ const TransportRoutesPage = () => {
 
     try {
       setSaving(true);
-      const response = await apiClient.post('/transport/routes', formData);
+      const instId = user?.institutionId || user?.institution || '';
+      const payload = {
+        ...formData,
+        institutionId: instId,
+        tenant: instId
+      };
+      const response = await apiClient.post('/transport/routes', payload);
 
       if (response.data?.success || response.status === 200) {
         toast.success('Route added successfully');
@@ -135,25 +145,33 @@ const TransportRoutesPage = () => {
   };
 
   const handleDelete = async () => {
-    try {
-      setDeleting(true);
+    const idsToDelete = [...selectedRoutes];
+    if (idsToDelete.length === 0) return;
 
-      if (selectedRoutes.length === 1) {
-        const response = await apiClient.delete(`/transport/routes/${selectedRoutes[0]}`);
-        if (response.data.success) {
-          toast.success('Route deleted successfully');
-        }
+    // Save original data for potential rollback
+    const originalData = [...routes];
+
+    // Optimistically remove from UI immediately
+    setRoutes(prev => prev.filter(r => !idsToDelete.includes(r._id)));
+    setShowDeleteModal(false);
+    setSelectedRoutes([]);
+    setDeleting(true);
+
+    try {
+      if (idsToDelete.length === 1) {
+        const response = await apiClient.delete(`/transport/routes/${idsToDelete[0]}?_t=${Date.now()}`);
+        if (!response.data?.success) throw new Error(response.data?.message || 'Delete failed');
       } else {
         await Promise.all(
-          selectedRoutes.map((id) => apiClient.delete(`/transport/routes/${id}`))
+          idsToDelete.map((id) => apiClient.delete(`/transport/routes/${id}?_t=${Date.now()}`))
         );
-        toast.success('Routes deleted successfully');
       }
-
-      setShowDeleteModal(false);
-      setSelectedRoutes([]);
+      toast.success(`${idsToDelete.length > 1 ? 'Routes' : 'Route'} deleted successfully`);
+      // Sync with server
       fetchRoutes();
     } catch (err: any) {
+      // Rollback optimistic removal on failure
+      setRoutes(originalData);
       console.error('Error deleting route(s):', err);
       toast.error(err.response?.data?.message || 'Failed to delete route(s)');
     } finally {
@@ -192,12 +210,38 @@ const TransportRoutesPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = filteredRoutes.map(r => ({
+      'Route Name': r.name,
+      Vehicle: r.vehicle?.registrationNumber || 'Not Assigned',
+      Driver: r.driver?.name || 'Not Assigned',
+      Stops: r.stops,
+      'Start Time': r.startTime || '-',
+      'End Time': r.endTime || '-',
+      Status: r.status.charAt(0).toUpperCase() + r.status.slice(1)
+    }));
+    exportToPDF(exportData, 'routes', [
+      { key: 'Route Name', label: 'Route Name' },
+      { key: 'Vehicle', label: 'Vehicle' },
+      { key: 'Driver', label: 'Driver' },
+      { key: 'Stops', label: 'Stops' },
+      { key: 'Start Time', label: 'Start Time' },
+      { key: 'End Time', label: 'End Time' },
+      { key: 'Status', label: 'Status' }
+    ], 'Transport Routes');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = filteredRoutes.map(r => ({
+      'Route Name': r.name,
+      Vehicle: r.vehicle?.registrationNumber || 'Not Assigned',
+      Driver: r.driver?.name || 'Not Assigned',
+      Stops: r.stops,
+      'Start Time': r.startTime || '-',
+      'End Time': r.endTime || '-',
+      Status: r.status.charAt(0).toUpperCase() + r.status.slice(1)
+    }));
+    exportToExcel(exportData, 'routes');
   };
 
   const activeRoutes = routes.filter((r) => r.status === 'active').length;
@@ -213,10 +257,10 @@ const TransportRoutesPage = () => {
             <nav>
               <ol className="breadcrumb mb-0">
                 <li className="breadcrumb-item">
-                  <Link to="/transport">Dashboard</Link>
+                  <Link to="/dashboard/main">Dashboard</Link>
                 </li>
                 <li className="breadcrumb-item">
-                  <Link to="/transport">Transport</Link>
+                  <Link to="/dashboard/main/transport">Transport</Link>
                 </li>
                 <li className="breadcrumb-item active">Routes</li>
               </ol>
@@ -245,10 +289,10 @@ const TransportRoutesPage = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                  <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/transport">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active">Routes</li>
             </ol>
@@ -284,12 +328,12 @@ const TransportRoutesPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -492,7 +536,7 @@ const TransportRoutesPage = () => {
                       <td>
                         {route.vehicle ? (
                           <Link
-                            to={`/institution/transport/vehicles/${route.vehicle._id}`}
+                            to={`/dashboard/main/transport/vehicles/${route.vehicle._id}`}
                             className="badge bg-info-transparent text-info"
                           >
                             {route.vehicle.registrationNumber}
@@ -527,13 +571,13 @@ const TransportRoutesPage = () => {
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
-                          <Link
-                            to={`/transport/routes/${route._id}`}
+                          <button
                             className="btn btn-sm btn-icon btn-light me-2"
-                            title="View Details"
+                            onClick={() => openEditModal(route)}
+                            title="View / Edit Details"
                           >
                             <i className="ti ti-eye"></i>
-                          </Link>
+                          </button>
                           <button
                             className="btn btn-sm btn-icon btn-info me-2"
                             onClick={() => openEditModal(route)}

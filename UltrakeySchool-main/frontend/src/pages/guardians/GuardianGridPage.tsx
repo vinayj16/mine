@@ -13,7 +13,7 @@ const GuardianGridPage = () => {
   useEffect(() => {
     let isMounted = true;
 
-    if (!user?.schoolId) {
+    if (!user?.institutionId) {
       setError('Unable to resolve your school. Please sign in again.');
       setLoading(false);
 
@@ -26,7 +26,7 @@ const GuardianGridPage = () => {
       setLoading(true);
 
       try {
-        const payload = await guardianService.listForSchool(user.schoolId, { limit: 100 });
+        const payload = await guardianService.listForSchool(user.institutionId, { limit: 100 });
         if (!isMounted) return;
         setGuardians(payload.guardians.map(mapGuardianToDisplay));
         setError(null);
@@ -46,7 +46,7 @@ const GuardianGridPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [user?.schoolId]);
+  }, [user?.institutionId]);
 
   return (
     <>

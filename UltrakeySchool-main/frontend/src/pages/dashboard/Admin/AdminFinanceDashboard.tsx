@@ -58,9 +58,9 @@ const AdminFinanceDashboard = () => {
       setLoading(true);
       setError(null);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || JSON.parse(userStr)?.institutionId || '' : '';
       
       const [
         summaryRes,
@@ -72,14 +72,14 @@ const AdminFinanceDashboard = () => {
         overdueRes,
         expenseCatRes
       ] = await Promise.allSettled([
-        apiClient.get('/finance/summary', { params: { schoolId } }),
-        apiClient.get('/finance/transactions', { params: { schoolId, limit: 20 } }),
-        apiClient.get('/expenses', { params: { schoolId, limit: 20 } }),
-        apiClient.get('/finance/monthly-trend', { params: { schoolId } }),
-        apiClient.get('/finance/payment-modes', { params: { schoolId } }),
-        apiClient.get('/finance/pending-by-grade', { params: { schoolId } }),
-        apiClient.get('/finance/overdue-students', { params: { schoolId } }),
-        apiClient.get('/expenses/categories', { params: { schoolId } })
+        apiClient.get('/finance/summary', { params: { institutionId } }),
+        apiClient.get('/finance/transactions', { params: { institutionId, limit: 20 } }),
+        apiClient.get('/expenses', { params: { institutionId, limit: 20 } }),
+        apiClient.get('/finance/monthly-trend', { params: { institutionId } }),
+        apiClient.get('/finance/payment-modes', { params: { institutionId } }),
+        apiClient.get('/finance/pending-by-grade', { params: { institutionId } }),
+        apiClient.get('/finance/overdue-students', { params: { institutionId } }),
+        apiClient.get('/expenses/categories', { params: { institutionId } })
       ])
 
       if (summaryRes.status === 'fulfilled' && summaryRes.value.data?.data) {
@@ -168,17 +168,17 @@ const AdminFinanceDashboard = () => {
   }
 
   const finSummary = [
-    { label: 'Total Collection', value: `$${summary.totalCollection.toLocaleString()}`, icon: 'ti ti-currency-dollar', avatarTone: 'bg-success', delta: '+12%', deltaTone: 'badge-success', sub: 'This month' },
-    { label: 'Total Expenses', value: `$${summary.totalExpenses.toLocaleString()}`, icon: 'ti ti-receipt', avatarTone: 'bg-danger', delta: '+5%', deltaTone: 'badge-danger', sub: 'This month' },
-    { label: 'Net Balance', value: `$${summary.netBalance.toLocaleString()}`, icon: 'ti ti-wallet', avatarTone: 'bg-primary', delta: '+8%', deltaTone: 'badge-primary', sub: 'This month' },
-    { label: 'Pending Fees', value: `$${summary.pendingFees.toLocaleString()}`, icon: 'ti ti-alert-circle', avatarTone: 'bg-warning', delta: '-3%', deltaTone: 'badge-warning', sub: 'Outstanding' },
+    { label: 'Total Collection', value: `₹${summary.totalCollection.toLocaleString()}`, icon: 'ti ti-currency-rupee', avatarTone: 'bg-success', delta: '+12%', deltaTone: 'badge-success', sub: 'This month' },
+    { label: 'Total Expenses', value: `₹${summary.totalExpenses.toLocaleString()}`, icon: 'ti ti-receipt', avatarTone: 'bg-danger', delta: '+5%', deltaTone: 'badge-danger', sub: 'This month' },
+    { label: 'Net Balance', value: `₹${summary.netBalance.toLocaleString()}`, icon: 'ti ti-wallet', avatarTone: 'bg-primary', delta: '+8%', deltaTone: 'badge-primary', sub: 'This month' },
+    { label: 'Pending Fees', value: `₹${summary.pendingFees.toLocaleString()}`, icon: 'ti ti-alert-circle', avatarTone: 'bg-warning', delta: '-3%', deltaTone: 'badge-warning', sub: 'Outstanding' },
     { label: 'Total Students', value: summary.totalStudents.toString(), icon: 'ti ti-users', avatarTone: 'bg-info', delta: '+2%', deltaTone: 'badge-info', sub: 'Active' },
     { label: 'Collection Rate', value: `${summary.collectionRate}%`, icon: 'ti ti-chart-pie', avatarTone: 'bg-success', delta: '+1%', deltaTone: 'badge-success', sub: 'This term' },
   ]
 
   const navSections = [
     { id: 'overview',  label: 'Overview',         icon: 'ti ti-layout-dashboard'   },
-    { id: 'collection',label: 'Fee Collection',   icon: 'ti ti-currency-dollar'    },
+    { id: 'collection',label: 'Fee Collection',   icon: 'ti ti-currency-rupee'    },
     { id: 'pending',   label: 'Pending Fees',     icon: 'ti ti-alert-circle'       },
     { id: 'expenses',  label: 'Expenses',         icon: 'ti ti-receipt'            },
     { id: 'reports',   label: 'Reports',          icon: 'ti ti-report-analytics'   },
@@ -272,8 +272,8 @@ const AdminFinanceDashboard = () => {
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v || 0)/1000}k`} />
-                      <Tooltip formatter={(v: any) => [`$${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v || 0)/1000}k`} />
+                      <Tooltip formatter={(v: any) => [`₹${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Area type="monotone" dataKey="collected" name="Collected" stroke="#6366f1" strokeWidth={2.5} fill="url(#colGrad)" dot={false} />
                     </AreaChart>
@@ -316,7 +316,7 @@ const AdminFinanceDashboard = () => {
                             <td><span className="badge bg-secondary">{t.id?.slice(0, 8) || '-'}</span></td>
                             <td className="fw-semibold">{t.student || t.name || '-'}</td>
                             <td>{t.class || t.grade || '-'}</td>
-                            <td className="text-success fw-semibold">${t.amount?.toLocaleString() || '0'}</td>
+                            <td className="text-success fw-semibold">₹{t.amount?.toLocaleString() || '0'}</td>
                             <td><span className="badge bg-light text-dark">{t.mode || t.paymentMode || '-'}</span></td>
                             <td><small className="text-muted">{t.date ? new Date(t.date).toLocaleDateString() : '-'}</small></td>
                             <td><span className={`badge ${t.status === 'completed' ? 'bg-success' : 'bg-warning'}`}>{t.status || 'pending'}</span></td>
@@ -346,8 +346,8 @@ const AdminFinanceDashboard = () => {
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={pendingByGrade.length > 0 ? pendingByGrade : []} barSize={32}>
                       <XAxis dataKey="grade" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v || 0)/1000}k`} />
-                      <Tooltip formatter={(v: any) => [`$${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v || 0)/1000}k`} />
+                      <Tooltip formatter={(v: any) => [`₹${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="collected" name="Collected" fill="#6366f1" radius={[6,6,0,0]} />
                       <Bar dataKey="pending" name="Pending" fill="#ef4444" radius={[6,6,0,0]} />
@@ -375,7 +375,7 @@ const AdminFinanceDashboard = () => {
                             <td><span className="badge bg-secondary">{t.id?.slice(0, 8) || '-'}</span></td>
                             <td className="fw-semibold">{t.student || t.name || '-'}</td>
                             <td>{t.class || t.grade || '-'}</td>
-                            <td className="text-success fw-semibold">${t.amount?.toLocaleString() || '0'}</td>
+                            <td className="text-success fw-semibold">₹{t.amount?.toLocaleString() || '0'}</td>
                             <td><span className="badge bg-light text-dark">{t.mode || t.paymentMode || '-'}</span></td>
                             <td><small className="text-muted">{t.date ? new Date(t.date).toLocaleDateString() : '-'}</small></td>
                             <td><span className={`badge ${t.status === 'completed' ? 'bg-success' : 'bg-warning'}`}>{t.status || 'pending'}</span></td>
@@ -406,8 +406,8 @@ const AdminFinanceDashboard = () => {
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={pendingByGrade.length > 0 ? pendingByGrade : []} barSize={32}>
                       <XAxis dataKey="grade" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v || 0)/1000}k`} />
-                      <Tooltip formatter={(v: any) => [`$${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${(v || 0)/1000}k`} />
+                      <Tooltip formatter={(v: any) => [`₹${(v || 0).toLocaleString()}`]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Bar dataKey="pending" name="Pending Fees" fill="#ef4444" radius={[6,6,0,0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -420,7 +420,7 @@ const AdminFinanceDashboard = () => {
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-center py-2 border-bottom">
                     <p className="mb-0 text-muted">Total Pending</p>
-                    <span className="text-danger fw-bold fs-4">${summary.pendingFees.toLocaleString()}</span>
+                    <span className="text-danger fw-bold fs-4">₹{summary.pendingFees.toLocaleString()}</span>
                   </div>
                   <div className="d-flex justify-content-between align-items-center py-2 border-bottom">
                     <p className="mb-0 text-muted">Students with Dues</p>
@@ -450,7 +450,7 @@ const AdminFinanceDashboard = () => {
                           <tr key={i}>
                             <td className="fw-semibold">{s.name || '-'}</td>
                             <td>{s.grade || s.class || '-'}</td>
-                            <td className="text-danger fw-semibold">${s.pending?.toLocaleString() || '0'}</td>
+                            <td className="text-danger fw-semibold">₹{s.pending?.toLocaleString() || '0'}</td>
                             <td><span className="badge bg-danger">{s.daysOverdue || '0'} days</span></td>
                             <td>
                               <div className="d-flex gap-1">
@@ -478,7 +478,7 @@ const AdminFinanceDashboard = () => {
         <>
           <div className="row mb-3">
             {[
-              { label: 'Total Expenses', value: `$${(summary.totalExpenses || 0).toLocaleString()}`, tone: 'bg-danger', icon: 'ti ti-receipt' },
+              { label: 'Total Expenses', value: `₹${(summary.totalExpenses || 0).toLocaleString()}`, tone: 'bg-danger', icon: 'ti ti-receipt' },
               { label: 'Categories', value: expenseCategories.length.toString(), tone: 'bg-info', icon: 'ti ti-tags' },
             ].map((c: any) => (
               <div key={c.label} className="col-xl-3 col-sm-6 d-flex">
@@ -504,7 +504,7 @@ const AdminFinanceDashboard = () => {
                       <Pie data={expenseCategories.length > 0 ? expenseCategories : []} cx="50%" cy="50%" outerRadius={85} paddingAngle={3} dataKey="value">
                         {(expenseCategories.length > 0 ? expenseCategories : []).map((_: any, i: number) => <Cell key={i} fill={C[i % C.length]} />)}
                       </Pie>
-                      <Tooltip formatter={(v: any) => [`$${v}`]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
+                      <Tooltip formatter={(v: any) => [`₹${v}`]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -525,7 +525,7 @@ const AdminFinanceDashboard = () => {
                           <tr key={i}>
                             <td><span className="badge badge-soft-primary">{e.category || '-'}</span></td>
                             <td style={{ fontSize: 13 }}>{e.description || '-'}</td>
-                            <td className="text-danger fw-semibold">${e.amount?.toLocaleString() || '0'}</td>
+                            <td className="text-danger fw-semibold">₹{e.amount?.toLocaleString() || '0'}</td>
                             <td><small className="text-muted">{e.date ? new Date(e.date).toLocaleDateString() : '-'}</small></td>
                             <td><span className={`badge ${e.status === 'approved' ? 'bg-success' : 'bg-warning'}`}>{e.status || 'pending'}</span></td>
                           </tr>
@@ -553,7 +553,7 @@ const AdminFinanceDashboard = () => {
                 <div className="card-body">
                   <div className="row g-3">
                     {[
-                      { label: 'Fee Collection Report', desc: 'Download detailed fee collection report', icon: 'ti ti-currency-dollar', to: '/finance/reports/collection' },
+                      { label: 'Fee Collection Report', desc: 'Download detailed fee collection report', icon: 'ti ti-currency-rupee', to: '/finance/reports/collection' },
                       { label: 'Expense Report', desc: 'Download expense summary', icon: 'ti ti-receipt', to: '/finance/reports/expenses' },
                       { label: 'Pending Fees Report', desc: 'Download pending fees report', icon: 'ti ti-alert-circle', to: '/finance/reports/pending' },
                       { label: 'Profit & Loss', desc: 'Download P&L statement', icon: 'ti ti-scale', to: '/finance/reports/pnl' },

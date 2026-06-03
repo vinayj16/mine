@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import institutionService, { type Institution } from '../../services/institutionService';
 import { useAuth } from '../../store/authStore';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const AgentInstitutionsPage = () => {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -16,6 +17,8 @@ const AgentInstitutionsPage = () => {
   const { user } = useAuth();
   const agentId = user?.id || localStorage.getItem('userId') || '';
   const itemsPerPage = 10;
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     fetchInstitutions();
@@ -37,17 +40,22 @@ const AgentInstitutionsPage = () => {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete ${name}?`)) {
-      return;
-    }
+    setDeleteTarget({ id, name });
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
-      await institutionService.deleteAgentInstitution(id);
+      await institutionService.deleteAgentInstitution(deleteTarget.id);
       toast.success('Institution deleted successfully');
       fetchInstitutions();
     } catch (error: any) {
       toast.error('Failed to delete institution');
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   // Filter institutions
@@ -84,7 +92,7 @@ const AgentInstitutionsPage = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -411,6 +419,7 @@ const AgentInstitutionsPage = () => {
           )}
         </div>
       </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message={deleteTarget ? `Are you sure you want to delete ${deleteTarget.name}?` : ''} />
     </div>
   );
 };

@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { useAuth } from '../../store/authStore';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Vehicle {
   _id: string;
-  registrationNumber: string;
+  vehicleNumber: string;
   vehicleType: string;
   model: string;
   manufacturer: string;
@@ -14,7 +16,7 @@ interface Vehicle {
     _id: string;
     name: string;
   };
-  status: 'active' | 'inactive' | 'maintenance';
+  status: 'Active' | 'Inactive' | 'Maintenance';
   gpsEnabled: boolean;
   lastLocation?: {
     latitude: number;
@@ -25,6 +27,7 @@ interface Vehicle {
 }
 
 const TransportVehiclePage = () => {
+  const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +41,7 @@ const TransportVehiclePage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
-    registrationNumber: '',
+    vehicleNumber: '',
     vehicleType: '',
     model: '',
     manufacturer: '',
@@ -53,9 +56,10 @@ const TransportVehiclePage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/transport/vehicles?_t=' + Date.now());
+      const instId = user?.institutionId || user?.institution || '';
+      const response = await apiClient.get(`/transport/vehicles?tenant=${instId}&_t=${Date.now()}`);
 
-      let vehiclesData = [];
+      let vehiclesData: Vehicle[] = [];
       if (response.data?.success) {
         const innerData = response.data.data;
         if (Array.isArray(innerData)) {
@@ -80,20 +84,29 @@ const TransportVehiclePage = () => {
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.registrationNumber.trim()) {
-      toast.error('Registration number is required');
+    if (!formData.vehicleNumber.trim()) {
+      toast.error('Vehicle number is required');
       return;
     }
 
     try {
       setSaving(true);
-      const response = await apiClient.post('/transport/vehicles', formData);
+      const instId = user?.institutionId || user?.institution || '';
+      const payload = {
+        vehicleNumber: formData.vehicleNumber,
+        vehicleType: formData.vehicleType,
+        model: formData.model,
+        manufacturer: formData.manufacturer,
+        capacity: formData.capacity,
+        institutionId: instId
+      };
+      const response = await apiClient.post('/transport/vehicles', payload);
 
       if (response.data.success) {
         toast.success('Vehicle added successfully');
         setShowAddModal(false);
         setFormData({
-          registrationNumber: '',
+          vehicleNumber: '',
           vehicleType: '',
           model: '',
           manufacturer: '',
@@ -115,14 +128,22 @@ const TransportVehiclePage = () => {
 
     try {
       setSaving(true);
-      const response = await apiClient.put(`/transport/vehicles/${selectedVehicle._id}`, formData);
+      const payload = {
+        vehicleNumber: formData.vehicleNumber,
+        vehicleType: formData.vehicleType,
+        model: formData.model,
+        manufacturer: formData.manufacturer,
+        capacity: formData.capacity,
+        status: selectedVehicle.status
+      };
+      const response = await apiClient.put(`/transport/vehicles/${selectedVehicle._id}`, payload);
 
       if (response.data.success) {
         toast.success('Vehicle updated successfully');
         setShowEditModal(false);
         setSelectedVehicle(null);
         setFormData({
-          registrationNumber: '',
+          vehicleNumber: '',
           vehicleType: '',
           model: '',
           manufacturer: '',
@@ -139,25 +160,32 @@ const TransportVehiclePage = () => {
   };
 
   const handleDelete = async () => {
-    try {
-      setDeleting(true);
+    const idsToDelete = [...selectedVehicles];
+    if (idsToDelete.length === 0) return;
 
-      if (selectedVehicles.length === 1) {
-        const response = await apiClient.delete(`/transport/vehicles/${selectedVehicles[0]}`);
-        if (response.data.success) {
-          toast.success('Vehicle deleted successfully');
-        }
+    // Save original data for potential rollback
+    const originalData = [...vehicles];
+
+    // Optimistically remove from UI immediately
+    setVehicles(prev => prev.filter(v => !idsToDelete.includes(v._id)));
+    setShowDeleteModal(false);
+    setSelectedVehicles([]);
+    setDeleting(true);
+
+    try {
+      if (idsToDelete.length === 1) {
+        const response = await apiClient.delete(`/transport/vehicles/${idsToDelete[0]}?_t=${Date.now()}`);
+        if (!response.data?.success) throw new Error(response.data?.message || 'Delete failed');
       } else {
         await Promise.all(
-          selectedVehicles.map((id) => apiClient.delete(`/transport/vehicles/${id}`))
+          idsToDelete.map((id) => apiClient.delete(`/transport/vehicles/${id}?_t=${Date.now()}`))
         );
-        toast.success('Vehicles deleted successfully');
       }
-
-      setShowDeleteModal(false);
-      setSelectedVehicles([]);
+      toast.success(`${idsToDelete.length > 1 ? 'Vehicles' : 'Vehicle'} deleted successfully`);
       fetchVehicles();
     } catch (err: any) {
+      // Rollback optimistic removal on failure
+      setVehicles(originalData);
       console.error('Error deleting vehicle(s):', err);
       toast.error(err.response?.data?.message || 'Failed to delete vehicle(s)');
     } finally {
@@ -168,7 +196,7 @@ const TransportVehiclePage = () => {
   const openEditModal = (vehicle: Vehicle) => {
     setSelectedVehicle(vehicle);
     setFormData({
-      registrationNumber: vehicle.registrationNumber,
+      vehicleNumber: vehicle.vehicleNumber,
       vehicleType: vehicle.vehicleType,
       model: vehicle.model,
       manufacturer: vehicle.manufacturer,
@@ -193,20 +221,49 @@ const TransportVehiclePage = () => {
 
   const filteredVehicles = vehicles.filter(
     (v) =>
-      v.registrationNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      v.vehicleNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.model.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const exportToPDF = () => {
-    toast.info('PDF export feature coming soon');
+  const handleExportPDF = () => {
+    const exportData = filteredVehicles.map(v => ({
+      'Vehicle No': v.vehicleNumber,
+      Type: v.vehicleType,
+      Model: v.model,
+      Manufacturer: v.manufacturer,
+      Capacity: v.capacity,
+      Driver: v.driver?.name || '-',
+      GPS: v.gpsEnabled ? 'Enabled' : 'Disabled',
+      Status: v.status
+    }));
+    exportToPDF(exportData, 'vehicles', [
+      { key: 'Vehicle No', label: 'Vehicle No' },
+      { key: 'Type', label: 'Type' },
+      { key: 'Model', label: 'Model' },
+      { key: 'Manufacturer', label: 'Manufacturer' },
+      { key: 'Capacity', label: 'Capacity' },
+      { key: 'Driver', label: 'Driver' },
+      { key: 'GPS', label: 'GPS' },
+      { key: 'Status', label: 'Status' }
+    ], 'Transport Vehicles');
   };
 
-  const exportToExcel = () => {
-    toast.info('Excel export feature coming soon');
+  const handleExportExcel = () => {
+    const exportData = filteredVehicles.map(v => ({
+      'Vehicle No': v.vehicleNumber,
+      Type: v.vehicleType,
+      Model: v.model,
+      Manufacturer: v.manufacturer,
+      Capacity: v.capacity,
+      Driver: v.driver?.name || '-',
+      GPS: v.gpsEnabled ? 'Enabled' : 'Disabled',
+      Status: v.status
+    }));
+    exportToExcel(exportData, 'vehicles');
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'active':
         return 'badge-soft-success';
       case 'maintenance':
@@ -227,10 +284,10 @@ const TransportVehiclePage = () => {
             <nav>
               <ol className="breadcrumb mb-0">
                 <li className="breadcrumb-item">
-                  <Link to="/transport">Dashboard</Link>
+                  <Link to="/dashboard/main">Dashboard</Link>
                 </li>
                 <li className="breadcrumb-item">
-                  <Link to="/institution/transport/routes">Transport</Link>
+                  <Link to="/dashboard/main/transport">Transport</Link>
                 </li>
                 <li className="breadcrumb-item active">Vehicles</li>
               </ol>
@@ -259,10 +316,10 @@ const TransportVehiclePage = () => {
           <nav>
             <ol className="breadcrumb mb-0">
               <li className="breadcrumb-item">
-                <Link to="/transport">Dashboard</Link>
+                <Link to="/dashboard/main">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/institution/transport/routes">Transport</Link>
+                <Link to="/dashboard/main/transport">Transport</Link>
               </li>
               <li className="breadcrumb-item active">Vehicles</li>
             </ol>
@@ -298,12 +355,12 @@ const TransportVehiclePage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToPDF}>
+                <button className="dropdown-item rounded-1" onClick={handleExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1" onClick={exportToExcel}>
+                <button className="dropdown-item rounded-1" onClick={handleExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -343,7 +400,7 @@ const TransportVehiclePage = () => {
                 <div className="flex-grow-1">
                   <h6 className="mb-0">Active</h6>
                   <h3 className="mb-0 text-success">
-                    {vehicles.filter((v) => v.status === 'active').length}
+                    {vehicles.filter((v) => v.status === 'Active').length}
                   </h3>
                 </div>
                 <div className="avatar avatar-lg bg-success-transparent rounded">
@@ -360,7 +417,7 @@ const TransportVehiclePage = () => {
                 <div className="flex-grow-1">
                   <h6 className="mb-0">Maintenance</h6>
                   <h3 className="mb-0 text-warning">
-                    {vehicles.filter((v) => v.status === 'maintenance').length}
+                    {vehicles.filter((v) => v.status === 'Maintenance').length}
                   </h3>
                 </div>
                 <div className="avatar avatar-lg bg-warning-transparent rounded">
@@ -446,7 +503,7 @@ const TransportVehiclePage = () => {
                         />
                       </div>
                     </th>
-                    <th>Registration No</th>
+                    <th>Vehicle No</th>
                     <th>Type</th>
                     <th>Model</th>
                     <th>Manufacturer</th>
@@ -471,7 +528,7 @@ const TransportVehiclePage = () => {
                         </div>
                       </td>
                       <td>
-                        <span className="fw-medium">{vehicle.registrationNumber}</span>
+                        <span className="fw-medium">{vehicle.vehicleNumber}</span>
                       </td>
                       <td>{vehicle.vehicleType}</td>
                       <td>{vehicle.model}</td>
@@ -501,13 +558,13 @@ const TransportVehiclePage = () => {
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
-                          <Link
-                            to={`/transport/vehicles/${vehicle._id}`}
+                          <button
                             className="btn btn-sm btn-icon btn-light me-2"
-                            title="View Details"
+                            onClick={() => openEditModal(vehicle)}
+                            title="View / Edit Details"
                           >
                             <i className="ti ti-eye"></i>
-                          </Link>
+                          </button>
                           <button
                             className="btn btn-sm btn-icon btn-info me-2"
                             onClick={() => openEditModal(vehicle)}
@@ -555,17 +612,17 @@ const TransportVehiclePage = () => {
                   <div className="row">
                     <div className="col-md-6 mb-3">
                       <label className="form-label">
-                        Registration Number <span className="text-danger">*</span>
+                        Vehicle Number <span className="text-danger">*</span>
                       </label>
                       <input
                         type="text"
                         className="form-control"
-                        value={formData.registrationNumber}
+                        value={formData.vehicleNumber}
                         onChange={(e) =>
-                          setFormData({ ...formData, registrationNumber: e.target.value })
+                          setFormData({ ...formData, vehicleNumber: e.target.value })
                         }
                         required
-                        placeholder="e.g., ABC-1234"
+                        placeholder="e.g., KA-01-AB-1234"
                       />
                     </div>
                     <div className="col-md-6 mb-3">
@@ -626,7 +683,7 @@ const TransportVehiclePage = () => {
                     onClick={() => {
                       setShowAddModal(false);
                       setFormData({
-                        registrationNumber: '',
+                        vehicleNumber: '',
                         vehicleType: '',
                         model: '',
                         manufacturer: '',
@@ -678,9 +735,9 @@ const TransportVehiclePage = () => {
                       <input
                         type="text"
                         className="form-control"
-                        value={formData.registrationNumber}
+                        value={formData.vehicleNumber}
                         onChange={(e) =>
-                          setFormData({ ...formData, registrationNumber: e.target.value })
+                          setFormData({ ...formData, vehicleNumber: e.target.value })
                         }
                         required
                       />
@@ -741,7 +798,7 @@ const TransportVehiclePage = () => {
                       setShowEditModal(false);
                       setSelectedVehicle(null);
                       setFormData({
-                        registrationNumber: '',
+                        vehicleNumber: '',
                         vehicleType: '',
                         model: '',
                         manufacturer: '',

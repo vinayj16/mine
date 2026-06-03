@@ -1,5 +1,3 @@
-import ReportTemplate from '../models/reportTemplate.js';
-import ScheduledReport from '../models/scheduledReport.js';
 import jobService from './jobService.js';
 import attendanceService from './attendanceService.js';
 import feeService from './feeService.js';
@@ -91,7 +89,7 @@ class ScheduledReportService {
         return { type: 'fees', period, format, report: feesReport };
       }
       case 'student_summary': {
-        const students = await Student.find({ schoolId: context.institutionId })
+        const students = await Student.find({ institutionId: context.institutionId })
           .sort({ createdAt: -1 })
           .limit(5)
           .select('firstName lastName classId rollNumber');

@@ -1,9 +1,3 @@
-/**
- * Multi-Tenant Middleware
- * Enforces tenant isolation for SaaS deployments
- * Ensures users can only access data from their own institution/tenant
- */
-
 import fs from 'fs';
 import path from 'path';
 import User from '../models/User.js';
@@ -28,6 +22,9 @@ export const extractTenantId = (req) => {
   // Priority 3: From query parameters
   if (req.query?.tenantId) {
     return req.query.tenantId;
+  }
+  if (req.query?.institutionId) {
+    return req.query.institutionId;
   }
 
   // Priority 4: From headers (for API clients)

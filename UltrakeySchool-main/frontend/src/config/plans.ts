@@ -1,8 +1,3 @@
-/**
- * Unified Plan Configuration for EduManage Pro
- * Defines subscription plans, their features, and limitations
- */
-
 export interface Plan {
   id: string;
   name: string;
@@ -22,7 +17,6 @@ export interface Plan {
   isRecommended?: boolean;
 }
 
-// Define all plans
 export const PLANS: Plan[] = [
   // 🟢 BASIC (Small Schools)
   {
@@ -30,7 +24,7 @@ export const PLANS: Plan[] = [
     name: 'basic',
     displayName: 'Basic',
     price: 29,
-    currency: 'USD',
+    currency: 'INR',
     billingCycle: 'monthly',
     description: 'Perfect for small schools with essential management needs',
     features: [
@@ -47,7 +41,7 @@ export const PLANS: Plan[] = [
     enabledModules: [
       'dashboards',
       'students',
-      'teachers', 
+      'teachers',
       'academics',
       'attendance',
       'communication',
@@ -68,7 +62,7 @@ export const PLANS: Plan[] = [
     name: 'medium',
     displayName: 'Medium',
     price: 79,
-    currency: 'USD',
+    currency: 'INR',
     billingCycle: 'monthly',
     description: 'Ideal for growing schools with comprehensive management needs',
     features: [
@@ -112,7 +106,7 @@ export const PLANS: Plan[] = [
     name: 'premium',
     displayName: 'Premium',
     price: 199,
-    currency: 'USD',
+    currency: 'INR',
     billingCycle: 'monthly',
     description: 'Complete solution for large schools and institutions',
     features: [
@@ -150,14 +144,14 @@ export const PLANS: Plan[] = [
     studentLimit: 2000,
     userLimit: 100,
     allowedRoles: [
-      'Admin', 
-      'Teacher', 
-      'Student', 
-      'Parent', 
-      'Accountant', 
-      'HR', 
-      'Librarian', 
-      'Transport Manager', 
+      'Admin',
+      'Teacher',
+      'Student',
+      'Parent',
+      'Accountant',
+      'HR',
+      'Librarian',
+      'Transport Manager',
       'Hostel Warden',
       'Principal',
       'Agent',
@@ -185,9 +179,9 @@ export const getEnabledPlans = (): Plan[] => {
 export const getPlansForComparison = (): Plan[] => {
   return PLANS.map(plan => ({
     ...plan,
-    features: plan.features.map(feature => 
+    features: plan.features.map(feature =>
       feature.replace('Everything in Basic', 'Basic features')
-            .replace('Everything in Medium', 'Medium features')
+        .replace('Everything in Medium', 'Medium features')
     )
   }));
 };
@@ -201,7 +195,7 @@ export const canUpgradeTo = (currentPlan: string, targetPlan: string): boolean =
   const current = getPlanById(currentPlan);
   const target = getPlanById(targetPlan);
   if (!current || !target) return false;
-  
+
   const currentPrice = current.price;
   const targetPrice = target.price;
   return targetPrice > currentPrice;
@@ -223,7 +217,7 @@ export const getPlanComparison = (): { [key: string]: boolean[] } => {
   const allFeatures = [
     'Core dashboards',
     'Student management',
-    'Teacher management', 
+    'Teacher management',
     'Parent & guardian management',
     'Academic management',
     'Attendance management',
@@ -257,7 +251,7 @@ export const getPlanComparison = (): { [key: string]: boolean[] } => {
             'User & role management',
             'School settings'
           ].includes(feature);
-        
+
         case 'medium':
           return [
             'Core dashboards',
@@ -274,10 +268,10 @@ export const getPlanComparison = (): { [key: string]: boolean[] } => {
             'User & role management',
             'School settings'
           ].includes(feature);
-        
+
         case 'premium':
           return true; // Premium has all features
-        
+
         default:
           return false;
       }
@@ -289,7 +283,7 @@ export const getPlanComparison = (): { [key: string]: boolean[] } => {
 export const getYearlyPrice = (planId: string): number => {
   const plan = getPlanById(planId);
   if (!plan) return 0;
-  
+
   // Apply 20% discount for yearly billing
   return plan.price * 12 * 0.8;
 };
@@ -303,31 +297,31 @@ export const canRoleAccessPlan = (roleId: string, planId: string): boolean => {
 export const getPlanFeaturesSummary = (planId: string): string[] => {
   const plan = getPlanById(planId);
   if (!plan) return [];
-  
+
   const features: string[] = [];
-  
+
   if (plan.studentLimit > 0) {
     features.push(`Up to ${plan.studentLimit} students`);
   } else {
     features.push('Unlimited students');
   }
-  
+
   if (plan.userLimit > 0) {
     features.push(`Up to ${plan.userLimit} users`);
   } else {
     features.push('Unlimited users');
   }
-  
+
   features.push(`${plan.enabledModules.length} modules`);
   features.push(`${plan.allowedRoles.length} role types`);
-  
+
   if (plan.isPopular) {
     features.push('Most Popular');
   }
-  
+
   if (plan.isRecommended) {
     features.push('Recommended');
   }
-  
+
   return features;
 };

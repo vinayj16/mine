@@ -97,30 +97,32 @@ const StudentTimeTablePage: React.FC = () => {
   const [timetable, setTimetable] = useState<DaySchedule[]>([]);
 
   const fetchStudentData = async () => {
-    if (!id) {
-      // No ID provided - will show student selector
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch student details
-      const studentResponse = await apiClient.get(`/students/${id}`);
-      if (studentResponse.data.success) {
-        setStudent(studentResponse.data.data);
+      let studentId = id;
+      let studentResponse;
+
+      if (id) {
+        studentResponse = await apiClient.get(`/students/${id}`);
+      } else {
+        studentResponse = await apiClient.get('/students/me');
       }
 
-      // Fetch student timetable
-      const timetableResponse = await apiClient.get(`/students/${id}/timetable`);
-      if (timetableResponse.data.success) {
-        const timetableData = timetableResponse.data.data || [];
-        
-        // Group sessions by day
-        const groupedByDay = groupSessionsByDay(timetableData);
-        setTimetable(groupedByDay);
+      if (studentResponse.data.success) {
+        const studentData = studentResponse.data.data;
+        setStudent(studentData);
+        studentId = studentData._id || studentData.id;
+      }
+
+      if (studentId) {
+        const timetableResponse = await apiClient.get(`/students/${studentId}/timetable`);
+        if (timetableResponse.data.success) {
+          const timetableData = timetableResponse.data.data || [];
+          const groupedByDay = groupSessionsByDay(timetableData);
+          setTimetable(groupedByDay);
+        }
       }
     } catch (err: any) {
       console.error('Error fetching student data:', err);
@@ -324,24 +326,16 @@ const StudentTimeTablePage: React.FC = () => {
           </div>
         </div>
       ) : !student ? (
-        !id ? (
-          <StudentSelector
-            redirectPath="/students/timetable"
-            title="Select Student for Timetable"
-            description="Choose a student to view their class timetable"
-          />
-        ) : (
-          <div className="card">
-            <div className="card-body text-center py-5">
-              <i className="ti ti-user-off fs-1 text-muted mb-3"></i>
-              <h4 className="mb-3">Student not found</h4>
-              <Link to="/students" className="btn btn-primary">
-                <i className="ti ti-arrow-left me-2"></i>
-                Back to Students
-              </Link>
-            </div>
+        <div className="card">
+          <div className="card-body text-center py-5">
+            <i className="ti ti-user-off fs-1 text-muted mb-3"></i>
+            <h4 className="mb-3">Student not found</h4>
+            <Link to="/dashboard/student" className="btn btn-primary">
+              <i className="ti ti-arrow-left me-2"></i>
+              Back to Dashboard
+            </Link>
           </div>
-        )
+        </div>
       ) : (
         <div className="row">
           <div className="col-xxl-3 col-xl-4">

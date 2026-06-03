@@ -243,7 +243,7 @@ export const expiringSubscriptionsValidator = [
 
 // Validation rules for migration from school
 export const migrateFromSchoolValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty()
     .withMessage('School ID is required')
     .isMongoId()

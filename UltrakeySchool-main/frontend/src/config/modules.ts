@@ -1,8 +1,3 @@
-/**
- * Unified Module Configuration for EduManage Pro
- * Defines all available modules, their properties, and access controls
- */
-
 export interface Module {
   key: string;
   legacyKey?: string;
@@ -32,6 +27,7 @@ export const MODULES: Module[] = [
       '/dashboard/main',
       '/dashboard/analytics',
       '/dashboard/finance',
+      '/dashboard/accountant',
       '/dashboard/teacher',
       '/dashboard/student',
       '/dashboard/parent',

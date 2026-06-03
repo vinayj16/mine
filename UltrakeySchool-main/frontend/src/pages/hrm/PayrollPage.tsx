@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import { getInstitutionId } from '../../utils/auth';
 
 interface Payroll {
   _id: string;
@@ -34,7 +36,7 @@ const PayrollPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.get('/hrm/payroll');
+      const response = await apiClient.get('/hrm/payroll', { params: { institutionId: getInstitutionId() } });
       if (response.data.success) {
         setPayrolls(response.data.data.payrolls || []);
       }
@@ -82,9 +84,9 @@ const PayrollPage: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'INR'
     }).format(amount);
   };
 
@@ -137,12 +139,30 @@ const PayrollPage: React.FC = () => {
               </a>
               <ul className="dropdown-menu dropdown-menu-end p-3">
                 <li>
-                  <a href="javascript:void(0);" className="dropdown-item rounded-1">
+                  <a href="javascript:void(0);" className="dropdown-item rounded-1" onClick={() => exportToPDF(payrolls, 'payroll-report', [
+                    { key: 'employee.name', label: 'Employee' },
+                    { key: 'month', label: 'Month' },
+                    { key: 'year', label: 'Year' },
+                    { key: 'basicSalary', label: 'Basic' },
+                    { key: 'allowances', label: 'Allowances' },
+                    { key: 'deductions', label: 'Deductions' },
+                    { key: 'netSalary', label: 'Net' },
+                    { key: 'status', label: 'Status' }
+                  ], 'Payroll Report')}>
                     <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                   </a>
                 </li>
                 <li>
-                  <a href="javascript:void(0);" className="dropdown-item rounded-1">
+                  <a href="javascript:void(0);" className="dropdown-item rounded-1" onClick={() => exportToExcel(payrolls, 'payroll-report', [
+                    { key: 'employee.name', label: 'Employee' },
+                    { key: 'month', label: 'Month' },
+                    { key: 'year', label: 'Year' },
+                    { key: 'basicSalary', label: 'Basic' },
+                    { key: 'allowances', label: 'Allowances' },
+                    { key: 'deductions', label: 'Deductions' },
+                    { key: 'netSalary', label: 'Net' },
+                    { key: 'status', label: 'Status' }
+                  ])}>
                     <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                   </a>
                 </li>

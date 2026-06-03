@@ -223,9 +223,9 @@ const UserSettingsPage = () => {
                         <select className="form-select form-select-sm" value={profile.gender}
                           onChange={(e) => setProfile({ ...profile, gender: e.target.value })}>
                           <option value="">Select</option>
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
                         </select>
                       </div>
                       <div className="col-md-6 mb-3">

@@ -3,8 +3,8 @@ import { successResponse, createdResponse, errorResponse, validationErrorRespons
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
-// Validation constants
-const VALID_STATUSES = ['active', 'inactive', 'maintenance', 'closed'];
+// Validation constants (must match Mongoose schema enum)
+const VALID_STATUSES = ['Active', 'Inactive'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 const MAX_NAME_LENGTH = 200;
 const MAX_ADDRESS_LENGTH = 500;
@@ -55,7 +55,7 @@ const getAllPickupPoints = async (req, res) => {
     logger.info('Fetching all pickup points');
     
     const { status, routeId, page, limit, search } = req.query;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId || req.query.tenant;
     
     // Validation
     const errors = [];
@@ -111,7 +111,7 @@ const getPickupPointById = async (req, res) => {
     logger.info('Fetching pickup point by ID');
     
     const { id } = req.params;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId || req.query.tenant;
     
     // Validation
     const errors = [];
@@ -149,7 +149,7 @@ const createPickupPoint = async (req, res) => {
     logger.info('Creating pickup point');
     
     const { name, address, latitude, longitude, routeId, status, pickupTime, dropTime, capacity, description } = req.body;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId || req.body.tenant;
     
     // Validation
     const errors = [];
@@ -232,7 +232,7 @@ const updatePickupPoint = async (req, res) => {
     
     const { id } = req.params;
     const { name, address, latitude, longitude, routeId, status, pickupTime, dropTime, capacity, description } = req.body;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId || req.body.tenant;
     
     // Validation
     const errors = [];
@@ -320,7 +320,7 @@ const deletePickupPoint = async (req, res) => {
     logger.info('Deleting pickup point');
     
     const { id } = req.params;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId || req.query.institutionId || req.body.tenant || req.query.tenant;
     
     // Validation
     const errors = [];
@@ -351,7 +351,7 @@ const bulkDeletePickupPoints = async (req, res) => {
     logger.info('Bulk deleting pickup points');
     
     const { ids } = req.body;
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId || req.query.institutionId || req.body.tenant || req.query.tenant;
     
     // Validation
     const errors = [];

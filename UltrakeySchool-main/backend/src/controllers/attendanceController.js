@@ -33,7 +33,7 @@ const validateDate = (date) => {
 export const getAttendanceStats = async (req, res) => {
   try {
     const { dateRange = 'today', startDate, endDate, classId, userType } = req.query;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate dateRange
     if (!VALID_DATE_RANGES.includes(dateRange)) {
@@ -68,8 +68,8 @@ export const getAttendanceStats = async (req, res) => {
       return validationErrorResponse(res, [{ field: 'userType', message: 'User type must be one of: ' + VALID_USER_TYPES.join(', ') }]);
     }
 
-    logger.info(`Fetching attendance stats for school ${schoolId}, range: ${dateRange}`);
-    const stats = await attendanceService.getAttendanceStats(schoolId, dateRange, { startDate, endDate, classId, userType });
+    logger.info(`Fetching attendance stats for school ${institutionId}, range: ${dateRange}`);
+    const stats = await attendanceService.getAttendanceStats(institutionId, dateRange, { startDate, endDate, classId, userType });
 
     return successResponse(res, stats, 'Attendance statistics fetched successfully', {
       dateRange,
@@ -83,9 +83,16 @@ export const getAttendanceStats = async (req, res) => {
 
 export const markAttendance = async (req, res) => {
   try {
-    const { userId, userType, status, remarks, date, location } = req.body;
-    const schoolId = req.user.schoolId;
-    const markedBy = req.user.id;
+    let { userId, staffId, userType, status, remarks, date, location } = req.body;
+    
+    // Support staffId from frontend
+    if (!userId && staffId) {
+      userId = staffId;
+      if (!userType) userType = 'staff';
+    }
+
+    const institutionId = req.body.institutionId || req.query.institutionId || req.user?.institutionId || req.tenantId;
+    const markedBy = req.user.id || req.user._id;
 
     // Validate required fields
     const errors = [];
@@ -113,7 +120,7 @@ export const markAttendance = async (req, res) => {
 
     logger.info(`Marking attendance for user ${userId}, status: ${status}`);
     const attendance = await attendanceService.markAttendance(
-      schoolId,
+      institutionId,
       userId,
       userType,
       status,
@@ -132,8 +139,21 @@ export const markAttendance = async (req, res) => {
 
 export const getAttendanceHistory = async (req, res) => {
   try {
-    const { userId, userType, startDate, endDate, status, page = 1, limit = 20 } = req.query;
-    const schoolId = req.user.schoolId;
+    let { userId, userType, startDate, endDate, status, page = 1, limit = 20 } = req.query;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
+
+    // For students, always use their own ID - no override allowed
+    if (req.user.role === 'student') {
+      const Student = (await import('../models/Student.js')).default;
+      const student = await Student.findOne({ userId: req.user.id || req.user._id });
+      if (student) {
+        userId = student._id;
+        userType = 'student';
+      } else {
+        userId = req.user.id || req.user._id;
+        userType = 'student';
+      }
+    }
 
     // Validate required fields
     const errors = [];
@@ -179,7 +199,7 @@ export const getAttendanceHistory = async (req, res) => {
 
     logger.info(`Fetching attendance history for user ${userId}`);
     const history = await attendanceService.getAttendanceHistory(
-      schoolId,
+      institutionId,
       userId,
       userType,
       new Date(startDate),
@@ -200,7 +220,7 @@ export const getAttendanceHistory = async (req, res) => {
 export const getBulkAttendance = async (req, res) => {
   try {
     const { userType, date, classId, sectionId, status } = req.query;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate userType
     if (!userType || !VALID_USER_TYPES.includes(userType)) {
@@ -235,7 +255,7 @@ export const getBulkAttendance = async (req, res) => {
 
     logger.info(`Fetching bulk attendance for ${userType}, date: ${date || 'today'}`);
     const attendance = await attendanceService.getBulkAttendance(
-      schoolId,
+      institutionId,
       userType,
       new Date(date || Date.now()),
       { classId, sectionId, status }
@@ -257,7 +277,7 @@ export const getBulkAttendance = async (req, res) => {
 export const getAttendanceWithSummary = async (req, res) => {
   try {
     const { classId, sectionId, date } = req.query;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate classId
     if (!classId) {
@@ -283,7 +303,7 @@ export const getAttendanceWithSummary = async (req, res) => {
 
     logger.info(`Fetching attendance with summary for class ${classId}`);
     const attendance = await attendanceService.getAttendanceWithSummary(
-      schoolId,
+      institutionId,
       classId,
       sectionId,
       new Date(date || Date.now())
@@ -305,7 +325,7 @@ export const getAttendanceWithSummary = async (req, res) => {
 export const bulkMarkAttendance = async (req, res) => {
   try {
     const { attendanceRecords, date } = req.body;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.body.institutionId || req.query.institutionId || req.user?.institutionId || req.tenantId;
     const markedBy = req.user.id;
 
     // Validate attendanceRecords
@@ -342,7 +362,7 @@ export const bulkMarkAttendance = async (req, res) => {
 
     logger.info(`Bulk marking attendance for ${attendanceRecords.length} records`);
     const result = await attendanceService.bulkMarkAttendance(
-      schoolId,
+      institutionId,
       attendanceRecords,
       markedBy,
       date
@@ -362,7 +382,7 @@ export const updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, remarks } = req.body;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.body.institutionId || req.query.institutionId || req.user?.institutionId || req.tenantId;
     const updatedBy = req.user.id;
 
     // Validate ID
@@ -379,7 +399,7 @@ export const updateAttendance = async (req, res) => {
     logger.info(`Updating attendance record ${id}`);
     const attendance = await attendanceService.updateAttendance(
       id,
-      schoolId,
+      institutionId,
       { status, remarks },
       updatedBy
     );
@@ -401,7 +421,7 @@ export const updateAttendance = async (req, res) => {
 export const deleteAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate ID
     const validation = validateObjectId(id, 'attendanceId');
@@ -410,7 +430,7 @@ export const deleteAttendance = async (req, res) => {
     }
 
     logger.info(`Deleting attendance record ${id}`);
-    const result = await attendanceService.deleteAttendance(id, schoolId);
+    const result = await attendanceService.deleteAttendance(id, institutionId);
 
     if (!result) {
       return errorResponse(res, 'Attendance record not found', 404);
@@ -429,7 +449,7 @@ export const deleteAttendance = async (req, res) => {
 export const getAttendanceReport = async (req, res) => {
   try {
     const { startDate, endDate, classId, sectionId, userType, format = 'json' } = req.query;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate required fields
     const errors = [];
@@ -470,7 +490,7 @@ export const getAttendanceReport = async (req, res) => {
 
     logger.info(`Generating attendance report from ${startDate} to ${endDate}`);
     const report = await attendanceService.getAttendanceReport(
-      schoolId,
+      institutionId,
       new Date(startDate),
       new Date(endDate),
       { classId, sectionId, userType, format }
@@ -496,8 +516,21 @@ export const getAttendanceReport = async (req, res) => {
  */
 export const getAttendancePercentage = async (req, res) => {
   try {
-    const { userId, userType, startDate, endDate } = req.query;
-    const schoolId = req.user.schoolId;
+    let { userId, userType, startDate, endDate } = req.query;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
+
+    // For students, always use their own ID - no override allowed
+    if (req.user.role === 'student') {
+      const Student = (await import('../models/Student.js')).default;
+      const student = await Student.findOne({ userId: req.user.id || req.user._id });
+      if (student) {
+        userId = student._id;
+        userType = 'student';
+      } else {
+        userId = req.user.id || req.user._id;
+        userType = 'student';
+      }
+    }
 
     // Validate required fields
     const errors = [];
@@ -524,7 +557,7 @@ export const getAttendancePercentage = async (req, res) => {
 
     logger.info(`Calculating attendance percentage for user ${userId}`);
     const percentage = await attendanceService.getAttendancePercentage(
-      schoolId,
+      institutionId,
       userId,
       userType,
       new Date(startDate),
@@ -541,10 +574,62 @@ export const getAttendancePercentage = async (req, res) => {
 /**
  * Get low attendance users
  */
+export const getStaffAttendance = async (req, res) => {
+  try {
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
+    const loggedInUserId = req.user?.id || req.user?._id;
+    const userRole = req.user?.role;
+
+    // Administrative roles can view all staff attendance
+    const adminRoles = ['superadmin', 'institution_admin', 'admin', 'principal'];
+    
+    if (adminRoles.includes(userRole)) {
+      // Admin view: return all staff attendance for the selected date (original behavior)
+      req.query.userType = 'staff';
+      return getBulkAttendance(req, res);
+    }
+
+    // Staff view: return only the logged-in user's own attendance
+    const { startDate, endDate } = req.query;
+    const today = new Date().toISOString().split('T')[0];
+    const queryStartDate = startDate || req.query.date || today;
+    const queryEndDate = endDate || req.query.date || today;
+
+    const attendance = await attendanceService.getAttendanceHistory(
+      institutionId,
+      loggedInUserId,
+      'staff',
+      new Date(queryStartDate),
+      new Date(queryEndDate)
+    );
+
+    // Format for frontend compatibility
+    const formatted = attendance.map(att => ({
+      _id: att._id,
+      staffId: att.userId,
+      staffName: req.user?.name || 'Staff',
+      staffAvatar: req.user?.avatar,
+      department: req.user?.department || 'General',
+      designation: req.user?.designation || req.user?.role || 'Staff',
+      attendance: att.status || 'absent',
+      status: att.status || 'absent',
+      notes: att.remarks || '',
+      date: att.date,
+      checkInTime: att.checkInTime,
+      checkOutTime: att.checkOutTime
+    }));
+
+    return successResponse(res, formatted, 'Staff attendance fetched successfully');
+  } catch (error) {
+    logger.error('Error fetching staff attendance:', error);
+    return errorResponse(res, 'Failed to fetch staff attendance', 500);
+  }
+};
+
 export const getLowAttendanceUsers = async (req, res) => {
   try {
     const { threshold = 75, userType, classId, startDate, endDate, page = 1, limit = 20 } = req.query;
-    const schoolId = req.user.schoolId;
+    const institutionId = req.query.institutionId || req.user?.institutionId || req.tenantId;
 
     // Validate threshold
     const thresholdNum = parseFloat(threshold);
@@ -584,7 +669,7 @@ export const getLowAttendanceUsers = async (req, res) => {
 
     logger.info(`Fetching users with attendance below ${thresholdNum}%`);
     const result = await attendanceService.getLowAttendanceUsers(
-      schoolId,
+      institutionId,
       thresholdNum,
       { userType, classId, startDate, endDate, page: pageNum, limit: limitNum }
     );
@@ -611,5 +696,6 @@ export default {
   deleteAttendance,
   getAttendanceReport,
   getAttendancePercentage,
-  getLowAttendanceUsers
+  getLowAttendanceUsers,
+  getStaffAttendance
 };

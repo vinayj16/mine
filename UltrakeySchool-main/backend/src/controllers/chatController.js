@@ -21,7 +21,7 @@ const createConversation = async (req, res, next) => {
 
 const createGlobalConversation = async (req, res, next) => {
   try {
-    console.log('📝 Creating global conversation with data:', JSON.stringify(req.body, null, 2));
+    console.log('[ChatController] Creating global conversation with data:', JSON.stringify(req.body, null, 2));
     const { participants, isGroup, title } = req.body;
     
     // Add email and institutionCode to participants from user data
@@ -31,21 +31,29 @@ const createGlobalConversation = async (req, res, next) => {
       institutionCode: p.institutionCode || '' // Should come from frontend
     }));
     
-    console.log('📝 Participants with details:', JSON.stringify(participantsWithDetails, null, 2));
+    console.log('[ChatController] Participants with details:', JSON.stringify(participantsWithDetails, null, 2));
     
     const conv = await chatService.createGlobalConversation(participantsWithDetails, isGroup, title);
-    console.log('✅ Global conversation created:', JSON.stringify(conv, null, 2));
+    console.log('[ChatController] Global conversation created:', JSON.stringify(conv, null, 2));
     res.status(201).json({ success: true, data: conv });
   } catch (error) {
-    console.error('❌ Error creating global conversation:', error);
+    console.error('[ChatController] Error creating global conversation:', error);
     next(error);
   }
 };
 
 const getConversations = async (req, res, next) => {
   try {
+    // Handle both /chat/conversations and /institutions/:institutionCode/users/:userId/conversations
     const { institutionCode, userId } = req.params;
-    const convs = await chatService.getConversations(institutionCode, userId);
+    const userIdFromQuery = req.query.userId || req.query.user_id;
+    const institutionCodeFromQuery = req.query.institutionCode || req.query.institutionId;
+    
+    // Use user from auth if no userId provided
+    const userIdToUse = userId || userIdFromQuery || req.user?.id;
+    const institutionCodeToUse = institutionCode || institutionCodeFromQuery || req.user?.institutionCode || 'default';
+    
+    const convs = await chatService.getConversations(institutionCodeToUse, userIdToUse);
     res.json({ success: true, data: convs });
   } catch (error) {
     next(error);

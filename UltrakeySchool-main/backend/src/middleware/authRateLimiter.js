@@ -1,14 +1,5 @@
-/**
- * Authentication Rate Limiter
- * Prevents brute force attacks on authentication endpoints
- */
-
 import rateLimit from 'express-rate-limit';
 
-/**
- * Strict rate limiter for login attempts
- * 20 attempts per 5 minutes per IP (development-friendly)
- */
 export const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 20, // 20 requests per window

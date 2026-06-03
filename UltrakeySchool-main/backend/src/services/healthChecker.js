@@ -1,8 +1,3 @@
-/**
- * Comprehensive Health Check System
- * Monitors all system components and external services
- */
-
 import mongoose from 'mongoose';
 import cacheService from '../services/cacheService.js';
 import emailService from '../services/emailService.js';

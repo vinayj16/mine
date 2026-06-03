@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const teacherLeaveSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -69,8 +69,8 @@ const teacherLeaveSchema = new mongoose.Schema({
   timestamps: true
 });
 
-teacherLeaveSchema.index({ schoolId: 1, teacherId: 1, startDate: -1 });
-teacherLeaveSchema.index({ schoolId: 1, status: 1 });
+teacherLeaveSchema.index({ institutionId: 1, teacherId: 1, startDate: -1 });
+teacherLeaveSchema.index({ institutionId: 1, status: 1 });
 
 const TeacherLeave = mongoose.model('TeacherLeave', teacherLeaveSchema);
 

@@ -34,9 +34,9 @@ const contactMessageSchema = new mongoose.Schema({
         type: String,
         default: '/assets/img/profiles/avatar-01.jpg'
     },
-    schoolId: {
+    institutionId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'School'
+        ref: 'Institution'
     },
     isDeleted: {
         type: Boolean,

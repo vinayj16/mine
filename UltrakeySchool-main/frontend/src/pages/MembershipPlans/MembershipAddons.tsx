@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 interface AddonLimits {
   students: { value: number; isUnlimited: boolean; isEnabled: boolean };
@@ -35,6 +36,8 @@ const MembershipAddons: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingAddon, setEditingAddon] = useState<Addon | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -145,12 +148,15 @@ const MembershipAddons: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this addon?')) {
-      return;
-    }
+    setDeleteTarget(id);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
 
     try {
-      const response = await apiClient.delete(`/addons/${id}`);
+      const response = await apiClient.delete(`/addons/${deleteTarget}`);
       if (response.data.success) {
         toast.success('Addon deleted successfully');
         fetchAddons();
@@ -159,6 +165,8 @@ const MembershipAddons: React.FC = () => {
       console.error('Error deleting addon:', err);
       toast.error(err.response?.data?.message || 'Failed to delete addon');
     }
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
   };
 
   const resetForm = () => {
@@ -186,9 +194,9 @@ const MembershipAddons: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'INR'
     }).format(amount);
   };
 
@@ -396,7 +404,9 @@ const MembershipAddons: React.FC = () => {
             </form>
           </div>
 
-          {/* Addons List */}
+          <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to delete this addon?" />
+
+      {/* Addons List */}
           {addons.length === 0 && !loading && (
             <div className="col-md-12">
               <div className="text-center py-5">

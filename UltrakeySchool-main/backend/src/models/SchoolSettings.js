@@ -102,7 +102,7 @@ const schoolSettingsSchema = new mongoose.Schema({
   feeSettings: {
     currency: {
       type: String,
-      default: 'USD'
+      default: 'INR'
     },
     lateFeePercentage: {
       type: Number,

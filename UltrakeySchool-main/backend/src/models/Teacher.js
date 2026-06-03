@@ -7,11 +7,6 @@ const teacherSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
-  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -124,7 +119,7 @@ const teacherSchema = new mongoose.Schema({
     total: Number,
     currency: {
       type: String,
-      default: 'USD'
+      default: 'INR'
     },
     paymentMode: {
       type: String,
@@ -166,14 +161,18 @@ const teacherSchema = new mongoose.Schema({
     index: true
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  autoCreate: false
 });
 
-teacherSchema.index({ institutionId: 1, schoolId: 1, employeeId: 1 }, { unique: true });
-teacherSchema.index({ institutionId: 1, schoolId: 1, status: 1 });
+teacherSchema.index({ institutionId: 1, employeeId: 1 }, { unique: true });
 teacherSchema.index({ institutionId: 1, status: 1 });
 
 teacherSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+teacherSchema.virtual('name').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 

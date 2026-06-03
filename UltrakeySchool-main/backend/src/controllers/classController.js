@@ -911,6 +911,21 @@ const getClassEnrollmentTrends = async (req, res) => {
 };
 
 
+const getClassOverview = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const institutionId = req.user?.institutionId || req.tenantId;
+    const validation = validateObjectId(id, 'classId');
+    if (!validation.valid) return validationErrorResponse(res, [validation.error]);
+    const data = await classService.getClassOverview(id, institutionId);
+    if (!data.class) return notFoundResponse(res, 'Class not found');
+    return successResponse(res, data, 'Class overview fetched successfully');
+  } catch (error) {
+    logger.error('Error fetching class overview:', error);
+    return errorResponse(res, 'Failed to fetch class overview', 500);
+  }
+};
+
 export default {
   createClass,
   getClassById,
@@ -933,5 +948,6 @@ export default {
   bulkAssignTeachers,
   bulkDeleteClasses,
   getClassesByAcademicYear,
-  getClassEnrollmentTrends
+  getClassEnrollmentTrends,
+  getClassOverview
 };

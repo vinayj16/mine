@@ -125,7 +125,8 @@ const CreateCredentialsPage: React.FC = () => {
           password: formData.password,
           role: formData.role,
           institutionId: formData.institutionId,
-          permissions: selectedPermissions
+          permissions: selectedPermissions,
+          fullName: formData.userId // Use userId as name since we don't collect name separately
         });
   
         if (response.success) {
@@ -363,7 +364,7 @@ const CreateCredentialsPage: React.FC = () => {
               <hr />
               <h5>Common User IDs:</h5>
               <ul>
-                <li><code>1</code> - John Doe (School) - Approved ✅</li>
+                <li><code>1</code> - John Doe (School) - Approved</li>
                 <li><code>2</code> - Jane Smith (College) - Pending</li>
                 <li><code>AR-1773121743498-h2i056byi</code> - Recent registration</li>
                 <li>Check Pending Requests page for available IDs</li>

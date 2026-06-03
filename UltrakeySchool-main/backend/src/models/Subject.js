@@ -7,12 +7,6 @@ const subjectSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true,
-    index: true
-  },
   name: {
     type: String,
     required: true,
@@ -48,8 +42,8 @@ const subjectSchema = new mongoose.Schema({
   timestamps: true
 });
 
-subjectSchema.index({ institutionId: 1, schoolId: 1, name: 1 }, { unique: true });
-subjectSchema.index({ institutionId: 1, schoolId: 1, code: 1 }, { unique: true });
+subjectSchema.index({ institutionId: 1, institutionId: 1, name: 1 }, { unique: true });
+subjectSchema.index({ institutionId: 1, institutionId: 1, code: 1 }, { unique: true });
 subjectSchema.index({ institutionId: 1, department: 1 });
 subjectSchema.index({ institutionId: 1, isActive: 1 });
 

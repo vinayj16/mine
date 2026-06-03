@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 const examScheduleSchema = new mongoose.Schema({
   scheduleId: {
     type: String,
-    required: true,
     unique: true,
     index: true
   },
@@ -22,7 +21,6 @@ const examScheduleSchema = new mongoose.Schema({
   classId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
-    required: true,
     index: true
   },
   

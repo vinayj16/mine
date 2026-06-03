@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
+import { toast } from 'react-toastify';
 
 interface Expense {
   id: string;
@@ -19,6 +21,76 @@ const ExpensesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectAll, setSelectAll] = useState(false);
   const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [formData, setFormData] = useState({ name: '', category: '', date: '', amount: '', invoiceNo: '', paymentMethod: '', description: '' });
+  const [editFormData, setEditFormData] = useState({ id: '', name: '', category: '', date: '', amount: '', invoiceNo: '', paymentMethod: '', description: '' });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await apiClient.post('/finance/transactions', { ...formData, type: 'expense' });
+      if (response.data.success) {
+        toast.success('Expense added successfully');
+        setShowAddModal(false);
+        setFormData({ name: '', category: '', date: '', amount: '', invoiceNo: '', paymentMethod: '', description: '' });
+        fetchExpenses();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to add expense');
+    }
+  };
+
+  const handleEditExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await apiClient.put(`/finance/transactions/${editFormData.id}`, editFormData);
+      if (response.data.success) {
+        toast.success('Expense updated successfully');
+        setShowEditModal(false);
+        fetchExpenses();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update expense');
+    }
+  };
+
+  const handleDeleteExpenses = async () => {
+    try {
+      await Promise.all(selectedExpenses.map(id => apiClient.delete(`/finance/transactions/${id}`)));
+      toast.success('Expenses deleted successfully');
+      setShowDeleteModal(false);
+      setSelectedExpenses([]);
+      fetchExpenses();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete expenses');
+    }
+  };
+
+  const openEditModal = (expense: Expense) => {
+    setEditFormData({
+      id: expense.id,
+      name: expense.name,
+      category: expense.category,
+      date: expense.date,
+      amount: String(expense.amount),
+      invoiceNo: expense.invoiceNo,
+      paymentMethod: expense.paymentMethod,
+      description: expense.description
+    });
+    setShowEditModal(true);
+  };
 
   useEffect(() => {
     fetchExpenses();
@@ -28,11 +100,11 @@ const ExpensesPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await apiClient.get('/finance/transactions', {
         params: { type: 'expense' }
       });
-      
+
       if (response.data.success) {
         const data = response.data.data?.transactions || response.data.data || [];
         const transactions = Array.isArray(data) ? data : [];
@@ -82,12 +154,32 @@ const ExpensesPage: React.FC = () => {
     setSelectAll(expenses.length > 0 && selectedExpenses.length === expenses.length);
   }, [expenses, selectedExpenses]);
 
+  const exportColumns: ExportColumn[] = [
+    { key: 'expenseId', label: 'Expense ID', format: (v, row) => v || row._id?.slice(-6) },
+    { key: 'category', label: 'Category', format: (_, row) => row.category?.name || row.category || 'N/A' },
+    { key: 'description', label: 'Description' },
+    { key: 'amount', label: 'Amount', format: (v, row) => { const a = v || row.totalAmount || 0; return `₹${Number(a).toFixed(2)}`; } },
+    { key: 'date', label: 'Date', format: (v, row) => { const d = v || row.expenseDate || row.createdAt; return d ? new Date(d).toLocaleDateString() : '-'; } },
+    { key: 'paymentMethod', label: 'Payment Method', format: (v) => v || '-' },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = expenses || [];
+    if (!data.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(data, 'expenses', exportColumns, 'Expenses Report');
+    } else {
+      exportToExcel(data, 'expenses', exportColumns);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -111,8 +203,8 @@ const ExpensesPage: React.FC = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <button 
-              className="btn btn-outline-light bg-white btn-icon me-1" 
+            <button
+              className="btn btn-outline-light bg-white btn-icon me-1"
               onClick={fetchExpenses}
               title="Refresh"
             >
@@ -120,8 +212,8 @@ const ExpensesPage: React.FC = () => {
             </button>
           </div>
           <div className="pe-1 mb-2">
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="btn btn-outline-light bg-white btn-icon me-1"
               onClick={() => window.print()}
               title="Print"
@@ -150,10 +242,9 @@ const ExpensesPage: React.FC = () => {
             </ul>
           </div>
           <div className="mb-2">
-            <button 
-              className="btn btn-primary d-flex align-items-center" 
-              data-bs-toggle="modal"
-              data-bs-target="#add_expense"
+            <button
+              className="btn btn-primary d-flex align-items-center"
+              onClick={() => setShowAddModal(true)}
             >
               <i className="ti ti-square-rounded-plus me-2"></i>Add Expense
             </button>
@@ -169,18 +260,18 @@ const ExpensesPage: React.FC = () => {
               <span className="icon-addon">
                 <i className="ti ti-calendar"></i>
               </span>
-              <input 
-                type="text" 
-                className="form-control date-range bookingrange" 
+              <input
+                type="text"
+                className="form-control date-range bookingrange"
                 placeholder="Select"
                 value="Academic Year : 2024 / 2025"
-                readOnly 
+                readOnly
               />
             </div>
             <div className="dropdown mb-3 me-2">
-              <button 
+              <button
                 className="btn btn-outline-light bg-white dropdown-toggle"
-                data-bs-toggle="dropdown" 
+                data-bs-toggle="dropdown"
                 data-bs-auto-close="outside"
               >
                 <i className="ti ti-filter me-2"></i>Filter
@@ -224,7 +315,7 @@ const ExpensesPage: React.FC = () => {
               </div>
             </div>
             <div className="dropdown mb-3">
-              <button 
+              <button
                 className="btn btn-outline-light bg-white dropdown-toggle"
                 data-bs-toggle="dropdown"
               >
@@ -263,9 +354,9 @@ const ExpensesPage: React.FC = () => {
                 <tr>
                   <th className="no-sort">
                     <div className="form-check form-check-md">
-                      <input 
-                        className="form-check-input" 
-                        type="checkbox" 
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
                         id="select-all"
                         checked={selectAll}
                         onChange={toggleSelectAll}
@@ -302,8 +393,8 @@ const ExpensesPage: React.FC = () => {
                     <tr key={expense.id}>
                       <td>
                         <div className="form-check form-check-md">
-                          <input 
-                            className="form-check-input" 
+                          <input
+                            className="form-check-input"
                             type="checkbox"
                             checked={selectedExpenses.includes(expense.id)}
                             onChange={() => toggleExpenseSelection(expense.id)}
@@ -312,9 +403,9 @@ const ExpensesPage: React.FC = () => {
                       </td>
                       <td><a href="#!" className="link-primary">{expense.id.slice(-6)}</a></td>
                       <td>{expense.name}</td>
-                      <td>{expense.category}</td>
+                      <td>{typeof expense.category === 'object' ? expense.category?.name || '-' : expense.category}</td>
                       <td>{formatDate(expense.date)}</td>
-                      <td>${expense.amount.toLocaleString()}</td>
+                      <td>₹{expense.amount.toLocaleString()}</td>
                       <td>{expense.invoiceNo}</td>
                       <td>{expense.paymentMethod}</td>
                       <td>
@@ -322,26 +413,24 @@ const ExpensesPage: React.FC = () => {
                           <div className="dropdown">
                             <button
                               className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
-                              data-bs-toggle="dropdown" 
+                              data-bs-toggle="dropdown"
                               aria-expanded="false"
                             >
                               <i className="ti ti-dots-vertical fs-14"></i>
                             </button>
                             <ul className="dropdown-menu dropdown-menu-right p-3">
                               <li>
-                                <button 
+                                <button
                                   className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal" 
-                                  data-bs-target="#edit_expense"
+                                  onClick={() => openEditModal(expense)}
                                 >
                                   <i className="ti ti-edit-circle me-2"></i>Edit
                                 </button>
                               </li>
                               <li>
-                                <button 
+                                <button
                                   className="dropdown-item rounded-1"
-                                  data-bs-toggle="modal" 
-                                  data-bs-target="#delete-modal"
+                                  onClick={() => setShowDeleteModal(true)}
                                 >
                                   <i className="ti ti-trash-x me-2"></i>Delete
                                 </button>
@@ -360,181 +449,189 @@ const ExpensesPage: React.FC = () => {
       </div>
 
       {/* Add Expense Modal */}
-      <div className="modal fade" id="add_expense">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Add Expense</h4>
-              <button type="button" className="btn-close custom-btn-close" data-bs-dismiss="modal">
-                <i className="ti ti-x"></i>
-              </button>
-            </div>
-            <form>
-              <div className="modal-body">
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Name</label>
-                      <input type="text" className="form-control" placeholder="Enter expense name" />
+      {showAddModal && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h4 className="modal-title">Add Expense</h4>
+                <button type="button" className="btn-close custom-btn-close" onClick={() => setShowAddModal(false)}>
+                  <i className="ti ti-x"></i>
+                </button>
+              </div>
+              <form onSubmit={handleAddExpense}>
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Name</label>
+                        <input type="text" className="form-control" name="name" value={formData.name} onChange={handleInputChange} placeholder="Enter expense name" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Category</label>
-                      <select className="form-select">
-                        <option value="">Select</option>
-                        <option>Utilities</option>
-                        <option>Salaries</option>
-                        <option>Maintenance</option>
-                        <option>Supplies</option>
-                        <option>Other</option>
-                      </select>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Category</label>
+                        <select className="form-select" name="category" value={formData.category} onChange={handleInputChange}>
+                          <option value="">Select</option>
+                          <option value="Utilities">Utilities</option>
+                          <option value="Salaries">Salaries</option>
+                          <option value="Maintenance">Maintenance</option>
+                          <option value="Supplies">Supplies</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Date</label>
-                      <input type="date" className="form-control" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Date</label>
+                        <input type="date" className="form-control" name="date" value={formData.date} onChange={handleInputChange} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Amount</label>
-                      <input type="number" className="form-control" placeholder="Enter amount" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Amount</label>
+                        <input type="number" className="form-control" name="amount" value={formData.amount} onChange={handleInputChange} placeholder="Enter amount" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Invoice No</label>
-                      <input type="text" className="form-control" placeholder="Enter invoice number" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Invoice No</label>
+                        <input type="text" className="form-control" name="invoiceNo" value={formData.invoiceNo} onChange={handleInputChange} placeholder="Enter invoice number" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Payment Method</label>
-                      <select className="form-select">
-                        <option value="">Select</option>
-                        <option>Cash</option>
-                        <option>Bank Transfer</option>
-                        <option>Credit Card</option>
-                        <option>Debit Card</option>
-                        <option>Cheque</option>
-                      </select>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Payment Method</label>
+                        <select className="form-select" name="paymentMethod" value={formData.paymentMethod} onChange={handleInputChange}>
+                          <option value="">Select</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Credit Card">Credit Card</option>
+                          <option value="Debit Card">Debit Card</option>
+                          <option value="Cheque">Cheque</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="mb-0">
-                      <label className="form-label">Description</label>
-                      <textarea rows={3} className="form-control" placeholder="Enter description"></textarea>
+                    <div className="col-md-12">
+                      <div className="mb-0">
+                        <label className="form-label">Description</label>
+                        <textarea rows={3} className="form-control" name="description" value={formData.description} onChange={handleInputChange} placeholder="Enter description"></textarea>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" className="btn btn-primary">Add Expense</button>
-              </div>
-            </form>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-light me-2" onClick={() => setShowAddModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Add Expense</button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Edit Expense Modal */}
-      <div className="modal fade" id="edit_expense">
-        <div className="modal-dialog modal-dialog-centered modal-lg">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Edit Expense</h4>
-              <button type="button" className="btn-close custom-btn-close" data-bs-dismiss="modal">
-                <i className="ti ti-x"></i>
-              </button>
-            </div>
-            <form>
-              <div className="modal-body">
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Name</label>
-                      <input type="text" className="form-control" defaultValue="Electricity Bill" />
+      {showEditModal && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h4 className="modal-title">Edit Expense</h4>
+                <button type="button" className="btn-close custom-btn-close" onClick={() => setShowEditModal(false)}>
+                  <i className="ti ti-x"></i>
+                </button>
+              </div>
+              <form onSubmit={handleEditExpense}>
+                <div className="modal-body">
+                  <div className="row">
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Name</label>
+                        <input type="text" className="form-control" name="name" value={editFormData.name} onChange={handleEditInputChange} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Category</label>
-                      <select className="form-select">
-                        <option>Utilities</option>
-                        <option>Salaries</option>
-                        <option>Maintenance</option>
-                        <option>Supplies</option>
-                        <option>Other</option>
-                      </select>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Category</label>
+                        <select className="form-select" name="category" value={editFormData.category} onChange={handleEditInputChange}>
+                          <option value="">Select</option>
+                          <option value="Utilities">Utilities</option>
+                          <option value="Salaries">Salaries</option>
+                          <option value="Maintenance">Maintenance</option>
+                          <option value="Supplies">Supplies</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Date</label>
-                      <input type="date" className="form-control" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Date</label>
+                        <input type="date" className="form-control" name="date" value={editFormData.date} onChange={handleEditInputChange} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Amount</label>
-                      <input type="number" className="form-control" defaultValue="2500" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Amount</label>
+                        <input type="number" className="form-control" name="amount" value={editFormData.amount} onChange={handleEditInputChange} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Invoice No</label>
-                      <input type="text" className="form-control" defaultValue="EXP-001" />
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Invoice No</label>
+                        <input type="text" className="form-control" name="invoiceNo" value={editFormData.invoiceNo} onChange={handleEditInputChange} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">Payment Method</label>
-                      <select className="form-select">
-                        <option>Cash</option>
-                        <option>Bank Transfer</option>
-                        <option>Credit Card</option>
-                        <option>Debit Card</option>
-                        <option>Cheque</option>
-                      </select>
+                    <div className="col-md-6">
+                      <div className="mb-3">
+                        <label className="form-label">Payment Method</label>
+                        <select className="form-select" name="paymentMethod" value={editFormData.paymentMethod} onChange={handleEditInputChange}>
+                          <option value="">Select</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                          <option value="Credit Card">Credit Card</option>
+                          <option value="Debit Card">Debit Card</option>
+                          <option value="Cheque">Cheque</option>
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                  <div className="col-md-12">
-                    <div className="mb-0">
-                      <label className="form-label">Description</label>
-                      <textarea rows={3} className="form-control" defaultValue="Monthly electricity bill payment"></textarea>
+                    <div className="col-md-12">
+                      <div className="mb-0">
+                        <label className="form-label">Description</label>
+                        <textarea rows={3} className="form-control" name="description" value={editFormData.description} onChange={handleEditInputChange}></textarea>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-light me-2" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Changes</button>
-              </div>
-            </form>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-light me-2" onClick={() => setShowEditModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Save Changes</button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Delete Modal */}
-      <div className="modal fade" id="delete-modal">
-        <div className="modal-dialog modal-dialog-centered">
-          <div className="modal-content">
-            <div className="modal-body text-center">
-              <span className="delete-icon">
-                <i className="ti ti-trash-x"></i>
-              </span>
-              <h4>Confirm Deletion</h4>
-              <p>You want to delete all the marked items, this can't be undone once you delete.</p>
-              <div className="d-flex justify-content-center">
-                <button type="button" className="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" className="btn btn-danger">Yes, Delete</button>
+      {showDeleteModal && (
+        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-body text-center">
+                <span className="delete-icon">
+                  <i className="ti ti-trash-x"></i>
+                </span>
+                <h4>Confirm Deletion</h4>
+                <p>You want to delete all the marked items, this can't be undone once you delete.</p>
+                <div className="d-flex justify-content-center">
+                  <button type="button" className="btn btn-light me-3" onClick={() => setShowDeleteModal(false)}>Cancel</button>
+                  <button type="button" className="btn btn-danger" onClick={handleDeleteExpenses}>Yes, Delete</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 };

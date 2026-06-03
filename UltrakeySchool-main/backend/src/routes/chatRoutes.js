@@ -8,12 +8,17 @@ const router = express.Router();
 // All chat routes require authentication (TESTED & VERIFIED)
 router.use(protect);
 
+// Simple conversation routes for frontend compatibility
+router.get('/conversations', chatController.getConversations);
+router.post('/conversations', chatController.createConversation);
+router.get('/conversations/:conversationId', chatController.getConversationById);
+
 // Conversation Routes (TESTED & VERIFIED)
 router.post('/institutions/:institutionCode/conversations', authorize(['admin', 'teacher', 'principal', 'student', 'parent']), chatController.createConversation);  
 router.get('/institutions/:institutionCode/users/:userId/conversations', chatController.getConversations);  
 router.get('/institutions/:institutionCode/conversations/:conversationId', chatController.getConversationById);
 
-// Agent conversation routes (platform-wide, no schoolId required)
+// Agent conversation routes (platform-wide, no institutionId required)
 router.get('/agent-conversations', authorize(['agent', 'superadmin']), chatController.getAgentConversations);
 
 // Global conversation routes (for agents and superadmin to chat with anyone)
@@ -29,8 +34,17 @@ router.delete('/messages/:messageId', chatController.deleteMessage);
 router.get('/history/:userId1/:userId2', chatController.getChatHistory);
 router.get('/user/:userId/messages', chatController.getAllUserMessages);
 
-// Block/Unblock Routes
+import * as messageController from '../controllers/messageController.js';
+
+// Block/Unblock Routes (Conversation level)
 router.post('/conversations/:conversationId/block', chatController.blockUser);
 router.post('/conversations/:conversationId/unblock', chatController.unblockUser);
+
+// Global Block/Unblock Routes (User level)
+router.post('/block/:userId', messageController.blockUser);
+router.post('/unblock/:userId', messageController.unblockUser);
+router.get('/blocked-users', messageController.getBlockedUsers);
+router.post('/block-role/:role', messageController.blockByRole);
+router.post('/unblock-role/:role', messageController.unblockByRole);
 
 export default router;

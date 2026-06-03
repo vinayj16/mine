@@ -48,7 +48,7 @@ const getAllReports = async (req, res) => {
   try {
     logger.info('Fetching all transport reports');
     
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.query.institutionId;
     const { reportType, status, period, startDate, endDate, page, limit, sortBy, sortOrder } = req.query;
     
     // Validation
@@ -129,7 +129,7 @@ const getReportById = async (req, res) => {
   try {
     logger.info('Fetching transport report by ID');
     
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.query.institutionId;
     const { id } = req.params;
     
     // Validation
@@ -162,9 +162,40 @@ const getReportById = async (req, res) => {
 const generateReport = async (req, res) => {
   try {
     logger.info('Generating transport report');
+    logger.info('Request body:', req.body);
+    logger.info('User info:', req.user);
     
-    const institutionId = req.user?.institutionId || req.body.institutionId;
-    const { reportType, period, startDate, endDate, name, description, parameters } = req.body;
+    // Use tenant ID from user object (set by auth middleware)
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.body.institutionId;
+    
+    if (!institutionId) {
+      return validationErrorResponse(res, ['Institution ID is required']);
+    }
+    
+    // Support for different report types mapping to model enums
+    const reportTypeMap = {
+      'route_performance': 'Route',
+      'vehicle_usage': 'Vehicle',
+      'driver': 'Driver',
+      'student': 'Student',
+      'revenue': 'Revenue',
+      'Route': 'Route',
+      'Vehicle': 'Vehicle',
+      'Driver': 'Driver',
+      'Student': 'Student',
+      'Revenue': 'Revenue'
+    };
+    
+    // Normalize field names to handle different client formats
+    let reportType = req.body.reportType || req.body.type || 'route_performance';
+    reportType = reportTypeMap[reportType] || 'Route';
+    
+    const period = req.body.period || req.body.periodType || 'month';
+    const startDate = req.body.startDate || req.body.dateRange?.startDate;
+    const endDate = req.body.endDate || req.body.dateRange?.endDate;
+    const title = req.body.name || req.body.title || 'Transport Report';
+    const description = req.body.description || req.body.desc || 'Transport Report Description';
+    const reportData = req.body.parameters || req.body.data || {};
     
     // Validation
     const errors = [];
@@ -174,30 +205,15 @@ const generateReport = async (req, res) => {
     
     if (!reportType) {
       errors.push('Report type is required');
-    } else if (!VALID_REPORT_TYPES.includes(reportType)) {
-      errors.push('Invalid report type. Must be one of: ' + VALID_REPORT_TYPES.join(', '));
+    } else if (!['Route', 'Vehicle', 'Driver', 'Student', 'Revenue'].includes(reportType)) {
+      errors.push('Invalid report type. Must be one of: Route, Vehicle, Driver, Student, Revenue');
     }
     
-    if (period && !VALID_PERIODS.includes(period)) {
-      errors.push('Invalid period. Must be one of: ' + VALID_PERIODS.join(', '));
+    if (!period) {
+      errors.push('Period is required');
     }
     
-    if (startDate) {
-      const startDateError = validateDate(startDate, 'Start date');
-      if (startDateError) errors.push(startDateError);
-    }
-    
-    if (endDate) {
-      const endDateError = validateDate(endDate, 'End date');
-      if (endDateError) errors.push(endDateError);
-    }
-    
-    if (startDate && endDate) {
-      const dateRangeError = validateDateRange(startDate, endDate);
-      if (dateRangeError) errors.push(dateRangeError);
-    }
-    
-    if (name && name.length > MAX_NAME_LENGTH) {
+    if (title && title.length > MAX_NAME_LENGTH) {
       errors.push('Report name must not exceed ' + MAX_NAME_LENGTH + ' characters');
     }
     
@@ -205,18 +221,29 @@ const generateReport = async (req, res) => {
       errors.push('Description must not exceed ' + MAX_DESCRIPTION_LENGTH + ' characters');
     }
     
-    if (parameters && typeof parameters !== 'object') {
-      errors.push('Parameters must be an object');
-    }
-    
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const report = await transportReportService.generateReport(institutionId, req.body);
+    const createData = {
+      reportType,
+      title,
+      description,
+      period,
+      status: 'completed',
+      reportData: {
+        startDate,
+        endDate,
+        ...reportData
+      },
+      totalRecords: 0,
+      generatedDate: new Date()
+    };
     
-    logger.info('Transport report generation started:', { reportId: report._id, reportType });
-    return createdResponse(res, report, 'Report generation started');
+    const report = await transportReportService.generateReport(institutionId, createData);
+    
+    logger.info('Transport report generated successfully:', { reportId: report._id, reportType });
+    return createdResponse(res, report, 'Report generated successfully');
   } catch (error) {
     logger.error('Error generating transport report:', error);
     return errorResponse(res, error.message);
@@ -227,7 +254,7 @@ const updateReport = async (req, res) => {
   try {
     logger.info('Updating transport report');
     
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.body.institutionId;
     const { id } = req.params;
     const { name, description, status } = req.body;
     
@@ -274,7 +301,7 @@ const deleteReport = async (req, res) => {
   try {
     logger.info('Deleting transport report');
     
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.query.institutionId;
     const { id } = req.params;
     
     // Validation
@@ -308,7 +335,7 @@ const bulkDeleteReports = async (req, res) => {
   try {
     logger.info('Bulk deleting transport reports');
     
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.body.institutionId;
     const { ids } = req.body;
     
     // Validation
@@ -347,7 +374,7 @@ const getTransportStatistics = async (req, res) => {
   try {
     logger.info('Fetching transport statistics');
     
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.tenant || req.user?.institutionId || req.query.institutionId;
     const { startDate, endDate } = req.query;
     
     // Validation

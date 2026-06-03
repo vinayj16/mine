@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useThemeStore } from '../../store/themeStore'
+import { useAuth } from '../../store/authStore'
+import { getImageUrl } from '../../utils/imageUtils'
 
 interface SuperAdminSidebarProps {
   isCollapsed?: boolean
@@ -86,9 +89,12 @@ const sections = [
 
 const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
   isCollapsed = false,
+  setCollapsed,
   isMobileOpen = false,
   setIsMobileOpen,
 }) => {
+  const { isDarkMode } = useThemeStore()
+  const { user } = useAuth()
   const allKeys = sections.map(s => s.key)
   const [expandedSections, setExpandedSections] = useState<string[]>(allKeys)
   const [isMobileView, setIsMobileView] = useState(false)
@@ -115,15 +121,16 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
 
   return (
     <div
+      className={`app-sidebar superadmin-sidebar ${isDarkMode ? 'bg-dark' : 'sidebar-bg-default'}`}
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
         height: '100vh',
-        width: isMobileView ? 280 : width,
-        backgroundColor: '#ffffff',
-        borderRight: '1px solid #e2e8f0',
-        boxShadow: '2px 0 8px rgba(0,0,0,0.06)',
+        width: isMobileView ? 280 : (isCollapsed ? '80px' : '280px'),
+        borderRight: isDarkMode ? '1px solid #2a2a32' : '1px solid #e2e8f0',
+        backgroundColor: isDarkMode ? '#18181c' : '#ffffff',
+        boxShadow: isDarkMode ? '2px 0 8px rgba(0,0,0,0.3)' : '2px 0 8px rgba(0,0,0,0.06)',
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
@@ -136,38 +143,45 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
     >
       {/* Logo / Brand header */}
       <div style={{
-        padding: isCollapsed && !isMobileView ? '1rem' : '1rem 1.25rem',
-        borderBottom: '1px solid #e2e8f0',
+        padding: isCollapsed && !isMobileView ? '0.75rem' : '1rem 1.25rem',
+        borderBottom: isDarkMode ? '1px solid #2a2a32' : '1px solid #e2e8f0',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: isCollapsed && !isMobileView ? 'center' : 'flex-start',
+        justifyContent: isCollapsed && !isMobileView ? 'center' : 'space-between',
         gap: '0.75rem',
         flexShrink: 0,
         minHeight: 60,
       }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: '50%',
-          backgroundColor: '#3b82f6', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          color: 'white', flexShrink: 0,
-        }}>
-          <i className="ti ti-crown" style={{ fontSize: '1rem' }}></i>
-        </div>
-        {(!isCollapsed || isMobileView) && (
-          <div>
-            <div style={{ color: '#1e293b', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>
-              Super Admin
-            </div>
-            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Platform Control</div>
+        <div style={{ display: 'flex', flexDirection: isCollapsed && !isMobileView ? 'row' : 'column', alignItems: 'center', gap: isCollapsed && !isMobileView ? '0' : '0.5rem' }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%',
+            backgroundColor: '#3b82f6', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            color: 'white', flexShrink: 0,
+            overflow: 'hidden'
+          }}>
+            {user?.avatar || user?.photo ? (
+              <img src={getImageUrl(user.avatar || user.photo)} alt="" style={{width: '100%', height: '100%', objectFit: 'cover'}} onError={(e) => { const img = e.target as HTMLImageElement; img.style.display = 'none'; img.parentElement && (img.parentElement.innerHTML = '<i class="ti ti-crown" style="font-size:1rem"></i>'); }} />
+            ) : (
+              <i className="ti ti-crown" style={{ fontSize: '1rem' }}></i>
+            )}
           </div>
-        )}
+          {(!isCollapsed || isMobileView) && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: isDarkMode ? '#e4e4e7' : '#1e293b', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>
+                Super Admin
+              </div>
+              <div style={{ color: isDarkMode ? '#a1a1aa' : '#64748b', fontSize: '0.68rem' }}>Platform Control</div>
+            </div>
+          )}
+        </div>
         {/* Mobile close button */}
         {isMobileView && (
           <button
             onClick={() => setIsMobileOpen?.(false)}
             style={{
-              marginLeft: 'auto', background: 'transparent', border: 'none',
-              color: '#64748b', fontSize: '1.1rem', cursor: 'pointer',
+              background: 'transparent', border: 'none',
+              color: isDarkMode ? '#a1a1aa' : '#64748b', fontSize: '1.1rem', cursor: 'pointer',
               padding: '0.3rem', borderRadius: '0.375rem',
             }}
           >
@@ -189,7 +203,7 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
                   onClick={() => toggleSection(section.key)}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '0.4rem 1rem', color: '#94a3b8', fontSize: '0.68rem',
+                    padding: '0.4rem 1rem',                     color: isDarkMode ? '#a1a1aa' : '#475569', fontSize: '0.68rem',
                     fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em',
                     cursor: 'pointer', userSelect: 'none',
                   }}
@@ -215,7 +229,7 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
                         padding: isCollapsed && !isMobileView ? '0.65rem' : '0.55rem 1rem',
                         margin: '0.1rem 0.5rem',
                         borderRadius: '0.5rem',
-                        color: isActive ? '#3b82f6' : '#374151',
+                        color: isActive ? '#3b82f6' : (isDarkMode ? '#a1a1aa' : '#374151'),
                         textDecoration: 'none',
                         fontSize: '0.85rem',
                         fontWeight: isActive ? 600 : 400,
@@ -241,7 +255,7 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
                             fontSize: isCollapsed && !isMobileView ? '1.2rem' : '1rem',
                             width: isCollapsed && !isMobileView ? 'auto' : '1.25rem',
                             flexShrink: 0,
-                            color: isActive ? '#3b82f6' : '#6b7280',
+                            color: isActive ? '#3b82f6' : (isDarkMode ? '#71717a' : '#6b7280'),
                           }}></i>
                           {(!isCollapsed || isMobileView) && (
                             <span style={{ marginLeft: '0.65rem' }}>{item.label}</span>
@@ -261,10 +275,10 @@ const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
       {(!isCollapsed || isMobileView) && (
         <div style={{
           padding: '0.75rem 1rem',
-          borderTop: '1px solid #e2e8f0',
+          borderTop: isDarkMode ? '1px solid #2a2a32' : '1px solid #e2e8f0',
           flexShrink: 0,
         }}>
-          <small style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Platform Control Center</small>
+          <small style={{ color: isDarkMode ? '#71717a' : '#94a3b8', fontSize: '0.68rem' }}>Platform Control Center</small>
         </div>
       )}
     </div>

@@ -1,27 +1,31 @@
+import mongoose from 'mongoose';
 import Event from '../models/Event.js';
 
 class EventService {
-  async createEvent(schoolId, data) {
-    return await Event.create({ ...data, schoolId });
+  async createEvent(institutionId, data) {
+    return await Event.create({ ...data, institutionId });
   }
 
-  async getEvents(schoolId, filters = {}) {
-    return await Event.find({ schoolId, ...filters })
+  async getEvents(institutionId, filters = {}) {
+    const query = institutionId
+      ? { $or: [{ institutionId }, { institutionId: { $exists: false } }, { institutionId: null }], ...filters }
+      : { $or: [{ institutionId: { $exists: false } }, { institutionId: null }], ...filters };
+    return await Event.find(query)
       .populate('organizer', 'firstName lastName')
       .sort({ startDate: 1 });
   }
 
-  async getEventById(eventId, schoolId) {
-    const event = await Event.findOne({ _id: eventId, schoolId })
+  async getEventById(eventId, institutionId) {
+    const event = await Event.findOne({ _id: eventId, institutionId })
       .populate('organizer', 'firstName lastName')
       .populate('classIds', 'name section');
     if (!event) throw new Error('Event not found');
     return event;
   }
 
-  async updateEvent(eventId, schoolId, updates) {
+  async updateEvent(eventId, institutionId, updates) {
     const event = await Event.findOneAndUpdate(
-      { _id: eventId, schoolId },
+      { _id: eventId, institutionId },
       { $set: updates },
       { new: true }
     );
@@ -29,42 +33,42 @@ class EventService {
     return event;
   }
 
-  async deleteEvent(eventId, schoolId) {
-    const event = await Event.findOneAndDelete({ _id: eventId, schoolId });
+  async deleteEvent(eventId, institutionId) {
+    const event = await Event.findOneAndDelete({ _id: eventId, institutionId });
     if (!event) throw new Error('Event not found');
     return event;
   }
 
-  async getUpcomingEvents(schoolId) {
+  async getUpcomingEvents(institutionId) {
     return await Event.find({ 
-      schoolId, 
+      institutionId, 
       startDate: { $gte: new Date() },
       status: { $ne: 'cancelled' },
       isActive: true 
     }).populate('organizer', 'firstName lastName').sort({ startDate: 1 });
   }
 
-  async getEventsByType(schoolId, eventType) {
-    return await Event.find({ schoolId, eventType, isActive: true })
+  async getEventsByType(institutionId, eventType) {
+    return await Event.find({ institutionId, eventType, isActive: true })
       .populate('organizer', 'firstName lastName')
       .sort({ startDate: 1 });
   }
 
-  async bulkUpdateEvents(schoolId, eventIds, updates) {
+  async bulkUpdateEvents(institutionId, eventIds, updates) {
     const result = await Event.updateMany(
-      { _id: { $in: eventIds }, schoolId },
+      { _id: { $in: eventIds }, institutionId },
       { $set: updates }
     );
     return result;
   }
 
-  async bulkDeleteEvents(schoolId, eventIds) {
-    const result = await Event.deleteMany({ _id: { $in: eventIds }, schoolId });
+  async bulkDeleteEvents(institutionId, eventIds) {
+    const result = await Event.deleteMany({ _id: { $in: eventIds }, institutionId });
     return result;
   }
 
-  async exportEvents(schoolId, format = 'json') {
-    const events = await Event.find({ schoolId, isActive: true })
+  async exportEvents(institutionId, format = 'json') {
+    const events = await Event.find({ institutionId, isActive: true })
       .populate('organizer', 'firstName lastName')
       .sort({ startDate: 1 });
 
@@ -95,21 +99,21 @@ class EventService {
     throw new Error('Unsupported export format');
   }
 
-  async getEventStatistics(schoolId) {
-    const totalEvents = await Event.countDocuments({ schoolId, isActive: true });
+  async getEventStatistics(institutionId) {
+    const totalEvents = await Event.countDocuments({ institutionId, isActive: true });
     const upcomingEvents = await Event.countDocuments({
-      schoolId,
+      institutionId,
       startDate: { $gte: new Date() },
       isActive: true
     });
     const pastEvents = await Event.countDocuments({
-      schoolId,
+      institutionId,
       startDate: { $lt: new Date() },
       isActive: true
     });
 
     const eventsByType = await Event.aggregate([
-      { $match: { schoolId: new mongoose.Types.ObjectId(schoolId), isActive: true } },
+      { $match: { institutionId: new mongoose.Types.ObjectId(institutionId), isActive: true } },
       { $group: { _id: '$eventType', count: { $sum: 1 } } }
     ]);
 
@@ -121,12 +125,12 @@ class EventService {
     };
   }
 
-  async getEventAnalytics(schoolId) {
+  async getEventAnalytics(institutionId) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const recentEvents = await Event.find({
-      schoolId,
+      institutionId,
       createdAt: { $gte: thirtyDaysAgo },
       isActive: true
     }).sort({ createdAt: -1 });

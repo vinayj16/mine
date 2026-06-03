@@ -77,17 +77,7 @@ export interface UpdateAgentInput extends Partial<CreateAgentInput> {
 
 export const agentService = {
   // Get all agents with pagination
-  getAll: async (page: number = 1, limit: number = 10, search?: string): Promise<{
-    map(arg0: (agent: { _id: any; createdAt: any; }) => { id: any; joinDate: any; institutionsCreated: number; institutions: never[]; totalRevenue: number; lastLogin: undefined; _id: any; createdAt: any; }): import("../data/agents").Agent[] | PromiseLike<import("../data/agents").Agent[]>;
-    agents: Agent[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalAgents: number;
-      hasNextPage: boolean;
-      hasPrevPage: boolean;
-    };
-  }> => {
+  getAll: async (page: number = 1, limit: number = 10, search?: string): Promise<Agent[]> => {
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -239,11 +229,11 @@ export const agentService = {
 
   getNotificationsSettings: async (): Promise<AgentSettings['notifications']> => {
     try {
-      const response = await apiService.get<AgentSettings['notifications']>('/agents/settings/notifications');
+      const response = await apiService.get<AgentSettings>('/agents/settings');
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch notifications settings');
       }
-      return response.data;
+      return response.data.notifications || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to fetch notifications settings:', error);
       throw error;
@@ -252,11 +242,11 @@ export const agentService = {
 
   updateNotificationsSettings: async (settings: Partial<AgentSettings['notifications']>): Promise<AgentSettings['notifications']> => {
     try {
-      const response = await apiService.put<AgentSettings['notifications']>('/agents/settings/notifications', settings);
+      const response = await apiService.put<AgentSettings>('/agents/settings', { notifications: settings });
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to update notifications settings');
       }
-      return response.data;
+      return response.data.notifications || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to update notifications settings:', error);
       throw error;
@@ -265,11 +255,11 @@ export const agentService = {
 
   getPrivacySettings: async (): Promise<AgentSettings['privacy']> => {
     try {
-      const response = await apiService.get<AgentSettings['privacy']>('/agents/settings/privacy');
+      const response = await apiService.get<AgentSettings>('/agents/settings');
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch privacy settings');
       }
-      return response.data;
+      return response.data.privacy || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to fetch privacy settings:', error);
       throw error;
@@ -278,11 +268,11 @@ export const agentService = {
 
   updatePrivacySettings: async (settings: Partial<AgentSettings['privacy']>): Promise<AgentSettings['privacy']> => {
     try {
-      const response = await apiService.put<AgentSettings['privacy']>('/agents/settings/privacy', settings);
+      const response = await apiService.put<AgentSettings>('/agents/settings', { privacy: settings });
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to update privacy settings');
       }
-      return response.data;
+      return response.data.privacy || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to update privacy settings:', error);
       throw error;
@@ -291,11 +281,11 @@ export const agentService = {
 
   getPreferencesSettings: async (): Promise<AgentSettings['preferences']> => {
     try {
-      const response = await apiService.get<AgentSettings['preferences']>('/agents/settings/preferences');
+      const response = await apiService.get<AgentSettings>('/agents/settings');
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch preferences settings');
       }
-      return response.data;
+      return response.data.preferences || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to fetch preferences settings:', error);
       throw error;
@@ -304,11 +294,11 @@ export const agentService = {
 
   updatePreferencesSettings: async (settings: Partial<AgentSettings['preferences']>): Promise<AgentSettings['preferences']> => {
     try {
-      const response = await apiService.put<AgentSettings['preferences']>('/agents/settings/preferences', settings);
+      const response = await apiService.put<AgentSettings>('/agents/settings', { preferences: settings });
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to update preferences settings');
       }
-      return response.data;
+      return response.data.preferences || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to update preferences settings:', error);
       throw error;
@@ -317,11 +307,11 @@ export const agentService = {
 
   getSecuritySettings: async (): Promise<AgentSettings['security']> => {
     try {
-      const response = await apiService.get<AgentSettings['security']>('/agents/settings/security');
+      const response = await apiService.get<AgentSettings>('/agents/settings');
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch security settings');
       }
-      return response.data;
+      return response.data.security || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to fetch security settings:', error);
       throw error;
@@ -330,11 +320,11 @@ export const agentService = {
 
   updateSecuritySettings: async (settings: Partial<AgentSettings['security']>): Promise<AgentSettings['security']> => {
     try {
-      const response = await apiService.put<AgentSettings['security']>('/agents/settings/security', settings);
+      const response = await apiService.put<AgentSettings>('/agents/settings', { security: settings });
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to update security settings');
       }
-      return response.data;
+      return response.data.security || {} as any;
     } catch (error) {
       console.error('[Agent Service] Failed to update security settings:', error);
       throw error;
@@ -512,11 +502,12 @@ export const agentService = {
   // Update commission status (Super Admin)
   updateCommissionStatus: async (id: string, status: string, paymentDate?: string, paymentMethod?: string, paymentReference?: string) => {
     try {
+      const paymentData = paymentDate || paymentMethod || paymentReference
+        ? { paymentDate, paymentMethod, paymentReference }
+        : undefined;
       const response = await apiService.patch<any>(`/commissions/${id}/status`, {
         status,
-        paymentDate,
-        paymentMethod,
-        paymentReference
+        paymentData
       });
       if (!response.success) {
         throw new Error(response.message || 'Failed to update commission status');

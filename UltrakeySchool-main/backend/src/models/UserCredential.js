@@ -62,6 +62,14 @@ const userCredentialSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  avatar: {
+    type: String,
+    default: null
+  },
+  photo: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -81,6 +89,9 @@ userCredentialSchema.pre('save', function(next) {
 // Index for faster queries
 userCredentialSchema.index({ role: 1 });
 userCredentialSchema.index({ status: 1 });
+userCredentialSchema.index({ institutionId: 1, role: 1 });
+userCredentialSchema.index({ institutionId: 1, status: 1 });
+userCredentialSchema.index({ createdAt: -1 });
 
 const UserCredential = mongoose.model('UserCredential', userCredentialSchema);
 

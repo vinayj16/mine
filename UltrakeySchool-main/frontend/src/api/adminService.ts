@@ -1,6 +1,3 @@
-// API Service for School Admin modules
-// This file provides standardized API integration for all School Admin pages
-
 import apiClient from './client';
 
 // Generic API service class

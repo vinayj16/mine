@@ -2,7 +2,7 @@ import api from './api';
 
 export interface CustomField {
   _id: string;
-  schoolId: string;
+  institutionId: string;
   entityType: 'student' | 'teacher' | 'guardian' | 'staff' | 'user';
   fieldName: string;
   fieldLabel: string;
@@ -49,33 +49,33 @@ export interface CustomFieldFormData {
 }
 
 const customFieldService = {
-  getFields: async (schoolId: string, entityType: string) => {
-    const response = await api.get(`/custom-fields/schools/${schoolId}/${entityType}`);
+  getFields: async (institutionId: string, entityType: string) => {
+    const response = await api.get(`/custom-fields/institutions/${institutionId}/${entityType}`);
     return response.data;
   },
 
-  getFieldById: async (schoolId: string, entityType: string, fieldId: string) => {
-    const response = await api.get(`/custom-fields/schools/${schoolId}/${entityType}/${fieldId}`);
+  getFieldById: async (institutionId: string, entityType: string, fieldId: string) => {
+    const response = await api.get(`/custom-fields/institutions/${institutionId}/${entityType}/${fieldId}`);
     return response.data;
   },
 
-  createField: async (schoolId: string, data: CustomFieldFormData) => {
-    const response = await api.post(`/custom-fields/schools/${schoolId}`, data);
+  createField: async (institutionId: string, data: CustomFieldFormData) => {
+    const response = await api.post(`/custom-fields/institutions/${institutionId}`, data);
     return response.data;
   },
 
-  updateField: async (schoolId: string, entityType: string, fieldId: string, data: Partial<CustomFieldFormData>) => {
-    const response = await api.put(`/custom-fields/schools/${schoolId}/${entityType}/${fieldId}`, data);
+  updateField: async (institutionId: string, entityType: string, fieldId: string, data: Partial<CustomFieldFormData>) => {
+    const response = await api.put(`/custom-fields/institutions/${institutionId}/${entityType}/${fieldId}`, data);
     return response.data;
   },
 
-  deleteField: async (schoolId: string, entityType: string, fieldId: string) => {
-    const response = await api.delete(`/custom-fields/schools/${schoolId}/${entityType}/${fieldId}`);
+  deleteField: async (institutionId: string, entityType: string, fieldId: string) => {
+    const response = await api.delete(`/custom-fields/institutions/${institutionId}/${entityType}/${fieldId}`);
     return response.data;
   },
 
-  reorderFields: async (schoolId: string, entityType: string, orderedIds: string[]) => {
-    const response = await api.patch(`/custom-fields/schools/${schoolId}/${entityType}/reorder`, { orderedIds });
+  reorderFields: async (institutionId: string, entityType: string, orderedIds: string[]) => {
+    const response = await api.patch(`/custom-fields/institutions/${institutionId}/${entityType}/reorder`, { orderedIds });
     return response.data;
   }
 };

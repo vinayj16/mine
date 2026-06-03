@@ -1,5 +1,4 @@
 import { useLocation, Link } from 'react-router-dom';
-import { SIDEBAR_MENUS } from '../../config/sidebar-menus';
 
 interface BreadcrumbItem {
   label: string;

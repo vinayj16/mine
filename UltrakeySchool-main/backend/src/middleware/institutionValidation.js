@@ -1,8 +1,3 @@
-/**
- * Institution Validation Middleware
- * Ensures complete institution isolation across all endpoints
- */
-
 import Institution from '../models/Institution.js';
 import logger from '../utils/logger.js';
 

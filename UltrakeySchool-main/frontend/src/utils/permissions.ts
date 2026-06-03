@@ -1,25 +1,27 @@
 import { MODULES, isModuleEnabledForPlan, type Module } from '../config/modules';
 import { getSidebarMenu } from '../config/sidebar-menus';
+import { getRoleById as getRoleFromConfig, canRoleAccessModule as canAccessModuleForRole } from '../config/roles';
+import { getDashboardConfig } from '../config/roleDashboardConfig';
 
 const getRoleById = (id: string): { label: string; description: string } | undefined => {
-  // Mock role data - in a real app this would come from a database or config
-  const roles: Record<string, { label: string; description: string }> = {
-    'superadmin': { label: 'Super Admin', description: 'Full system access' },
-    'super_admin': { label: 'Super Admin', description: 'Full system access' },
-    'institution_admin': { label: 'Institution Admin', description: 'Manages institution settings' },
-    'admin': { label: 'Admin', description: 'Administrative access' },
-    'principal': { label: 'Principal', description: 'School management' },
-    'teacher': { label: 'Teacher', description: 'Teaching staff' },
-    'student': { label: 'Student', description: 'Student access' },
-    'parent': { label: 'Parent', description: 'Parent access' },
-    'hostel':{label: 'hostel', description: 'hostel access'},
-    'transport':{label: 'transport', description: 'transportaccess'},
-    'agent':{label: 'Agent', description: 'agent access'},
+  const role = getRoleFromConfig(id);
+  if (role) return { label: role.displayName, description: role.description };
+  const fallback: Record<string, { label: string; description: string }> = {
+    'hostel': { label: 'Hostel', description: 'Hostel access' },
+    'transport': { label: 'Transport', description: 'Transport access' },
+    'staff': { label: 'Staff', description: 'Staff access' },
+    'staff_member': { label: 'Staff', description: 'Staff access' },
+    'librarian': { label: 'Librarian', description: 'Library access' },
+    'accountant': { label: 'Accountant', description: 'Financial access' },
+    'hr': { label: 'HR', description: 'HR access' },
+    'hr_manager': { label: 'HR Manager', description: 'HR access' },
   };
-  return roles[id.toLowerCase()];
+  return fallback[id.toLowerCase()];
 };
 
-const canRoleAccessModule = (_roleId: string, _moduleKey: string) => true;
+const canRoleAccessModule = (roleId: string, moduleKey: string): boolean => {
+  return canAccessModuleForRole(roleId, moduleKey);
+};
 
 const getModuleByRoute = (routePath: string): Module | undefined => {
   return MODULES.find(m => m.allowedRoutes.some(r => routePath.startsWith(r)));
@@ -30,7 +32,6 @@ export interface User {
   name: string;
   email: string;
   role: string;
-  schoolId?: string;
   institutionId?: string;
   institutionData?: {
     id: string;
@@ -56,73 +57,50 @@ export interface User {
   permissions?: string[];
   modules?: string[];
   avatar?: string;
+  photo?: string;
 }
 
 /**
  * Get role-specific dashboard path
  */
 export const getRoleBasedDashboard = (role?: string): string => {
-  if (!role) {
-    return '/';
-  }
+  if (!role) return '/';
 
-  // TEMPORARY FIX: Force SUPER_ADMIN to go to super-admin dashboard
-  if (role === 'SUPER_ADMIN' || role === 'super_admin' || role === 'superadmin') {
-    return '/super-admin/dashboard';
-  }
+  const dashboardConfig = getDashboardConfig(role);
+  if (dashboardConfig?.defaultRoute) return dashboardConfig.defaultRoute;
 
   const normalizedRole = role.toLowerCase().replace(/[_\s]+/g, '_');
-  
+
   const dashboardMap: Record<string, string> = {
-    // Super Admin
     'superadmin': '/super-admin/dashboard',
-
-
-
-    // Institution Admin
     'institution_admin': '/dashboard/main',
-    'institution-admin': '/dashboard/main',
-    'school-admin': '/dashboard/main',
-
-    // Admin Dashboard (separate from institution admin)
     'admin': '/dashboard/admin',
-
-    // Agent
     'agent': '/agent',
-
-    // Academic Roles
     'teacher': '/dashboard/teacher',
     'student': '/dashboard/student',
     'parent': '/dashboard/parent',
+    'guardian': '/dashboard/parent',
     'principal': '/dashboard/principal',
-
-    // Staff Roles
     'staff': '/dashboard/staff',
-    'staff_member': '/dashboard/staff',
-    'staff-member': '/dashboard/staff',
-    'accountant': '/dashboard/finance',
+    'accountant': '/dashboard/accountant',
     'hr': '/dashboard/hr',
-    'hr_manager': '/dashboard/hr',
-    'hr-manager': '/dashboard/hr',
     'librarian': '/dashboard/library',
     'transport_manager': '/transport',
-    'transport-manager': '/transport',
     'hostel_warden': '/dashboard/hostel',
-    'hostel-warden': '/dashboard/hostel',
   };
 
-  // Handle uppercase role names (TEACHER, STUDENT, PRINCIPAL, etc.)
-  const upperRole = role?.toUpperCase();
-  if (upperRole === 'TEACHER') return '/dashboard/teacher';
-  if (upperRole === 'STUDENT') return '/dashboard/student';
-  if (upperRole === 'PARENT') return '/dashboard/parent';
-  if (upperRole === 'PRINCIPAL') return '/dashboard/principal';
-  if (upperRole === 'SUPER_ADMIN') return '/super-admin/dashboard';
-  if (upperRole === 'ADMIN') return '/dashboard/admin';
+  const upperRole = role.toUpperCase();
+  const upperMap: Record<string, string> = {
+    'TEACHER': '/dashboard/teacher',
+    'STUDENT': '/dashboard/student',
+    'PARENT': '/dashboard/parent',
+    'PRINCIPAL': '/dashboard/principal',
+    'SUPER_ADMIN': '/super-admin/dashboard',
+    'ADMIN': '/dashboard/admin',
+  };
+  if (upperMap[upperRole]) return upperMap[upperRole];
 
-  const dashboardPath = dashboardMap[normalizedRole] || '/dashboard/principal';
-  
-  return dashboardPath;
+  return dashboardMap[normalizedRole] || '/dashboard/principal';
 };
 
 const MODULE_MAP: Record<string, Module> = MODULES.reduce((acc, module) => {
@@ -188,6 +166,41 @@ export const canAccessRoute = (user: User | null, routePath: string): boolean =>
     const normalizedRole = user.role.toLowerCase();
     if (normalizedRole === 'superadmin' || normalizedRole === 'super_admin') {
       return true;
+    }
+
+    // Cross-dashboard navigation protection — allow shared routes
+    const routeLower = routePath.toLowerCase();
+    const isSharedRoute = 
+      routeLower.startsWith('/dashboard/applications') || 
+      routeLower.startsWith('/notice-board') || 
+      routeLower.startsWith('/events') ||
+      routeLower.includes('/dashboard/applications/') ||
+      routeLower.includes('calendar');
+    if (isSharedRoute) {
+      return true;
+    }
+
+    if (normalizedRole === 'student') {
+      // Block student access to non-student dashboard routes (shared routes already allowed above)
+      if (routeLower.startsWith('/dashboard/') && !routeLower.startsWith('/dashboard/student')) {
+        console.warn(`[Security Guard] Blocked student user from accessing ${routePath}`);
+        return false;
+      }
+    } else if (normalizedRole === 'parent') {
+      if (routeLower.startsWith('/dashboard/') && !routeLower.startsWith('/dashboard/parent')) {
+        console.warn(`[Security Guard] Blocked parent user from accessing ${routePath}`);
+        return false;
+      }
+    } else if (normalizedRole === 'teacher') {
+      if (routeLower.startsWith('/dashboard/') && !routeLower.startsWith('/dashboard/teacher')) {
+        console.warn(`[Security Guard] Blocked teacher user from accessing ${routePath}`);
+        return false;
+      }
+    } else if (normalizedRole === 'principal') {
+      if (routeLower.startsWith('/dashboard/') && !routeLower.startsWith('/dashboard/principal')) {
+        console.warn(`[Security Guard] Blocked principal user from accessing ${routePath}`);
+        return false;
+      }
     }
 
     // Allow Institution Admin access to all dashboard routes

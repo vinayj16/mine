@@ -1,9 +1,3 @@
-/**
- * Academic Engine Controller
- * Handles academic structure configuration for different institution types
- * Supports: Schools, Inter Colleges, Degree Colleges
- */
-
 import academicEngineService from '../services/academicEngineService.js';
 import ApiResponse from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
@@ -35,7 +29,7 @@ const getCachedOrFetch = (key, fetchFn) => {
     logger.debug(`Cache hit for key: ${key}`);
     return cached.data;
   }
-  
+
   const data = fetchFn();
   configCache.set(key, { data, timestamp: Date.now() });
   logger.debug(`Cache miss for key: ${key}, fetched fresh data`);
@@ -48,7 +42,7 @@ const getCachedOrFetch = (key, fetchFn) => {
 const clearCache = async (req, res, next) => {
   try {
     const { type } = req.params;
-    
+
     if (type) {
       const validatedType = validateInstitutionType(type);
       // Clear specific type cache
@@ -60,7 +54,7 @@ const clearCache = async (req, res, next) => {
       logger.info(`Cache cleared for institution type: ${validatedType}`);
       return ApiResponse.success(res, `Cache cleared for ${validatedType}`);
     }
-    
+
     // Clear all cache
     configCache.clear();
     logger.info('All cache cleared');
@@ -79,22 +73,22 @@ const getAcademicStructure = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const structure = getCachedOrFetch(
       `structure_${type}_${institutionId}`,
       () => academicEngineService.getAcademicStructure(type, institutionId)
     );
-    
+
     logger.info(`Academic structure retrieved for: ${type}`, {
       userId: req.user?.id,
       institutionType: type,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Academic structure retrieved successfully',
@@ -114,22 +108,22 @@ const getAvailableModules = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const modules = getCachedOrFetch(
       `modules_${type}_${institutionId}`,
       () => academicEngineService.getAvailableModules(type, institutionId)
     );
-    
+
     logger.info(`Available modules retrieved for: ${type}`, {
       userId: req.user?.id,
       moduleCount: modules.length,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Available modules retrieved successfully',
@@ -153,26 +147,26 @@ const getStudentGroupingLogic = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const logic = getCachedOrFetch(
       `grouping_${type}_${institutionId}`,
       () => academicEngineService.getStudentGroupingLogic(type, institutionId)
     );
-    
+
     if (!logic) {
       return ApiResponse.notFound(res, `No grouping logic found for ${type}`);
     }
-    
+
     logger.info(`Student grouping logic retrieved for: ${type}`, {
       userId: req.user?.id,
       groupBy: logic.groupBy,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Student grouping logic retrieved successfully',
@@ -195,22 +189,22 @@ const getAttendanceRules = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const rules = getCachedOrFetch(
       `attendance_${type}_${institutionId}`,
       () => academicEngineService.getAttendanceRules(type, institutionId)
     );
-    
+
     logger.info(`Attendance rules retrieved for: ${type}`, {
       userId: req.user?.id,
       minimumRequired: rules.minimumRequired,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Attendance rules retrieved successfully',
@@ -233,22 +227,22 @@ const getExamSystem = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const system = getCachedOrFetch(
       `exam_${type}_${institutionId}`,
       () => academicEngineService.getExamSystem(type, institutionId)
     );
-    
+
     logger.info(`Exam system retrieved for: ${type}`, {
       userId: req.user?.id,
       examType: system.type,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Exam system retrieved successfully',
@@ -271,22 +265,22 @@ const getRequiredRoles = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const roles = getCachedOrFetch(
       `roles_${type}_${institutionId}`,
       () => academicEngineService.getRequiredRoles(type, institutionId)
     );
-    
+
     logger.info(`Required roles retrieved for: ${type}`, {
       userId: req.user?.id,
       roleCount: roles.length,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'Required roles retrieved successfully',
@@ -310,15 +304,15 @@ const getAllConfigs = async (req, res, next) => {
   try {
     const type = validateInstitutionType(req.params.type);
     const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+
     if (!institutionId) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     // Check if full config is cached
     const cacheKey = `all_configs_${type}_${institutionId}`;
     const cached = configCache.get(cacheKey);
-    
+
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       logger.debug(`Full config cache hit for: ${type}`);
       return ApiResponse.success(
@@ -327,7 +321,7 @@ const getAllConfigs = async (req, res, next) => {
         cached.data
       );
     }
-    
+
     // Fetch all configs
     const configs = {
       institutionType: type,
@@ -344,17 +338,17 @@ const getAllConfigs = async (req, res, next) => {
         cacheTTL: CACHE_TTL / 1000 // in seconds
       }
     };
-    
+
     // Cache the full config
     configCache.set(cacheKey, { data: configs, timestamp: Date.now() });
-    
+
     logger.info(`All configurations retrieved for: ${type}`, {
       userId: req.user?.id,
       moduleCount: configs.modules.length,
       roleCount: configs.roles.length,
       institutionId
     });
-    
+
     return ApiResponse.success(
       res,
       'All configurations retrieved successfully',
@@ -392,12 +386,12 @@ const getSupportedTypes = async (req, res, next) => {
         features: ['Departments', 'Courses', 'Semesters', 'Credits', 'GPA/CGPA', 'Backlogs']
       }
     ];
-    
+
     logger.info('Supported institution types retrieved', {
       userId: req.user?.id,
       typeCount: types.length
     });
-    
+
     return ApiResponse.success(
       res,
       'Supported institution types retrieved successfully',
@@ -419,24 +413,24 @@ const getSupportedTypes = async (req, res, next) => {
 const compareConfigurations = async (req, res, next) => {
   try {
     const { types, institutionId } = req.query;
-    
+
     if (!types) {
       return ApiResponse.badRequest(res, 'Types parameter is required (comma-separated)');
     }
-    
+
     const institutionIdValue = req.user?.institutionId || institutionId;
-    
+
     if (!institutionIdValue) {
       return ApiResponse.badRequest(res, 'Institution ID is required');
     }
-    
+
     const typeArray = types.split(',').map(t => t.trim().toUpperCase());
-    
+
     // Validate all types
     typeArray.forEach(type => validateInstitutionType(type));
-    
+
     const comparison = {};
-    
+
     for (const type of typeArray) {
       comparison[type] = {
         structure: await academicEngineService.getAcademicStructure(type, institutionIdValue),
@@ -447,13 +441,13 @@ const compareConfigurations = async (req, res, next) => {
         roles: await academicEngineService.getRequiredRoles(type, institutionIdValue)
       };
     }
-    
+
     logger.info('Configuration comparison generated', {
       userId: req.user?.id,
       types: typeArray,
       institutionId: institutionIdValue
     });
-    
+
     return ApiResponse.success(
       res,
       'Configuration comparison generated successfully',
@@ -480,11 +474,11 @@ const getCacheStats = async (req, res, next) => {
       cacheTTL: CACHE_TTL / 1000, // in seconds
       currentTime: Date.now()
     };
-    
+
     for (const [key, value] of configCache) {
       const age = Date.now() - value.timestamp;
       const remaining = Math.max(0, CACHE_TTL - age);
-      
+
       stats.entries.push({
         key,
         age: Math.floor(age / 1000), // in seconds
@@ -492,12 +486,12 @@ const getCacheStats = async (req, res, next) => {
         expired: remaining <= 0
       });
     }
-    
+
     logger.info('Cache statistics retrieved', {
       userId: req.user?.id,
       totalEntries: stats.totalEntries
     });
-    
+
     return ApiResponse.success(
       res,
       'Cache statistics retrieved successfully',

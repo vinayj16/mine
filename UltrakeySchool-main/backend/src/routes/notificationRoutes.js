@@ -7,7 +7,8 @@ const {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  broadcastNotification
+  broadcastNotification,
+  clearReadNotifications
 } = notificationController;
 
 import { protect } from '../middleware/authMiddleware.js';
@@ -40,7 +41,7 @@ router.get(
 // Create notification (TESTED & VERIFIED)
 router.post(
   '/',
-  authorize(['admin', 'teacher', 'principal']),
+  authorize(['admin', 'teacher', 'principal', 'institution_admin', 'superadmin', 'institution_owner']),
   createNotificationValidation,
   createNotification
 );
@@ -54,7 +55,7 @@ router.post(
 // Broadcast notification (TESTED & VERIFIED)
 router.post(
   '/broadcast',
-  authorize(['admin', 'principal']),
+  authorize(['admin', 'principal', 'institution_admin', 'superadmin', 'institution_owner']),
   broadcastNotificationValidation,
   broadcastNotification
 );  
@@ -77,6 +78,12 @@ router.delete(
   '/:id',
   deleteNotificationValidation,
   deleteNotification
-);  
+);
+
+// Clear all read notifications
+router.delete(
+  '/clear-read',
+  clearReadNotifications
+);
 
 export default router;

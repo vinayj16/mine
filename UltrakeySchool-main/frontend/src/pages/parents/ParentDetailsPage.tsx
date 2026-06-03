@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
@@ -50,9 +50,11 @@ const ParentDetailsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [parentImageError, setParentImageError] = useState(false);
+  const navigate = useNavigate();
+  const [showLoginDetails, setShowLoginDetails] = useState(false);
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011';
+  // Get institutionId from localStorage
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchGuardianDetails = async () => {
     if (!id) {
@@ -65,7 +67,7 @@ const ParentDetailsPage = () => {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get(`/guardians/schools/${schoolId}/${id}`);
+      const response = await apiClient.get(`/guardians/schools/${institutionId}/${id}`);
 
       if (response.data.success) {
         setGuardian(response.data.data.guardian || response.data.data);
@@ -124,7 +126,7 @@ const ParentDetailsPage = () => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -184,7 +186,7 @@ const ParentDetailsPage = () => {
                 <Link to="/">Dashboard</Link>
               </li>
               <li className="breadcrumb-item">
-                <Link to="/parents">Parents</Link>
+                <Link to="/dashboard/parent/list">Parents</Link>
               </li>
               <li className="breadcrumb-item active" aria-current="page">
                 Parent Details
@@ -195,14 +197,14 @@ const ParentDetailsPage = () => {
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <button 
             className="btn btn-light me-2 mb-2"
-            onClick={() => toast.info('Login details feature coming soon')}
+            onClick={() => setShowLoginDetails(true)}
           >
             <i className="ti ti-lock me-2" />
             Login Details
           </button>
           <button 
             className="btn btn-primary d-flex align-items-center mb-2"
-            onClick={() => toast.info('Edit feature coming soon')}
+            onClick={() => navigate(`/dashboard/parent/details/${id}`)}
           >
             <i className="ti ti-edit-circle me-2" />
             Edit Parent
@@ -416,6 +418,45 @@ const ParentDetailsPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Login Details Modal */}
+      {showLoginDetails && (
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Login Details</h5>
+                <button type="button" className="btn-close" onClick={() => setShowLoginDetails(false)} />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">Email</label>
+                  <input type="email" className="form-control" value={guardian.email} readOnly />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Password</label>
+                  <div className="input-group">
+                    <input type="text" className="form-control" value="********" readOnly />
+                    <button className="btn btn-outline-primary" onClick={async () => {
+                      try {
+                        await apiClient.post('/auth/reset-password', { email: guardian.email });
+                        toast.success('Password reset link sent to parent email');
+                      } catch (err: any) {
+                        toast.error(err.response?.data?.message || 'Failed to send reset link');
+                      }
+                    }}>
+                      Reset Password
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowLoginDetails(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

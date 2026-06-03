@@ -5,6 +5,24 @@ import os from 'os';
 const router = express.Router();
 
 /**
+ * Root health check (accessed at /api/v1/health)
+ * GET /
+ */
+router.get('/', async (req, res) => {
+  try {
+    const dbHealth = await checkDBHealth();
+    res.status(200).json({
+      status: 'healthy',
+      database: dbHealth.healthy ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(503).json({ status: 'unhealthy', error: error.message });
+  }
+});
+
+/**
  * Basic health check endpoint (TESTED & VERIFIED)
  * GET /health
  */

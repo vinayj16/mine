@@ -23,11 +23,6 @@ const TransportDashboardPage = () => {
     status: string
     arrivalTime: string
   }>>([])
-  const [complaints, setComplaints] = useState<Array<{
-    title: string
-    severity: string
-    route: string
-  }>>([])
   const [busStatusData, setBusStatusData] = useState<Array<{
     status: string
     count: number
@@ -36,6 +31,20 @@ const TransportDashboardPage = () => {
   const [emailMessage, setEmailMessage] = useState<string | null>(null)
 
   const sendTransportEmail = async (studentId: string) => {
+    // Validate required parameters
+    if (!studentId) {
+      setEmailMessage('Invalid student ID')
+      setTimeout(() => setEmailMessage(null), 3000)
+      return
+    }
+
+    // Validate user and institution data
+    if (!user?.institutionData) {
+      setEmailMessage('User institution data not available')
+      setTimeout(() => setEmailMessage(null), 3000)
+      return
+    }
+
     try {
       setEmailSending(true)
       const response = await apiClient.post(`/transport/send-email/${studentId}`, {
@@ -53,16 +62,17 @@ const TransportDashboardPage = () => {
           transportFee: INDIAN_CURRENCY.format(5000),
           paymentStatus: 'Paid',
           dueDate: '2024-04-30',
-          schoolName: user?.institutionData?.name || 'EduSearch School'
+          schoolName: user.institutionData.name || 'EduSearch School'
         }
       })
       if (response.data.success) {
         setEmailMessage('Transport email sent successfully!')
         setTimeout(() => setEmailMessage(null), 3000)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error sending transport email:', err)
-      setEmailMessage('Failed to send transport email')
+      const errorMessage = err.response?.data?.message || 'Failed to send transport email'
+      setEmailMessage(errorMessage)
       setTimeout(() => setEmailMessage(null), 3000)
     } finally {
       setEmailSending(false)
@@ -70,53 +80,84 @@ const TransportDashboardPage = () => {
   }
 
   useEffect(() => {
-const fetchData = async () => {
-    try {
-        setLoading(true)
-        
-        // Fetch transport statistics
-        const statsResponse = await apiClient.get('/transport/dashboard/stats')
-        if (statsResponse.data?.success) {
-          const statsData = statsResponse.data.data;
-          setStats({
-            totalRoutes: statsData.totalRoutes || 0,
-            busesRunning: statsData.busesRunning || 0,
-            totalStudents: statsData.totalStudents || 0,
-            pendingIssues: statsData.pendingIssues || 0
-          });
-        }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-        // Fetch route data
-        const routesResponse = await apiClient.get('/transport/dashboard/routes')
-        if (routesResponse.data?.success) {
-          const routesRaw = routesResponse.data.data;
-          setRouteData(Array.isArray(routesRaw) ? routesRaw : routesRaw?.routes || []);
-        }
+        const instId = user?.institutionId || user?.institution || '';
 
-        // Fetch complaints
-        const complaintsResponse = await apiClient.get('/transport/dashboard/complaints')
-        if (complaintsResponse.data?.success) {
-          const complaintsRaw = complaintsResponse.data.data;
-          setComplaints(Array.isArray(complaintsRaw) ? complaintsRaw : complaintsRaw?.complaints || []);
-        }
+        // Use the same APIs as the transport pages.
+        // 1) Routes (for route list + route counts + active/inactive)
+        const routesResponse = await apiClient.get(
+          `/transport/routes?institutionId=${instId}&_t=${Date.now()}`
+        );
 
-        // Fetch bus status distribution
-        const statusResponse = await apiClient.get('/transport/dashboard/status')
-        if (statusResponse.data?.success) {
-          const statusRaw = statusResponse.data.data;
-          setBusStatusData(Array.isArray(statusRaw) ? statusRaw : statusRaw?.status || []);
-        }
+        const routesPayload = routesResponse.data;
+        const routesRaw = routesPayload?.data?.routes ?? routesPayload?.data ?? routesPayload?.routes;
+        const routesList: any[] = Array.isArray(routesRaw)
+          ? routesRaw
+          : Array.isArray(routesPayload)
+            ? routesPayload
+            : [];
 
-      } catch (err) {
-        console.error('Error fetching transport data:', err)
-        setError('Failed to load transport dashboard data')
+        // Normalize route fields used by this dashboard.
+        const normalizedRouteData = routesList.map((r) => ({
+          route: r.name || r.routeName || '-',
+          bus: r.vehicle?.registrationNumber || r.vehicleNumber || '-',
+          students: r.studentsCount ?? r.assignedStudents ?? 0,
+          status: r.status === 'active' || r.status === 'Active' ? 'On Time' : r.status === 'inactive' || r.status === 'Inactive' ? 'Delayed' : (r.status || 'On Time'),
+          arrivalTime: r.startTime || r.arrivalTime || '-',
+        }));
+
+        setRouteData(normalizedRouteData.slice(0, 10));
+
+        // 2) Vehicles (for bus running + maintenance count)
+        const vehiclesResponse = await apiClient.get(
+          `/transport/vehicles?tenant=${instId}&_t=${Date.now()}`
+        );
+        const vehiclesPayload = vehiclesResponse.data;
+        const vehiclesRaw = vehiclesPayload?.data?.vehicles ?? vehiclesPayload?.data ?? vehiclesPayload?.vehicles;
+        const vehiclesList: any[] = Array.isArray(vehiclesRaw)
+          ? vehiclesRaw
+          : Array.isArray(vehiclesPayload)
+            ? vehiclesPayload
+            : [];
+
+        const busesRunning = vehiclesList.filter((v) => (v.status || '').toLowerCase() === 'active').length;
+        const totalStudents = 0; // not consistently available from these endpoints
+        const pendingIssues = 0; // not consistently available from these endpoints
+
+        setStats({
+          totalRoutes: routesList.length,
+          busesRunning,
+          totalStudents,
+          pendingIssues,
+        });
+
+        // 3) Bus status chart (active/maintenance/inactive from vehicles)
+        const countByStatus = (status: string) =>
+          vehiclesList.filter((v) => (v.status || '').toLowerCase() === status).length;
+
+        setBusStatusData([
+          { status: 'Active', count: countByStatus('active') },
+          { status: 'Maintenance', count: countByStatus('maintenance') },
+          { status: 'Inactive', count: countByStatus('inactive') },
+        ]);
+
+        // 4) Complaints (optional; keep empty if endpoint not available)
+        // Complaints endpoint not used in this dashboard, keeping state for future use
+
+      } catch (err: any) {
+        console.error('Error fetching transport dashboard data:', err);
+        setError(err.response?.data?.message || 'Failed to load transport dashboard data');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchData()
-  }, [])
+    fetchData();
+  }, [user?.institutionId, user?.institution]);
 
   if (loading) {
     return (
@@ -152,28 +193,23 @@ const fetchData = async () => {
           <h3 className="page-title mb-1">Transport Manager Dashboard</h3>
           <nav>
             <ol className="breadcrumb mb-0">
-              <li className="breadcrumb-item"><Link to="/transport">Dashboard</Link></li>
+<li className="breadcrumb-item"><Link to="/dashboard/transport">Dashboard</Link></li>
               <li className="breadcrumb-item active" aria-current="page">Transport</li>
             </ol>
           </nav>
-          {user?.institutionData && (
-            <small className="text-muted">
-              Connected to: {user.institutionData.name} ({user.institutionData.instituteCode})
-            </small>
-          )}
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap gap-2">
           <button 
             className="btn btn-info"
-            onClick={() => sendTransportEmail('507f1f77bcf86cd799439011')}
-            disabled={emailSending}
+            onClick={() => sendTransportEmail(user?.id || '')}
+            disabled={!user?.id || emailSending}
           >
             <i className="ti ti-mail me-1" />{emailSending ? 'Sending...' : 'Send Transport Email'}
           </button>
-          <Link to="/transport/routes" className="btn btn-primary">
+          <Link to="/dashboard/transport/routes" className="btn btn-primary">
             <i className="ti ti-route me-1" />Routes
           </Link>
-          <Link to="/transport/vehicles" className="btn btn-success">
+          <Link to="/dashboard/transport/vehicles" className="btn btn-success">
             <i className="ti ti-bus me-1" />Vehicles
           </Link>
         </div>
@@ -276,7 +312,7 @@ const fetchData = async () => {
           <div className="card">
             <div className="card-header d-flex align-items-center justify-content-between">
               <h5 className="card-title mb-0">Today's Bus Status</h5>
-              <Link to="/transport/routes" className="btn btn-sm btn-primary">
+              <Link to="/dashboard/transport/routes" className="btn btn-sm btn-primary">
                 <i className="ti ti-plus me-1" />Add Route
               </Link>
             </div>
@@ -334,37 +370,73 @@ const fetchData = async () => {
               <h5 className="card-title mb-0">Quick Actions</h5>
             </div>
             <div className="card-body">
-              <div className="d-flex flex-column gap-2">
-                <Link to="/transport/routes" className="btn btn-light border">
-                  <i className="ti ti-route me-2" />Manage Routes
-                </Link>
-                <Link to="/transport/vehicles" className="btn btn-light border">
-                  <i className="ti ti-bus me-2" />Manage Vehicles
-                </Link>
-                <Link to="/transport/drivers" className="btn btn-light border">
-                  <i className="ti ti-user me-2" />Manage Drivers
-                </Link>
+              <div className="row g-2">
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/routes" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-route me-2" />Manage Routes
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/vehicles" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-bus me-2" />Manage Vehicles
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/drivers" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-user me-2" />Manage Drivers
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/pickup-points" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-map-pin me-2" />Pickup Points
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/assign" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-transfer me-2" />Assign Vehicle
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/maintenance" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-wrench me-2" />Vehicle Maintenance
+                  </Link>
+                </div>
+                <div className="col-sm-6">
+                  <Link to="/dashboard/transport/reports" className="btn btn-light border w-100 text-start">
+                    <i className="ti ti-report me-2" />Transport Reports
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="col-md-6">
-          <div className="card">
-            <div className="card-header">
-              <h5 className="card-title mb-0">Pending Complaints</h5>
-            </div>
-            <div className="card-body">
-              {complaints.map((complaint, index) => (
-                <div key={index} className={`alert ${
-                  complaint.severity === 'critical' 
-                    ? 'alert-danger' 
-                    : 'alert-warning'
-                } mb-2`}>
-                  <i className={`ti ti-${complaint.severity === 'critical' ? 'alert-triangle' : 'alert-circle'} me-2`} />
-                  {complaint.title} - {complaint.route}
+          <div className="col-md-6">
+            <div className="card">
+              <div className="card-header">
+                <h5 className="card-title mb-0">Application Quick Access</h5>
+              </div>
+              <div className="card-body">
+                <div className="row g-2">
+                  <div className="col-sm-4">
+                    <Link to="/transport/apps/chat" className="btn btn-outline-primary w-100 py-3 d-flex flex-column align-items-center gap-2">
+                      <i className="ti ti-brand-hipchat fs-24" />
+                      <span>Chat</span>
+                    </Link>
+                  </div>
+                  <div className="col-sm-4">
+                    <Link to="/transport/apps/calendar" className="btn btn-outline-info w-100 py-3 d-flex flex-column align-items-center gap-2">
+                      <i className="ti ti-calendar fs-24" />
+                      <span>Calendar</span>
+                    </Link>
+                  </div>
+                  <div className="col-sm-4">
+                    <Link to="/transport/apps/todo" className="btn btn-outline-success w-100 py-3 d-flex flex-column align-items-center gap-2">
+                      <i className="ti ti-list-check fs-24" />
+                      <span>Todo</span>
+                    </Link>
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         </div>

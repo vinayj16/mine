@@ -1,88 +1,48 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../store/authStore';
+import { getRoleBasedDashboard } from '../utils/permissions';
 
 const RoleBasedDashboardRedirect: React.FC = () => {
+  const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
-  const [userRole, setUserRole] = useState('');
-  
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    const role = localStorage.getItem('userRole') || '';
-    console.log('[RoleBasedDashboardRedirect] userRole from localStorage:', role);
-    setUserRole(role);
-    setReady(true);
-  }, []);
-  
-  useEffect(() => {
-    if (ready && userRole) {
-      const normalizedRole = userRole.toLowerCase().replace(/_/g, '').replace(/-/g, '');
-      
-      console.log('[RoleBasedDashboardRedirect] normalized role:', normalizedRole);
-      
-      let redirectPath = '/dashboard/main';
-      
-      switch (normalizedRole) {
-        case 'institutionowner':
-          redirectPath = '/dashboard/institution';
-          break;
-        case 'institutionadmin':
-          redirectPath = '/dashboard/main';
-          break;
-        case 'admin':
-          redirectPath = '/dashboard/admin';
-          break;
-        case 'superadmin':
-          redirectPath = '/super-admin/dashboard';
-          break;
-        case 'principal':
-          redirectPath = '/dashboard/principal';
-          break;
-        case 'teacher':
-          redirectPath = '/dashboard/teacher';
-          break;
-        case 'student':
-          redirectPath = '/dashboard/student';
-          break;
-        case 'parent':
-          redirectPath = '/dashboard/parent';
-          break;
-        case 'staff':
-        case 'staffmember':
-          redirectPath = '/dashboard/staff';
-          break;
-        case 'accountant':
-          redirectPath = '/dashboard/accountant';
-          break;
-        case 'hr':
-          redirectPath = '/dashboard/hr';
-          break;
-        case 'librarian':
-          redirectPath = '/dashboard/librarian';
-          break;
-        case 'transportmanager':
-          redirectPath = '/transport';
-          break;
-        case 'hostelwarden':
-          redirectPath = '/dashboard/hostel';
-          break;
-        case 'agent':
-          redirectPath = '/agent';
-          break;
-        default:
-          console.log('[RoleBasedDashboardRedirect] Unknown role:', userRole, 'normalized:', normalizedRole);
-          redirectPath = '/dashboard/main';
-      }
-      
-      console.log('[RoleBasedDashboardRedirect] Redirecting to:', redirectPath);
-      navigate(redirectPath, { replace: true });
+    if (authLoading) return;
+    if (!user) {
+      setError('User not authenticated');
+      setReady(true);
+      return;
     }
-  }, [ready, userRole, navigate]);
-  
-  if (!ready) {
-    return <div>Loading...</div>;
+    const dashboardPath = getRoleBasedDashboard(user.role);
+    if (dashboardPath && dashboardPath !== '/') {
+      navigate(dashboardPath, { replace: true });
+    } else {
+      setError(`No dashboard configured for role: ${user.role}`);
+    }
+    setReady(true);
+  }, [user, authLoading, navigate]);
+
+  if (authLoading) {
+    return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div></div>;
   }
-  
-  return <div>Redirecting...</div>;
+
+  if (error) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100">
+        <div className="text-center">
+          <i className="ti ti-alert-triangle fs-1 text-danger mb-3"></i>
+          <h5>Redirect Error</h5>
+          <p className="text-muted">{error}</p>
+          <button className="btn btn-primary" onClick={() => window.location.href = '/login'}>Go to Login</button>
+        </div>
+      </div>
+    );
+  }
+
+  return <div className="d-flex justify-content-center align-items-center vh-100"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Redirecting...</span></div></div>;
 };
 
 export default RoleBasedDashboardRedirect;

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const ptmSlotSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
     required: true,
@@ -63,8 +63,8 @@ const ptmSlotSchema = new mongoose.Schema({
 });
 
 // Compound index for efficient queries
-ptmSlotSchema.index({ schoolId: 1, date: 1, teacherId: 1 });
-ptmSlotSchema.index({ schoolId: 1, status: 1 });
+ptmSlotSchema.index({ institutionId: 1, date: 1, teacherId: 1 });
+ptmSlotSchema.index({ institutionId: 1, status: 1 });
 
 const PTMSlot = mongoose.model('PTMSlot', ptmSlotSchema);
 

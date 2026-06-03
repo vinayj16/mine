@@ -5,8 +5,8 @@ import mongoose from 'mongoose';
 import { getCache, setCache, deleteCachePattern } from '../config/redis.js';
 
 // Validation constants
-const VALID_VEHICLE_TYPES = ['bus', 'van', 'car', 'minibus', 'other'];
-const VALID_VEHICLE_STATUSES = ['active', 'inactive', 'maintenance', 'retired'];
+const VALID_VEHICLE_TYPES = ['Bus', 'Van', 'Car', 'Auto'];
+const VALID_VEHICLE_STATUSES = ['Active', 'Inactive', 'Maintenance', 'Retired'];
 const VALID_ROUTE_STATUSES = ['active', 'inactive', 'suspended'];
 const VALID_TRIP_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'];
 const VALID_MAINTENANCE_TYPES = ['routine', 'repair', 'inspection', 'emergency'];
@@ -80,8 +80,8 @@ const createVehicle = async (req, res) => {
   try {
     logger.info('Creating vehicle');
     
-    const { registrationNumber, vehicleType, capacity, model, manufacturer, status, description } = req.body;
-    const tenant = req.user?.tenant;
+    const { vehicleNumber, registrationNumber, vehicleType, capacity, model, manufacturer, status, description } = req.body;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     
     // Validation
     const errors = [];
@@ -90,10 +90,12 @@ const createVehicle = async (req, res) => {
       errors.push('Tenant information is required');
     }
     
-    if (!registrationNumber || registrationNumber.trim().length === 0) {
-      errors.push('Registration number is required');
-    } else if (registrationNumber.length > MAX_REGISTRATION_LENGTH) {
-      errors.push('Registration number must not exceed ' + MAX_REGISTRATION_LENGTH + ' characters');
+    // Accept either vehicleNumber (frontend form field) or registrationNumber (legacy)
+    const vehicleNum = vehicleNumber || registrationNumber;
+    if (!vehicleNum || vehicleNum.trim().length === 0) {
+      errors.push('Vehicle number is required');
+    } else if (vehicleNum.length > MAX_REGISTRATION_LENGTH) {
+      errors.push('Vehicle number must not exceed ' + MAX_REGISTRATION_LENGTH + ' characters');
     }
     
     if (!vehicleType) {
@@ -143,15 +145,17 @@ const getVehicles = async (req, res) => {
   try {
     logger.info('Fetching vehicles');
     
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { vehicleType, status, page, limit, sortBy, sortOrder } = req.query;
+    
+    // Return empty if no school context
+    if (!institutionId) {
+      logger.info('No institution context — returning empty vehicles');
+      return successResponse(res, { vehicles: [], total: 0, page: 1, limit: 20 }, 'No school context — returning empty');
+    }
     
     // Validation
     const errors = [];
-    
-    if (!institutionId) {
-      errors.push('Institution ID is required');
-    }
     
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
@@ -210,7 +214,7 @@ const getVehicleById = async (req, res) => {
     logger.info('Fetching vehicle by ID');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     
     // Validation
     const errors = [];
@@ -245,7 +249,7 @@ const updateVehicle = async (req, res) => {
     logger.info('Updating vehicle');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     const { registrationNumber, vehicleType, capacity, model, manufacturer, status, description } = req.body;
     
     // Validation
@@ -259,7 +263,7 @@ const updateVehicle = async (req, res) => {
     if (idError) errors.push(idError);
     
     if (registrationNumber && registrationNumber.length > MAX_REGISTRATION_LENGTH) {
-      errors.push('Registration number must not exceed ' + MAX_REGISTRATION_LENGTH + ' characters');
+      errors.push('Vehicle number must not exceed ' + MAX_REGISTRATION_LENGTH + ' characters');
     }
     
     if (vehicleType && !VALID_VEHICLE_TYPES.includes(vehicleType)) {
@@ -312,7 +316,7 @@ const deleteVehicle = async (req, res) => {
     logger.info('Deleting vehicle');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     
     // Validation
     const errors = [];
@@ -349,7 +353,7 @@ const createRoute = async (req, res) => {
     logger.info('Creating route');
     
     const { name, routeNumber, startPoint, endPoint, stops, distance, estimatedDuration, status, description } = req.body;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     
     // Validation
     const errors = [];
@@ -427,7 +431,7 @@ const getRoutes = async (req, res) => {
   try {
     logger.info('Fetching routes');
     
-    const institutionId = req.user?.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { status, page, limit, sortBy, sortOrder } = req.query;
     
     // Validation
@@ -483,7 +487,7 @@ const getRouteById = async (req, res) => {
     logger.info('Fetching route by ID');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     
     // Validation
     const errors = [];
@@ -518,7 +522,7 @@ const updateRoute = async (req, res) => {
     logger.info('Updating route');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     const { name, stops, distance, estimatedDuration, status, description } = req.body;
     
     // Validation
@@ -591,7 +595,7 @@ const deleteRoute = async (req, res) => {
     logger.info('Deleting route');
     
     const { id } = req.params;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     
     // Validation
     const errors = [];
@@ -1137,7 +1141,7 @@ const createMaintenance = async (req, res) => {
     logger.info('Creating maintenance record');
     
     const { vehicleId, maintenanceType, description, scheduledDate, cost, status } = req.body;
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     
     // Validation
     const errors = [];
@@ -1183,7 +1187,9 @@ const createMaintenance = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const maintenance = await transportService.createMaintenance(req.body, tenant);
+    // Map frontend vehicleId to model's 'vehicle' field
+    const maintenanceData = { ...req.body, vehicle: vehicleId };
+    const maintenance = await transportService.createMaintenance(maintenanceData, tenant);
     
     logger.info('Maintenance record created successfully:', { maintenanceId: maintenance._id });
     return createdResponse(res, maintenance, 'Maintenance record created successfully');
@@ -1197,7 +1203,7 @@ const getMaintenanceRecords = async (req, res) => {
   try {
     logger.info('Fetching maintenance records');
     
-    const tenant = req.user?.tenant;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId || req.query.tenant;
     const { vehicleId, maintenanceType, status, page, limit } = req.query;
     
     // Validation
@@ -1391,7 +1397,7 @@ const getFuelRecords = async (req, res) => {
 };
 
 // Statistics and Analytics
-const getTransportStatistics = async (req, res) => {
+const getTransportStats = async (req, res) => {
   try {
     logger.info('Fetching transport statistics');
     
@@ -1408,7 +1414,11 @@ const getTransportStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const stats = await transportService.getTransportStatistics(tenant);
+    const stats = await transportService.getTransportStats?.(tenant);
+    if (!stats) {
+      return validationErrorResponse(res, ['Transport statistics are not available']);
+    }
+
     
     logger.info('Transport statistics fetched successfully');
     return successResponse(res, stats, 'Transport statistics retrieved successfully');
@@ -1682,6 +1692,113 @@ const bulkDeleteVehicles = async (req, res) => {
   }
 };
 
+// Dashboard Stats
+const getDashboardStats = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant;
+    const stats = await transportService.getTransportStats(tenantId);
+    return successResponse(res, stats, 'Dashboard statistics retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching dashboard stats:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Dashboard Routes
+const getDashboardRoutes = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant;
+    const routes = await transportService.getRoutes(tenantId, { limit: 5 });
+    return successResponse(res, routes, 'Dashboard routes retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching dashboard routes:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Dashboard Complaints
+const getDashboardComplaints = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant;
+    // Attempt to fetch transport-specific complaints if the model exists
+    let complaints = [];
+    try {
+      const Complaint = mongoose.model('Complaint');
+      complaints = await Complaint.find({ 
+        category: 'Transport',
+        tenant: tenantId 
+      }).limit(5).sort({ createdAt: -1 });
+    } catch (err) {
+      logger.warn('Complaint model not found or error fetching complaints:', err.message);
+    }
+    
+    return successResponse(res, complaints, 'Dashboard complaints retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching dashboard complaints:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+// Dashboard Status
+const getDashboardStatus = async (req, res) => {
+  try {
+    const tenantId = req.user?.tenant;
+    const stats = await transportService.getTransportStats(tenantId);
+    
+    const status = {
+      overall: stats.vehicles.active > 0 ? 'Operational' : 'Partial',
+      activeVehicles: stats.vehicles.active,
+      activeRoutes: stats.routes.active,
+      pendingMaintenance: stats.maintenance.pending
+    };
+    
+    return successResponse(res, status, 'Dashboard status retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching dashboard status:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const updateMaintenance = async (req, res) => {
+  try {
+    logger.info('Updating maintenance record');
+    const { id } = req.params;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId || req.query.institutionId || req.query.tenant;
+    const errors = [];
+    if (!tenant) errors.push('Tenant information is required');
+    const idError = validateObjectId(id, 'Maintenance ID');
+    if (idError) errors.push(idError);
+    if (errors.length > 0) return validationErrorResponse(res, errors);
+    const maintenance = await transportService.updateMaintenance(id, tenant, req.body);
+    if (!maintenance) return notFoundResponse(res, 'Maintenance record not found');
+    logger.info('Maintenance record updated successfully:', { id });
+    return successResponse(res, maintenance, 'Maintenance record updated successfully');
+  } catch (error) {
+    logger.error('Error updating maintenance record:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
+const deleteMaintenance = async (req, res) => {
+  try {
+    logger.info('Deleting maintenance record');
+    const { id } = req.params;
+    const tenant = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId || req.query.tenant;
+    const errors = [];
+    if (!tenant) errors.push('Tenant information is required');
+    const idError = validateObjectId(id, 'Maintenance ID');
+    if (idError) errors.push(idError);
+    if (errors.length > 0) return validationErrorResponse(res, errors);
+    const result = await transportService.deleteMaintenance(id, tenant);
+    if (!result) return notFoundResponse(res, 'Maintenance record not found');
+    logger.info('Maintenance record deleted successfully:', { id });
+    return successResponse(res, null, 'Maintenance record deleted successfully');
+  } catch (error) {
+    logger.error('Error deleting maintenance record:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
 // Export all functions
 export default {
   createVehicle,
@@ -1706,12 +1823,18 @@ export default {
   getTripById,
   createMaintenance,
   getMaintenanceRecords,
+  updateMaintenance,
+  deleteMaintenance,
   addFuelRecord,
   getFuelRecords,
-  getTransportStatistics,
+  getTransportStats,
   getTransportAnalytics,
   exportTransportData,
   searchTransport,
   bulkUpdateVehicles,
-  bulkDeleteVehicles
+  bulkDeleteVehicles,
+  getDashboardStats,
+  getDashboardRoutes,
+  getDashboardComplaints,
+  getDashboardStatus
 };

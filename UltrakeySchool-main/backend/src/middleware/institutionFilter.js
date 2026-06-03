@@ -1,9 +1,3 @@
-/**
- * Institution Filter Middleware
- * Ensures all data queries are filtered by institution
- * Provides institution context to all responses
- */
-
 import mongoose from 'mongoose';
 import logger from '../utils/logger.js';
 

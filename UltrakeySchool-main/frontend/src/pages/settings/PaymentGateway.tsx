@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
 
 interface Gateway {
+  _id: string;
   name: string;
   displayName: string;
   description?: string;
@@ -16,7 +17,7 @@ interface Gateway {
     merchantId?: string;
     publicKey?: string;
     webhookSecret?: string;
-    environment: 'sandbox' | 'production';
+    environment?: 'sandbox' | 'production';
   };
   settings?: {
     currency: string;
@@ -28,35 +29,32 @@ interface Gateway {
   lastUsed?: string;
 }
 
-interface PaymentGatewaySettings {
-  _id: string;
-  institutionId: string;
-  gateways: Gateway[];
-  defaultGateway?: string;
-  isActive: boolean;
-}
-
 const PaymentGateway: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<PaymentGatewaySettings | null>(null);
+  const [gateways, setGateways] = useState<Gateway[]>([]);
+  const [defaultGateway, setDefaultGateway] = useState<string>('');
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
 
-  const fetchSettings = async () => {
+  const fetchGateways = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await apiClient.get('/payment-gateway/settings');
+      const response = await apiClient.get('/payment-gateways');
 
       if (response.data.success) {
-        setSettings(response.data.data.settings);
+        const data = response.data.data;
+        const gatewayList: Gateway[] = Array.isArray(data) ? data : (data?.gateways || []);
+        setGateways(gatewayList);
+        const defaultGw = gatewayList.find(g => g.name === (data?.defaultGateway || ''));
+        setDefaultGateway(data?.defaultGateway || defaultGw?.name || '');
       }
     } catch (err: any) {
-      console.error('Error fetching payment gateway settings:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to load payment gateway settings';
+      console.error('Error fetching payment gateways:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to load payment gateways';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -65,35 +63,35 @@ const PaymentGateway: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchSettings();
+    fetchGateways();
   }, []);
 
-  const handleToggleGateway = async (gatewayName: string, isEnabled: boolean) => {
+  const handleToggleGateway = async (gateway: Gateway, isEnabled: boolean) => {
     try {
       const response = await apiClient.patch(
-        `/payment-gateway/settings/${gatewayName}/toggle`,
+        `/payment-gateways/${gateway._id}/toggle`,
         { isEnabled }
       );
 
       if (response.data.success) {
-        fetchSettings();
-        toast.success(`${gatewayName} ${isEnabled ? 'enabled' : 'disabled'} successfully`);
+        fetchGateways();
+        toast.success(`${gateway.displayName} ${isEnabled ? 'enabled' : 'disabled'} successfully`);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to toggle gateway');
     }
   };
 
-  const handleSetDefault = async (gatewayName: string) => {
+  const handleSetDefault = async (gateway: Gateway) => {
     try {
       setSaving(true);
-      const response = await apiClient.put('/payment-gateway/settings', {
-        defaultGateway: gatewayName
+      const response = await apiClient.put(`/payment-gateways/${gateway._id}`, {
+        isDefault: true
       });
 
       if (response.data.success) {
-        setSettings(response.data.data.settings);
-        toast.success(`${gatewayName} set as default gateway`);
+        setDefaultGateway(gateway.name);
+        toast.success(`${gateway.displayName} set as default gateway`);
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to set default gateway');
@@ -145,30 +143,10 @@ const PaymentGateway: React.FC = () => {
                 <h5 className="alert-heading">Error Loading Payment Gateways</h5>
                 <p className="mb-0">{error}</p>
               </div>
-              <button className="btn btn-outline-danger ms-3" onClick={fetchSettings}>
+              <button className="btn btn-outline-danger ms-3" onClick={fetchGateways}>
                 <i className="ti ti-refresh me-1"></i>Retry
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!settings) {
-    return (
-      <div>
-        <h3 className="page-title mb-1">Payment Gateways</h3>
-        <nav>
-          <ol className="breadcrumb mb-0">
-            <li className="breadcrumb-item"><Link to="/">Home</Link></li>
-            <li className="breadcrumb-item active">Payment Gateways</li>
-          </ol>
-        </nav>
-        <div className="card mt-3">
-          <div className="card-body text-center py-5">
-            <i className="ti ti-database-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
-            <p className="mt-2 text-muted">No payment gateway settings available</p>
           </div>
         </div>
       </div>
@@ -185,23 +163,23 @@ const PaymentGateway: React.FC = () => {
         </ol>
       </nav>
 
-      {settings.defaultGateway && (
-        <div className="alert alert-info mt-3">
-          <i className="ti ti-info-circle me-2"></i>
-          Default Gateway: <strong>{settings.defaultGateway.toUpperCase()}</strong>
+      {defaultGateway && (
+        <div className="alert alert-info mt-3 d-flex align-items-center">
+          <i className="ti ti-info-circle me-2 fs-5"></i>
+          <span>Default Gateway: <strong>{defaultGateway.toUpperCase()}</strong></span>
         </div>
       )}
 
       <div className="row mt-3">
-        {settings.gateways && settings.gateways.length > 0 ? (
-          settings.gateways.map((gateway) => (
-            <div key={gateway.name} className="col-xl-4 col-md-6 mb-3">
-              <div className="card h-100">
+        {gateways.length > 0 ? (
+          gateways.map((gateway) => (
+            <div key={gateway._id} className="col-xl-4 col-md-6 mb-3">
+              <div className="card h-100 shadow-sm border-0 gateway-card">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-start mb-3">
                     <div className="d-flex align-items-center">
-                      <div className="avatar avatar-lg bg-primary-transparent rounded me-3">
-                        <i className={`${getGatewayIcon(gateway.name)} fs-24`}></i>
+                      <div className={`avatar avatar-lg rounded me-3 d-flex align-items-center justify-content-center ${gateway.isEnabled && gateway.isConnected ? 'bg-success-transparent' : 'bg-light'}`} style={{ width: 56, height: 56 }}>
+                        <i className={`${getGatewayIcon(gateway.name)} fs-24 ${gateway.isEnabled && gateway.isConnected ? 'text-success' : 'text-muted'}`}></i>
                       </div>
                       <div>
                         <h5 className="mb-1">{gateway.displayName}</h5>
@@ -213,8 +191,8 @@ const PaymentGateway: React.FC = () => {
                         className="form-check-input"
                         type="checkbox"
                         checked={gateway.isEnabled}
-                        onChange={(e) => handleToggleGateway(gateway.name, e.target.checked)}
-                        id={`toggle-${gateway.name}`}
+                        onChange={(e) => handleToggleGateway(gateway, e.target.checked)}
+                        id={`toggle-${gateway._id}`}
                       />
                     </div>
                   </div>
@@ -223,6 +201,7 @@ const PaymentGateway: React.FC = () => {
                     <div className="d-flex justify-content-between mb-2">
                       <span className="text-muted">Status:</span>
                       <span className={`badge ${gateway.isConnected ? 'bg-success' : 'bg-secondary'}`}>
+                        <span className={`d-inline-block rounded-circle me-1`} style={{ width: 6, height: 6, backgroundColor: 'currentColor' }}></span>
                         {gateway.isConnected ? 'Connected' : 'Not Connected'}
                       </span>
                     </div>
@@ -263,10 +242,10 @@ const PaymentGateway: React.FC = () => {
                     {gateway.isEnabled && gateway.isConnected && (
                       <button
                         className="btn btn-sm btn-outline-primary flex-fill"
-                        onClick={() => handleSetDefault(gateway.name)}
-                        disabled={settings.defaultGateway === gateway.name || saving}
+                        onClick={() => handleSetDefault(gateway)}
+                        disabled={defaultGateway === gateway.name || saving}
                       >
-                        {settings.defaultGateway === gateway.name ? (
+                        {defaultGateway === gateway.name ? (
                           <>
                             <i className="ti ti-check me-1"></i>Default
                           </>
@@ -284,19 +263,33 @@ const PaymentGateway: React.FC = () => {
           ))
         ) : (
           <div className="col-12">
-            <div className="card">
+            <div className="card border-0 shadow-sm">
               <div className="card-body text-center py-5">
-                <i className="ti ti-credit-card-off fs-48 text-muted"></i>
-                <p className="mt-2 text-muted">No payment gateways configured</p>
+                <i className="ti ti-credit-card-off fs-48 text-muted mb-3 d-block"></i>
+                <h5 className="text-muted mb-2">No Payment Gateways</h5>
+                <p className="text-muted">No payment gateways have been configured yet.</p>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Configuration Modal Placeholder */}
+      <style>{`
+        .gateway-card {
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          border-radius: 12px;
+        }
+        .gateway-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+        }
+        .bg-success-transparent {
+          background-color: rgba(25, 135, 84, 0.1);
+        }
+      `}</style>
+
       {showConfigModal && selectedGateway && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">
               <div className="modal-header">
@@ -314,9 +307,9 @@ const PaymentGateway: React.FC = () => {
                 <p className="text-muted">
                   Gateway configuration requires API credentials. Please contact your administrator or refer to the {selectedGateway.displayName} documentation.
                 </p>
-                <div className="alert alert-info">
-                  <i className="ti ti-info-circle me-2"></i>
-                  Configuration is managed through the backend API for security purposes.
+                <div className="alert alert-info d-flex align-items-center">
+                  <i className="ti ti-info-circle me-2 fs-5"></i>
+                  <span>Configuration is managed through the backend API for security purposes.</span>
                 </div>
               </div>
               <div className="modal-footer">

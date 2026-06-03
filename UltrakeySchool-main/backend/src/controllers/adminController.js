@@ -1,8 +1,12 @@
+import mongoose from 'mongoose';
 import emailService from '../services/emailService.js';
 import logger from '../utils/logger.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import UserCredential from '../models/UserCredential.js';
+import User from '../models/User.js';
+import Agent from '../models/Agent.js';
 import Institution from '../models/Institution.js';
+import AuditLog from '../models/AuditLog.js';
 import bcrypt from 'bcryptjs';
 
 // In-memory storage for demo purposes (will be replaced with database in production)
@@ -24,7 +28,7 @@ export const createCredentials = async (req, res) => {
       body: req.body
     });
 
-    const { userId, email, password, role, permissions } = req.body;
+    const { userId, email, password, role, permissions, fullName } = req.body;
     
     // Get institutionId from JWT token - check both institution and institutionId fields
     const institutionId = req.user?.institution || req.user?.institutionId || req.body.institutionId;
@@ -104,25 +108,99 @@ export const createCredentials = async (req, res) => {
       institutionId: institutionId, // Use string ID from token (like "inst-1")
       instituteType: 'School', // Default - could be enhanced to fetch from institution
       instituteCode: institutionId, // Use the institutionId as code
-      fullName: 'User', // Placeholder, should be sent from frontend
+      fullName: fullName || email?.split('@')[0] || 'User',
       createdAt: new Date().toISOString(),
       status: 'active',
       hasLoggedIn: false // Track first-time login for welcome email
     };
 
-    // Store credentials in database
+    // Store credentials in UserCredential collection
     try {
       const newCred = new UserCredential(userCredential);
       await newCred.save();
-      logger.info('User credentials saved to database:', {
+      logger.info('User credentials saved to UserCredential collection:', {
         userId: userCredential.userId,
         email: userCredential.email,
         role: userCredential.role
       });
     } catch (dbError) {
-      logger.error('Failed to save credentials to database:', dbError.message);
-      // Also keep in memory as fallback
+      logger.error('Failed to save to UserCredential collection:', dbError.message);
       userCredentials.push(userCredential);
+    }
+
+    // Also create a User document so login works via the standard User collection
+    try {
+      const existingUser = await User.findOne({ email: email.trim().toLowerCase() });
+      if (!existingUser) {
+        const newUser = new User({
+          name: userCredential.fullName,
+          email: email.trim().toLowerCase(),
+          password: password, // plain password — User pre-save hook will hash it
+          role: role.toLowerCase().replace(' ', '_'),
+          institutionId: /^[a-f\d]{24}$/i.test(institutionId) ? institutionId : undefined,
+          permissions: normalizePermissions(permissions),
+          status: 'active'
+        });
+        await newUser.save();
+        logger.info('User document created for login:', {
+          email: newUser.email,
+          role: newUser.role,
+          _id: newUser._id
+        });
+      } else {
+        logger.info('User already exists, skipping User creation:', { email });
+      }
+    } catch (userError) {
+      logger.error('Failed to create User document:', userError.message);
+      // Non-blocking — login still works via UserCredential fallback
+    }
+
+    // If role is agent, also create an Agent document so it appears in agents list/count
+    if (role.toLowerCase().replace(' ', '_') === 'agent') {
+      try {
+        const existingAgent = await Agent.findOne({ email: email.trim().toLowerCase() });
+        if (!existingAgent) {
+          const newAgent = new Agent({
+            name: userCredential.fullName || email?.split('@')[0] || 'Agent',
+            email: email.trim().toLowerCase(),
+            password: password,
+            phone: '0000000000',
+            address: 'TBD',
+            city: 'TBD',
+            state: 'TBD',
+            country: 'India',
+            postalCode: '000000',
+            commissionRate: 10,
+            tenantId: institutionId || 'platform',
+            createdBy: req.user?.userId || req.user?.id || 'system',
+            status: 'Active'
+          });
+          await newAgent.save();
+          logger.info('Agent document created for agent role:', { email, _id: newAgent._id });
+        }
+      } catch (agentError) {
+        logger.error('Failed to create Agent document:', agentError.message);
+      }
+    }
+
+    // Log audit entry
+    try {
+      await AuditLog.create({
+        userId: req.user?.userId || req.user?.id,
+        userName: req.user?.name || 'Unknown',
+        userRole: req.user?.role || 'admin',
+        action: 'create-credentials',
+        category: 'settings-change',
+        resource: 'User',
+        resourceId: userCredential.userId,
+        details: `Created ${role} credentials for ${email}`,
+        ipAddress: req.ip || '',
+        status: 'success',
+        institutionId: /^[a-f\d]{24}$/i.test(institutionId) ? institutionId : undefined,
+        institutionName: ''
+      });
+    } catch (auditError) {
+      logger.error('Failed to create audit log:', auditError.message);
     }
 
     // Return success response directly without helper
@@ -435,10 +513,6 @@ export const rejectAccountRequest = async (req, res) => {
     const { id } = req.params;
     const { rejectionReason } = req.body;
     const PendingInstitutionRegistration = (await import('../models/PendingInstitutionRegistration.js')).default;
-    
-    if (!rejectionReason) {
-      return errorResponse(res, 'Rejection reason is required', 400, 'REJECTION_REASON_REQUIRED');
-    }
     
     const request = await PendingInstitutionRegistration.findById(id);
     

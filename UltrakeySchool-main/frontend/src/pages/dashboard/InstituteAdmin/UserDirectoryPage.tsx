@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "react-toastify";
 import institutionSetupService from "../../../services/institutionSetupService";
+import userManagementService from "../../../services/userManagementService";
+import ConfirmModal from "../../../components/common/ConfirmModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Member {
@@ -242,6 +245,176 @@ const RolePill = ({
         {count}
       </span>
     </button>
+  );
+};
+
+// ─── Edit Member Modal ────────────────────────────────────────────────────────
+const EditMemberModal = ({
+  member,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  member: Member | null;
+  onSave: (data: Partial<Member>) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) => {
+  const m = member;
+  if (!m) return null;
+
+  const [form, setForm] = useState({
+    name: m.name || "",
+    email: m.email || "",
+    phone: m.phone || "",
+    role: m.role || "",
+    department: m.department || "",
+    designation: m.designation || "",
+    status: m.status || "active",
+  });
+
+  useEffect(() => {
+    if (m) {
+      setForm({
+        name: m.name || "",
+        email: m.email || "",
+        phone: m.phone || "",
+        role: m.role || "",
+        department: m.department || "",
+        designation: m.designation || "",
+        status: m.status || "active",
+      });
+    }
+  }, [m]);
+
+  return (
+    <div
+      className="modal show d-block"
+      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div className="modal-dialog modal-dialog-centered">
+        <div className="modal-content border-0 shadow-lg" style={{ borderRadius: 18 }}>
+          <div className="modal-header border-0 pb-0">
+            <h5 className="fw-bold">
+              <i className="ti ti-edit me-2" />Edit User
+            </h5>
+            <button className="btn-close" onClick={onCancel} />
+          </div>
+          <div className="modal-body">
+            <div className="row g-3">
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Name</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Email</label>
+                <input
+                  type="email"
+                  className="form-control"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Phone</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Role</label>
+                <select
+                  className="form-select"
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                >
+                  {Object.entries(ROLE_CONFIG).map(([key, cfg]) => (
+                    <option key={key} value={key}>
+                      {cfg.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Department</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={form.department}
+                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label small fw-medium">Designation</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={form.designation}
+                  onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                />
+              </div>
+              <div className="col-12">
+                <label className="form-label small fw-medium">Status</label>
+                <select
+                  className="form-select"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer border-0 pt-0">
+            <button className="btn btn-light px-4" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary px-4"
+              onClick={() =>
+                onSave({
+                  name: form.name,
+                  email: form.email,
+                  phone: form.phone,
+                  role: form.role,
+                  department: form.department,
+                  designation: form.designation,
+                  status: form.status,
+                })
+              }
+              disabled={saving || !form.name || !form.email}
+            >
+              {saving ? (
+                <>
+                  <span
+                    className="spinner-border spinner-border-sm me-1"
+                    role="status"
+                  />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <i className="ti ti-device-floppy me-1" /> Save Changes
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -493,6 +666,34 @@ export default function UserDirectoryPage() {
     open: false,
   });
 
+  // Edit modal
+  const [editModal, setEditModal] = useState<{
+    member: Member | null;
+    open: boolean;
+  }>({ member: null, open: false });
+
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    member: Member | null;
+    open: boolean;
+  }>({ member: null, open: false });
+
+  // Suspend confirmation
+  const [suspendConfirm, setSuspendConfirm] = useState<{
+    member: Member | null;
+    open: boolean;
+  }>({ member: null, open: false });
+
+  // Saving / deleting state
+  const [savingAction, setSavingAction] = useState<string | null>(null);
+
+  // Reset password result
+  const [passwordResult, setPasswordResult] = useState<{
+    userId: string;
+    email: string;
+    tempPassword: string;
+  } | null>(null);
+
   // Institution info from localStorage
   const [institutionInfo, setInstitutionInfo] = useState<{
     id: string;
@@ -539,13 +740,12 @@ export default function UserDirectoryPage() {
         await institutionSetupService.getInstitutionUsers(institutionId);
 
       let members: Member[] = [];
-      if (response?.success && response?.data) {
-        const data = response.data;
-        if (Array.isArray(data)) {
-          members = data;
-        } else if (Array.isArray(data.users)) {
-          members = data.users;
-        }
+      if (Array.isArray(response?.users)) {
+        members = response.users as Member[];
+      } else if (response?.success && Array.isArray(response?.data)) {
+        members = response.data as Member[];
+      } else if (response?.success && Array.isArray(response?.data?.users)) {
+        members = response.data.users as Member[];
       }
 
       setAllMembers(members);
@@ -618,6 +818,104 @@ export default function UserDirectoryPage() {
   // Pagination
   const totalPages = Math.ceil(filtered.length / perPage);
   const pageItems = filtered.slice((page - 1) * perPage, page * perPage);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleEditUser = async (data: Partial<Member>) => {
+    const member = editModal.member;
+    if (!member) return;
+    const id = member._id;
+    try {
+      setSavingAction(`edit-${id}`);
+      await userManagementService.updateUser(id, data);
+      // Optimistic update
+      setAllMembers((prev) =>
+        prev.map((m) => (m._id === id ? { ...m, ...data } : m)),
+      );
+      toast.success(`${data.name || member.name} updated successfully`);
+      setEditModal({ member: null, open: false });
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update user");
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    const member = deleteConfirm.member;
+    if (!member) return;
+    const id = member._id;
+    // Optimistic removal
+    const originalData = [...allMembers];
+    setAllMembers((prev) => prev.filter((m) => m._id !== id));
+    setDeleteConfirm({ member: null, open: false });
+    try {
+      await userManagementService.deleteUser(id);
+      toast.success(`${member.name} deleted successfully`);
+    } catch (err: any) {
+      // Rollback on failure
+      setAllMembers(originalData);
+      toast.error(err?.message || "Failed to delete user");
+    }
+  };
+
+  const handleToggleStatus = (member: Member) => {
+    const newStatus = member.status === "active" ? "suspended" : "active";
+
+    if (newStatus === "suspended") {
+      setSuspendConfirm({ member, open: true });
+      return;
+    }
+
+    performStatusToggle(member, newStatus);
+  };
+
+  const performStatusToggle = async (member: Member, newStatus: string) => {
+    const id = member._id;
+    const originalData = [...allMembers];
+    setAllMembers((prev) =>
+      prev.map((m) => (m._id === id ? { ...m, status: newStatus } : m)),
+    );
+    try {
+      await userManagementService.updateUser(id, {
+        status: newStatus,
+      } as Partial<Member>);
+      toast.success(
+        `${member.name} ${newStatus === "active" ? "activated" : "suspended"} successfully`,
+      );
+    } catch (err: any) {
+      setAllMembers(originalData);
+      toast.error(err?.message || "Failed to update status");
+    }
+  };
+
+  const handleConfirmSuspend = () => {
+    if (!suspendConfirm.member) return;
+    performStatusToggle(suspendConfirm.member, "suspended");
+    setSuspendConfirm({ member: null, open: false });
+  };
+
+  const handleResetPassword = async (member: Member) => {
+    const id = member._id;
+    try {
+      setSavingAction(`reset-${id}`);
+      const result = await userManagementService.resetUserPassword(id);
+      if (result?.data) {
+        setPasswordResult({
+          userId: result.data.userId,
+          email: result.data.email,
+          tempPassword: result.data.temporaryPassword,
+        });
+        toast.success(`Password reset for ${member.name}`);
+      } else {
+        toast.error("Failed to reset password");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to reset password");
+    } finally {
+      setSavingAction(null);
+    }
+  };
 
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
@@ -1074,18 +1372,115 @@ export default function UserDirectoryPage() {
 
                           {/* Actions */}
                           <td className="pe-4 text-center">
-                            <button
-                              className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1"
-                              style={{
-                                background: "#eff6ff",
-                                color: "#2563eb",
-                                fontSize: "0.8rem",
-                              }}
-                              onClick={() => setModal({ member, open: true })}
-                              title="View Details"
-                            >
-                              <i className="ti ti-eye" /> View
-                            </button>
+                            <div className="d-flex justify-content-center gap-1">
+                              {/* View */}
+                              <button
+                                className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1 px-2"
+                                style={{
+                                  background: "#eff6ff",
+                                  color: "#2563eb",
+                                  fontSize: "0.75rem",
+                                }}
+                                onClick={() => setModal({ member, open: true })}
+                                title="View Details"
+                              >
+                                <i className="ti ti-eye" />
+                                <span className="d-none d-md-inline">View</span>
+                              </button>
+                              {/* Edit */}
+                              <button
+                                className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1 px-2"
+                                style={{
+                                  background: "#fef3c7",
+                                  color: "#d97706",
+                                  fontSize: "0.75rem",
+                                }}
+                                onClick={() =>
+                                  setEditModal({ member, open: true })
+                                }
+                                title="Edit User"
+                              >
+                                <i className="ti ti-edit" />
+                                <span className="d-none d-md-inline">Edit</span>
+                              </button>
+                              {/* Status Toggle */}
+                              <button
+                                className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1 px-2"
+                                style={{
+                                  background:
+                                    member.status === "active"
+                                      ? "#fef2f2"
+                                      : "#ecfdf5",
+                                  color:
+                                    member.status === "active"
+                                      ? "#dc2626"
+                                      : "#059669",
+                                  fontSize: "0.75rem",
+                                }}
+                                onClick={() => handleToggleStatus(member)}
+                                title={
+                                  member.status === "active"
+                                    ? "Suspend User"
+                                    : "Activate User"
+                                }
+                              >
+                                <i
+                                  className={`ti ${member.status === "active" ? "ti-player-pause" : "ti-player-play"}`}
+                                />
+                                <span className="d-none d-md-inline">
+                                  {member.status === "active"
+                                    ? "Suspend"
+                                    : "Activate"}
+                                </span>
+                              </button>
+                              {/* Reset Password */}
+                              <button
+                                className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1 px-2"
+                                style={{
+                                  background: "#f0fdfa",
+                                  color: "#0d9488",
+                                  fontSize: "0.75rem",
+                                }}
+                                onClick={() => handleResetPassword(member)}
+                                disabled={
+                                  savingAction === `reset-${member._id}`
+                                }
+                                title="Reset Password"
+                              >
+                                {savingAction === `reset-${member._id}` ? (
+                                  <span
+                                    className="spinner-border spinner-border-sm"
+                                    style={{
+                                      width: 12,
+                                      height: 12,
+                                    }}
+                                  />
+                                ) : (
+                                  <>
+                                    <i className="ti ti-key" />
+                                    <span className="d-none d-md-inline">
+                                      Reset
+                                    </span>
+                                  </>
+                                )}
+                              </button>
+                              {/* Delete */}
+                              <button
+                                className="btn btn-sm border-0 rounded-3 d-inline-flex align-items-center gap-1 px-2"
+                                style={{
+                                  background: "#fef2f2",
+                                  color: "#dc2626",
+                                  fontSize: "0.75rem",
+                                }}
+                                onClick={() =>
+                                  setDeleteConfirm({ member, open: true })
+                                }
+                                title="Delete User"
+                              >
+                                <i className="ti ti-trash" />
+                                <span className="d-none d-md-inline">Delete</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1220,6 +1615,143 @@ export default function UserDirectoryPage() {
           onClose={() => setModal({ member: null, open: false })}
         />
       )}
+
+      {/* ── Edit Member Modal ──────────────────────────────────────────────────── */}
+      {editModal.open && (
+        <EditMemberModal
+          member={editModal.member}
+          onSave={handleEditUser}
+          onCancel={() => setEditModal({ member: null, open: false })}
+          saving={savingAction?.startsWith("edit-") ?? false}
+        />
+      )}
+
+      {/* ── Delete Confirmation ─────────────────────────────────────────────────── */}
+      {deleteConfirm.open && deleteConfirm.member && (
+        <div
+          className="modal show d-block"
+          style={{
+            background: "rgba(0,0,0,0.45)",
+            backdropFilter: "blur(2px)",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget)
+              setDeleteConfirm({ member: null, open: false });
+          }}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-sm">
+            <div
+              className="modal-content border-0 shadow-lg"
+              style={{ borderRadius: 18 }}
+            >
+              <div className="modal-body text-center py-4">
+                <div
+                  className="d-flex align-items-center justify-content-center mx-auto mb-3"
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: "50%",
+                    background: "#fef2f2",
+                    fontSize: "1.8rem",
+                    color: "#dc2626",
+                  }}
+                >
+                  <i className="ti ti-alert-triangle" />
+                </div>
+                <h5 className="fw-bold mb-2">Delete User</h5>
+                <p className="text-muted mb-4" style={{ fontSize: "0.9rem" }}>
+                  Are you sure you want to delete{" "}
+                  <strong>{deleteConfirm.member.name}</strong>? This action
+                  cannot be undone.
+                </p>
+                <div className="d-flex justify-content-center gap-2">
+                  <button
+                    className="btn btn-light px-4"
+                    onClick={() =>
+                      setDeleteConfirm({ member: null, open: false })
+                    }
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-danger px-4"
+                    onClick={handleDeleteUser}
+                  >
+                    <i className="ti ti-trash me-1" /> Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Password Reset Result Modal ─────────────────────────────────────────── */}
+      {passwordResult && (
+        <div
+          className="modal show d-block"
+          style={{
+            background: "rgba(0,0,0,0.45)",
+            backdropFilter: "blur(2px)",
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPasswordResult(null);
+          }}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-sm">
+            <div
+              className="modal-content border-0 shadow-lg"
+              style={{ borderRadius: 18 }}
+            >
+              <div className="modal-body text-center py-4">
+                <div
+                  className="d-flex align-items-center justify-content-center mx-auto mb-3"
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: "50%",
+                    background: "#ecfdf5",
+                    fontSize: "1.8rem",
+                    color: "#059669",
+                  }}
+                >
+                  <i className="ti ti-key" />
+                </div>
+                <h5 className="fw-bold mb-2">Password Reset</h5>
+                <p className="text-muted mb-3" style={{ fontSize: "0.9rem" }}>
+                  Temporary password for <strong>{passwordResult.email}</strong>
+                </p>
+                <div
+                  className="p-3 rounded-3 mb-3"
+                  style={{
+                    background: "#fffbeb",
+                    border: "2px dashed #f59e0b",
+                  }}
+                >
+                  <code
+                    style={{
+                      fontSize: "1.1rem",
+                      fontWeight: 700,
+                      color: "#92400e",
+                      userSelect: "all",
+                    }}
+                  >
+                    {passwordResult.tempPassword}
+                  </code>
+                </div>
+                <button
+                  className="btn btn-primary px-4"
+                  onClick={() => setPasswordResult(null)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal isOpen={suspendConfirm.open} onClose={() => setSuspendConfirm({ member: null, open: false })} onConfirm={handleConfirmSuspend} message={suspendConfirm.member ? `Are you sure you want to suspend ${suspendConfirm.member.name}? They will lose access to the system until reactivated.` : ''} />
     </>
   );
 }

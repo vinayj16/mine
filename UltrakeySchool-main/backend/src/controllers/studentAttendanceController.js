@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
 // Validation constants
-const VALID_STATUSES = ['present', 'absent', 'late', 'excused', 'half_day', 'sick', 'leave'];
+const VALID_STATUSES = ['present', 'absent', 'late', 'holiday', 'halfday', 'excused', 'sick', 'leave'];
 const VALID_SORT_ORDERS = ['asc', 'desc'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 const MAX_REASON_LENGTH = 500;
@@ -148,7 +148,62 @@ const bulkMarkAttendance = async (req, res) => {
   try {
     logger.info('Bulk marking attendance');
     
-    const { attendanceRecords } = req.body;
+    let attendanceRecords = [];
+    if (req.body.attendanceRecords && Array.isArray(req.body.attendanceRecords)) {
+      attendanceRecords = req.body.attendanceRecords;
+    } else if (req.body.records && Array.isArray(req.body.records)) {
+      // Convert frontend format: { date, records: [ { studentId, status, notes } ] }
+      const { date, classId, section } = req.body;
+      const formattedDate = date ? new Date(date) : new Date();
+
+      // Lookup students to populate required fields
+      const studentIds = req.body.records.map(r => r.studentId).filter(Boolean);
+      const Student = await (await import('../models/Student.js')).default;
+
+      // Try matching by _id first; if none found, also try by userId (for User._id fallback)
+      let students = await Student.find({ _id: { $in: studentIds } })
+        .populate('classId', 'name')
+        .populate('sectionId', 'name')
+        .lean();
+
+      if (students.length === 0) {
+        students = await Student.find({ userId: { $in: studentIds } })
+          .populate('classId', 'name')
+          .populate('sectionId', 'name')
+          .lean();
+      }
+
+      const studentMap = {};
+      for (const s of students) {
+        studentMap[s._id.toString()] = s;
+        if (s.userId) studentMap[s.userId.toString()] = s;
+      }
+
+      const institutionId = req.user.institutionId || req.body.institutionId;
+
+      attendanceRecords = req.body.records.map(record => {
+        const student = studentMap[record.studentId];
+        const now = new Date();
+        return {
+          studentId: record.studentId,
+          date: formattedDate,
+          attendance: record.status,
+          status: record.status,
+          notes: record.notes || record.remarks || '',
+          studentName: student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'Unknown',
+          admissionNo: student?.admissionNumber || 'N/A',
+          rollNo: student?.rollNumber || 'N/A',
+          className: student?.classId?.name || 'N/A',
+          section: student?.sectionId?.name || 'N/A',
+          markedBy: req.user._id || req.user.id || req.user.userId,
+          markedByName: req.user.name || req.user.firstName + ' ' + (req.user.lastName || '') || 'Teacher',
+          academicYear: '2024-2025',
+          institutionId,
+          institutionId,
+          createdAt: now,
+        };
+      });
+    }
     
     // Validation
     const errors = [];
@@ -183,8 +238,17 @@ const bulkMarkAttendance = async (req, res) => {
           errors.push('Record ' + (i + 1) + ': Status is required');
           break;
         } else if (!VALID_STATUSES.includes(record.status)) {
-          errors.push('Record ' + (i + 1) + ': Invalid status');
-          break;
+          // Normalize status mapping
+          let normalizedStatus = record.status;
+          if (record.status === 'sick') normalizedStatus = 'sick';
+          if (record.status === 'leave') normalizedStatus = 'leave';
+          
+          if (!VALID_STATUSES.includes(normalizedStatus)) {
+            errors.push('Record ' + (i + 1) + ': Invalid status: ' + record.status);
+            break;
+          } else {
+            record.status = normalizedStatus;
+          }
         }
       }
     }

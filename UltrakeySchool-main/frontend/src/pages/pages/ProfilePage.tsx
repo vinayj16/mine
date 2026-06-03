@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { useAuthStore } from '../../store/authStore';
 
 interface UserProfile {
   firstName: string;
@@ -28,6 +29,7 @@ const ProfilePage: React.FC = () => {
   const [showPersonalInfoModal, setShowPersonalInfoModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [personalInfo, setPersonalInfo] = useState({
@@ -251,8 +253,25 @@ const ProfilePage: React.FC = () => {
                 </span>
                 <div className="title-upload">
                   <h5>Edit Your Photo</h5>
-                  <button className="btn btn-link p-0 me-2" onClick={() => toast.info('Delete photo coming soon')}>Delete</button>
-                  <button className="btn btn-link p-0 text-primary" onClick={() => toast.info('Upload photo coming soon')}>Update</button>
+                  <button className="btn btn-link p-0 me-2" onClick={async () => {
+                    try {
+                      const res = await apiClient.delete('/upload/profile');
+                      if (res.data.success) {
+                        setProfile((prev: any) => ({ ...prev, avatar: undefined }));
+                        // Sync auth store so header/sidebar updates immediately
+                        const currentUser = useAuthStore.getState().user;
+                        if (currentUser) {
+                          const updatedUser = { ...currentUser, avatar: '', photo: '' };
+                          useAuthStore.setState({ user: updatedUser });
+                          localStorage.setItem('user', JSON.stringify(updatedUser));
+                        }
+                        toast.success('Profile photo deleted');
+                      }
+                    } catch (err: any) {
+                      toast.error(err.response?.data?.message || 'Failed to delete photo');
+                    }
+                  }}>Delete</button>
+                  <button className="btn btn-link p-0 text-primary" onClick={() => photoInputRef.current?.click()}>Update</button>
                 </div>
               </div>
               <div className="profile-uploader profile-uploader-two mb-0">
@@ -262,7 +281,35 @@ const ProfilePage: React.FC = () => {
                   <h6>JPG or PNG</h6>
                   <h6>(Max 450 x 450 px)</h6>
                 </div>
-                <input type="file" className="form-control" multiple id="image_sign" />
+                <input ref={photoInputRef} type="file" className="form-control" accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const formData = new FormData();
+                      formData.append('image', file);
+                      const res = await apiClient.post('/upload/profile', formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                      });
+                      if (res.data?.success) {
+                        const imageUrl = res.data.data?.imageUrl || res.data.data?.url || res.data.data?.file?.url;
+                        if (imageUrl) {
+                          setProfile((prev: any) => ({ ...prev, avatar: imageUrl }));
+                          // Sync auth store so header/sidebar updates immediately
+                          const currentUser = useAuthStore.getState().user;
+                          if (currentUser) {
+                            const updatedUser = { ...currentUser, avatar: imageUrl, photo: imageUrl };
+                            useAuthStore.setState({ user: updatedUser });
+                            localStorage.setItem('user', JSON.stringify(updatedUser));
+                          }
+                        }
+                        toast.success('Profile photo updated');
+                      }
+                    } catch (err: any) {
+                      toast.error(err.response?.data?.message || 'Failed to upload photo');
+                    }
+                    e.target.value = '';
+                  }} />
                 <div id="frames"></div>
               </div>
             </div>

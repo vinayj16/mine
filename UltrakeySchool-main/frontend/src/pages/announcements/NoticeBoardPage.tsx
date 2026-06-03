@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import noticeService, { type Notice, type NoticeFormData } from '../../services/noticeService';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 const NoticeBoardPage: React.FC = () => {
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -15,7 +16,7 @@ const NoticeBoardPage: React.FC = () => {
 
   // Form state
   const [formData, setFormData] = useState<NoticeFormData>({
-    title: '',
+    title: '', 
     description: '',
     noticeDate: '',
     publishDate: '',
@@ -30,10 +31,27 @@ const NoticeBoardPage: React.FC = () => {
   const [filterRecipient, setFilterRecipient] = useState('');
   const [filterDate, setFilterDate] = useState('');
 
+  const getInstitutionContextId = () => {
+    const inst = localStorage.getItem('institutionId');
+    if (inst && inst.length === 24) return inst;
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      return u.institutionId || u.institution?._id || u.school || '';
+    } catch { /* */ }
+    return '';
+  };
+
+  const getUserRole = () => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      return u.role || '';
+    } catch { return ''; }
+  };
+
   useEffect(() => {
-    const institutionId = localStorage.getItem('institutionId');
-    if (institutionId) {
-      setFormData(prev => ({ ...prev, institutionId }));
+    const id = getInstitutionContextId();
+    if (id) {
+      setFormData(prev => ({ ...prev, institutionId: id }));
       fetchNotices();
     }
   }, []);
@@ -41,21 +59,30 @@ const NoticeBoardPage: React.FC = () => {
   const fetchNotices = async () => {
     try {
       setLoading(true);
-      const institutionId = localStorage.getItem('institutionId');
-      const params: any = {
-        academicYear: '2024-2025'
-      };
-      
+      const institutionId = getInstitutionContextId();
+      const role = getUserRole();
+      const adminRoles = ['super_admin', 'superadmin', 'admin', 'principal', 'institution_admin', 'institution_owner'];
+      const params: any = {};
+
       if (institutionId && institutionId.length === 24) {
         params.institutionId = institutionId;
       }
 
-      if (filterRecipient) params.recipient = filterRecipient;
+      // Only filter by academic year for non-admin roles
+      if (!role || !adminRoles.includes(role.toLowerCase())) {
+        params.academicYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+      }
+
+      if (filterRecipient) {
+        params.recipient = filterRecipient;
+      } else if (role && !adminRoles.includes(role.toLowerCase())) {
+        params.recipient = role;
+      }
       if (filterDate) params.startDate = filterDate;
 
-      const response = await noticeService.getAll(params);
+      const response = await noticeService.getAll(params) as any;
       // Handle both wrapped and unwrapped responses
-      const noticesData = response?.data?.notices || response?.notices || response?.data || [];
+      const noticesData = response?.notices || response?.data?.notices || response?.data || [];
       setNotices(Array.isArray(noticesData) ? noticesData : []);
     } catch (error: any) {
       console.error('Error fetching notices:', error);
@@ -109,7 +136,10 @@ const NoticeBoardPage: React.FC = () => {
       resetForm();
       fetchNotices();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to save notice');
+      const data = error.response?.data;
+      const msg = data?.error?.details?.[0] || data?.error?.message || data?.message || 'Failed to save notice';
+      console.error('[Notice] Save error:', JSON.stringify(data));
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -133,7 +163,7 @@ const NoticeBoardPage: React.FC = () => {
   };
 
   const resetForm = () => {
-    const institutionId = localStorage.getItem('institutionId');
+    const institutionId = getInstitutionContextId();
     setFormData({
       title: '',
       description: '',
@@ -184,11 +214,42 @@ const NoticeBoardPage: React.FC = () => {
   const handleFilterReset = () => {
     setFilterRecipient('');
     setFilterDate('');
-    fetchNotices();
+    setTimeout(() => fetchNotices(), 0);
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    if (!notices.length) {
+      toast.error('No notices to export');
+      return;
+    }
+
+    const exportData = notices.map(notice => ({
+      Title: notice.title,
+      Description: notice.description,
+      'Notice Date': formatDate(notice.noticeDate),
+      'Publish Date': formatDate(notice.publishDate),
+      Priority: notice.priority.charAt(0).toUpperCase() + notice.priority.slice(1),
+      Status: notice.status.charAt(0).toUpperCase() + notice.status.slice(1),
+      Recipients: notice.recipients.join(', ')
+    }));
+    const columns: ExportColumn[] = [
+      { key: 'Title', label: 'Title' },
+      { key: 'Description', label: 'Description' },
+      { key: 'Notice Date', label: 'Notice Date' },
+      { key: 'Publish Date', label: 'Publish Date' },
+      { key: 'Priority', label: 'Priority' },
+      { key: 'Status', label: 'Status' },
+      { key: 'Recipients', label: 'Recipients' }
+    ];
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'notices', columns, 'Notice Board');
+    } else {
+      exportToExcel(exportData, 'notices', columns);
+    }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
@@ -204,7 +265,12 @@ const NoticeBoardPage: React.FC = () => {
     'librarian',
     'receptionist',
     'superadmin',
-    'staff'
+    'staff',
+    'principal',
+    'institution_admin',
+    'hr_manager',
+    'hostel_warden',
+    'transport_manager'
   ];
 
   return (
@@ -254,12 +320,12 @@ const NoticeBoardPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -619,7 +685,7 @@ const NoticeBoardPage: React.FC = () => {
               </div>
               <div className="modal-body pb-0">
                 <div className="mb-3">
-                  <p>{showViewModal.description}</p>
+                  <p>{typeof showViewModal.description === 'object' ? JSON.stringify(showViewModal.description) : showViewModal.description || ''}</p>
                 </div>
                 <div className="row">
                   <div className="col-md-6">

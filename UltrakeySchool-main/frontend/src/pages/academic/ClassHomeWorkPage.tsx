@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { homeworkService, type Homework, type CreateHomeworkInput, type HomeworkFilters } from '../../services/homeworkService';
-import apiClient from '../../api/client';
-
+import apiService from '../../services/api';
+import { getInstitutionId } from '../../utils/auth';
+ 
 interface Subject {
   _id?: string;
   id?: string;
   name: string;
+  section?: string;
 }
 
 interface ClassData {
@@ -16,6 +18,22 @@ interface ClassData {
   name: string;
   section?: string;
 }
+
+const fallbackSubjects: Subject[] = [
+  { id: 'mathematics', name: 'Mathematics' },
+  { id: 'science', name: 'Science' },
+  { id: 'english', name: 'English' },
+  { id: 'social-studies', name: 'Social Studies' },
+  { id: 'computer-science', name: 'Computer Science' }
+];
+
+const fallbackClasses: ClassData[] = [
+  { id: 'class-1-a', name: 'Class 1', section: 'A' },
+  { id: 'class-2-a', name: 'Class 2', section: 'A' },
+  { id: 'class-3-a', name: 'Class 3', section: 'A' },
+  { id: 'class-4-a', name: 'Class 4', section: 'A' },
+  { id: 'class-5-a', name: 'Class 5', section: 'A' }
+];
 
 const ClassHomeWorkPage: React.FC = () => {
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
@@ -60,36 +78,37 @@ const ClassHomeWorkPage: React.FC = () => {
     fetchHomework();
     fetchSubjects();
     fetchClasses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, sortBy]);
 
-  const fetchSubjects = async () => {
+  const fetchSubjects = async () => { 
     try {
-      const response = await apiClient.get('/subjects');
+      const response = await apiService.get('/subjects', { institutionId: getInstitutionId() }) as any;
       console.log('Subject response:', response);
       let subjectsData = [];
-      if (Array.isArray(response.data)) {
+      if (Array.isArray(response)) {
+        subjectsData = response;
+      } else if (Array.isArray(response?.data)) {
         subjectsData = response.data;
-      } else if (Array.isArray(response.data?.data)) {
-        subjectsData = response.data.data;
-      } else if (response.data?.data?.subjects) {
-        subjectsData = response.data.data.subjects;
+      } else if (response?.data?.subjects) {
+        subjectsData = response.data.subjects;
       }
       console.log('Subjects data:', subjectsData);
-      setSubjects(subjectsData);
+      setSubjects(subjectsData.length ? subjectsData : fallbackSubjects);
     } catch (err) {
       console.error('Error fetching subjects:', err);
-      setSubjects([]);
+      setSubjects(fallbackSubjects);
     }
   };
 
   const fetchClasses = async () => {
     try {
-      const response = await apiClient.get('/classes');
-      const classesData = response.data?.data?.classes || response.data?.data || response.data || [];
-      setClasses(Array.isArray(classesData) ? classesData : []);
+      const response = await apiService.get('/classes', { institutionId: getInstitutionId() }) as any;
+      const classesData = response?.data?.classes || response?.data || response || [];
+      setClasses(Array.isArray(classesData) && classesData.length ? classesData : fallbackClasses);
     } catch (err) {
       console.error('Error fetching classes:', err);
-      setClasses([]);
+      setClasses(fallbackClasses);
     }
   };
 
@@ -101,7 +120,8 @@ const ClassHomeWorkPage: React.FC = () => {
         ...filters,
         sortBy: 'assignedDate',
         sortOrder: sortBy,
-        limit: 100
+        limit: 100,
+        institutionId: getInstitutionId()
       };
       if (!params.classId) delete params.classId;
       if (!params.subject) delete params.subject;
@@ -109,7 +129,15 @@ const ClassHomeWorkPage: React.FC = () => {
       if (!params.search) delete params.search;
       
       const response = await homeworkService.getAll(params);
-      setHomeworks(response.homeworks || []);
+      const raw = response.homeworks || response.homeWorks || [];
+      setHomeworks(raw.map((h: any) => ({
+        ...h,
+        id: h.id || h._id,
+        classId: typeof h.classId === 'object' ? h.classId?._id || '' : (h.classId || ''),
+        className: h.className || (typeof h.classId === 'object' ? h.classId?.name || '' : '') || (typeof h.class === 'object' ? h.class?.name || '' : ''),
+        subject: typeof h.subjectId === 'object' ? h.subjectId?._id || '' : (typeof h.subject === 'object' ? h.subject?._id || '' : (h.subject || '')),
+        subjectName: h.subjectName || (typeof h.subjectId === 'object' ? h.subjectId?.name || '' : '') || (typeof h.subject === 'object' ? h.subject?.name || '' : ''),
+      })));
     } catch (err: any) {
       console.error('Error fetching homework:', err);
       setError(err.message || 'Failed to fetch homework');
@@ -213,6 +241,24 @@ const ClassHomeWorkPage: React.FC = () => {
     setFilters({ classId: '', subject: '', status: '', search: '' });
   };
 
+  const classOptions: Subject[] = classes.length ? classes : fallbackClasses;
+  const subjectOptions: ClassData[] = subjects.length ? subjects : fallbackSubjects;
+
+  const filteredHomeworks: Homework[] = React.useMemo(() => {
+    return homeworks.filter(hw => {
+      if (filters.classId && hw.classId !== filters.classId) return false;
+      if (filters.subject && hw.subject !== filters.subject) return false;
+      if (filters.status && hw.status !== filters.status) return false;
+      if (filters.search) {
+        const s = filters.search.toLowerCase();
+        const titleMatch = hw.title?.toLowerCase().includes(s);
+        const descMatch = hw.description?.toLowerCase().includes(s);
+        if (!titleMatch && !descMatch) return false;
+      }
+      return true;
+    });
+  }, [homeworks, filters]);
+
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, string> = {
       active: 'bg-success',
@@ -269,7 +315,7 @@ const ClassHomeWorkPage: React.FC = () => {
                   style={{ width: '150px' }}
                 >
                   <option value="">All Classes</option>
-                  {classes.map(cls => (
+                  {classOptions.map(cls => (
                     <option key={cls._id || cls.id} value={cls._id || cls.id}>{cls.name} {cls.section}</option>
                   ))}
                 </select>
@@ -280,8 +326,8 @@ const ClassHomeWorkPage: React.FC = () => {
                   style={{ width: '150px' }}
                 >
                   <option value="">All Subjects</option>
-                  {subjects.map(sub => (
-                    <option key={sub.id} value={sub.id}>{sub.name}</option>
+                  {subjectOptions.map(sub => (
+                    <option key={sub._id || sub.id} value={sub._id || sub.id}>{sub.name}</option>
                   ))}
                 </select>
                 <select 
@@ -334,10 +380,10 @@ const ClassHomeWorkPage: React.FC = () => {
               {error}
               <button className="btn btn-sm btn-danger ms-2" onClick={fetchHomework}>Retry</button>
             </div>
-          ) : homeworks.length === 0 ? (
+          ) : filteredHomeworks.length === 0 ? (
             <div className="text-center py-5">
               <i className="ti ti-clipboard-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
-              <p className="mt-2 text-muted">No homework found. Add your first homework to get started.</p>
+              <p className="mt-2 text-muted">No homework matches your filters.</p>
             </div>
           ) : (
             <div className="table-responsive">
@@ -356,14 +402,14 @@ const ClassHomeWorkPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {homeworks.map((homework) => (
+                  {filteredHomeworks.map((homework) => (
                     <tr key={homework.id || homework._id}>
                       <td><span className="text-muted">{(homework.id || homework._id || 'N/A').toString().slice(0, 8)}</span></td>
                       <td className="fw-semibold">{homework.title || 'Untitled Homework'}</td>
                       <td>{homework.className || homework.classId}</td>
-                      <td>{homework.subjectName || homework.subject}</td>
-                      <td>{new Date(homework.assignedDate).toLocaleDateString()}</td>
-                      <td>{new Date(homework.dueDate).toLocaleDateString()}</td>
+                      <td>{homework.subjectName || homework.subject || ''}</td>
+                      <td>{homework.assignedDate ? new Date(homework.assignedDate).toLocaleDateString() : '-'}</td>
+                      <td>{homework.dueDate ? new Date(homework.dueDate).toLocaleDateString() : '-'}</td>
                       <td>{homework.totalMarks || '-'}</td>
                       <td>
                         <span className={`badge ${getStatusBadge(homework.status)}`}>
@@ -381,7 +427,7 @@ const ClassHomeWorkPage: React.FC = () => {
                           </button>
                           <button 
                             className="btn btn-sm btn-icon btn-light text-danger"
-                            onClick={() => handleDeleteClick(homework.id)}
+                            onClick={() => handleDeleteClick(homework.id || homework._id)}
                             title="Delete"
                           >
                             <i className="ti ti-trash"></i>
@@ -438,7 +484,7 @@ const ClassHomeWorkPage: React.FC = () => {
                           required
                         >
                           <option value="">Select Class</option>
-                          {classes.map(cls => (
+                          {classOptions.map(cls => (
                             <option key={cls._id || cls.id} value={cls._id || cls.id}>{cls.name} {cls.section}</option>
                           ))}
                         </select>
@@ -455,7 +501,7 @@ const ClassHomeWorkPage: React.FC = () => {
                           required
                         >
                           <option value="">Select Subject</option>
-                          {subjects.map(sub => (
+                          {subjectOptions.map(sub => (
                             <option key={sub._id || sub.id} value={sub._id || sub.id}>{sub.name}</option>
                           ))}
                         </select>
@@ -573,7 +619,7 @@ const ClassHomeWorkPage: React.FC = () => {
                           required
                         >
                           <option value="">Select Class</option>
-                          {classes.map(cls => (
+                          {classOptions.map(cls => (
                             <option key={cls._id || cls.id} value={cls._id || cls.id}>{cls.name} {cls.section}</option>
                           ))}
                         </select>
@@ -590,8 +636,8 @@ const ClassHomeWorkPage: React.FC = () => {
                           required
                         >
                           <option value="">Select Subject</option>
-                          {subjects.map(sub => (
-                            <option key={sub.id} value={sub.id}>{sub.name}</option>
+                          {subjectOptions.map(sub => (
+                            <option key={sub._id || sub.id} value={sub._id || sub.id}>{sub.name}</option>
                           ))}
                         </select>
                       </div>

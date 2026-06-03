@@ -4,11 +4,11 @@ import Event from '../models/Event.js';
 import Schedule from '../models/Schedule.js';
 
 class CalendarService {
-  async getCalendarEvents(schoolId, startDate, endDate, filters = {}) {
+  async getCalendarEvents(institutionId, startDate, endDate, filters = {}) {
     const { entityTypes } = filters;
     
     const query = {
-      schoolId,
+      institutionId,
       $or: []
     };
 
@@ -17,7 +17,7 @@ class CalendarService {
     // Get Homework events
     if (!entityTypes || entityTypes.includes('homework')) {
       const homeworks = await HomeWork.find({
-        schoolId,
+        institutionId,
         dueDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isActive: true
       }).populate('subjectId', 'name code');
@@ -37,7 +37,7 @@ class CalendarService {
     // Get Exam events
     if (!entityTypes || entityTypes.includes('exam')) {
       const exams = await Exam.find({
-        schoolId,
+        institutionId,
         examDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isActive: true
       }).populate('subjectId', 'name code');
@@ -57,7 +57,7 @@ class CalendarService {
     // Get Event events
     if (!entityTypes || entityTypes.includes('event')) {
       const schoolEvents = await Event.find({
-        schoolId,
+        institutionId,
         $or: [
           { startDate: { $gte: new Date(startDate), $lte: new Date(endDate) } },
           { endDate: { $gte: new Date(startDate), $lte: new Date(endDate) } }
@@ -81,7 +81,7 @@ class CalendarService {
     // Get Schedule events
     if (!entityTypes || entityTypes.includes('schedule')) {
       const schedules = await Schedule.find({
-        schoolId,
+        institutionId,
         date: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isDeleted: false
       });
@@ -104,25 +104,25 @@ class CalendarService {
     return events;
   }
 
-  async getCalendarAnalytics(schoolId, startDate, endDate) {
+  async getCalendarAnalytics(institutionId, startDate, endDate) {
     const [homeworkCount, examCount, eventCount, scheduleCount] = await Promise.all([
       HomeWork.countDocuments({
-        schoolId,
+        institutionId,
         dueDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isActive: true
       }),
       Exam.countDocuments({
-        schoolId,
+        institutionId,
         examDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isActive: true
       }),
       Event.countDocuments({
-        schoolId,
+        institutionId,
         startDate: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isActive: true
       }),
       Schedule.countDocuments({
-        schoolId,
+        institutionId,
         date: { $gte: new Date(startDate), $lte: new Date(endDate) },
         isDeleted: false
       })
@@ -137,20 +137,20 @@ class CalendarService {
     };
   }
 
-  async createCalendarEvent(schoolId, eventData) {
+  async createCalendarEvent(institutionId, eventData) {
     const EventModel = (await import('../models/Event.js')).default;
     const event = new EventModel({
-      schoolId,
+      institutionId,
       ...eventData,
       isActive: true
     });
     return await event.save();
   }
 
-  async updateCalendarEvent(schoolId, eventId, updateData) {
+  async updateCalendarEvent(institutionId, eventId, updateData) {
     const EventModel = (await import('../models/Event.js')).default;
     const event = await EventModel.findOneAndUpdate(
-      { _id: eventId, schoolId },
+      { _id: eventId, institutionId },
       updateData,
       { new: true, runValidators: true }
     );
@@ -158,10 +158,10 @@ class CalendarService {
     return event;
   }
 
-  async deleteCalendarEvent(schoolId, eventId) {
+  async deleteCalendarEvent(institutionId, eventId) {
     const EventModel = (await import('../models/Event.js')).default;
     const event = await EventModel.findOneAndUpdate(
-      { _id: eventId, schoolId },
+      { _id: eventId, institutionId },
       { isActive: false },
       { new: true }
     );
@@ -169,15 +169,15 @@ class CalendarService {
     return event;
   }
 
-  async getCalendarEventById(schoolId, eventId) {
+  async getCalendarEventById(institutionId, eventId) {
     const EventModel = (await import('../models/Event.js')).default;
-    const event = await EventModel.findOne({ _id: eventId, schoolId, isActive: true })
+    const event = await EventModel.findOne({ _id: eventId, institutionId, isActive: true })
       .populate('organizer', 'firstName lastName');
     if (!event) throw new Error('Event not found');
     return event;
   }
 
-  async getUpcomingEvents(schoolId, options = {}) {
+  async getUpcomingEvents(institutionId, options = {}) {
     const { days = 7, entityTypes, limit = 10 } = options;
     const startDate = new Date();
     const endDate = new Date();
@@ -187,7 +187,7 @@ class CalendarService {
     
     if (!entityTypes || entityTypes.includes('homework')) {
       const homeworks = await HomeWork.find({
-        schoolId,
+        institutionId,
         dueDate: { $gte: startDate, $lte: endDate },
         isActive: true
       }).limit(limit);
@@ -196,7 +196,7 @@ class CalendarService {
 
     if (!entityTypes || entityTypes.includes('exam')) {
       const exams = await Exam.find({
-        schoolId,
+        institutionId,
         examDate: { $gte: startDate, $lte: endDate },
         isActive: true
       }).limit(limit);
@@ -206,7 +206,7 @@ class CalendarService {
     if (!entityTypes || entityTypes.includes('event')) {
       const EventModel = (await import('../models/Event.js')).default;
       const schoolEvents = await EventModel.find({
-        schoolId,
+        institutionId,
         startDate: { $gte: startDate, $lte: endDate },
         isActive: true
       }).limit(limit);
@@ -217,13 +217,13 @@ class CalendarService {
     return events.slice(0, limit);
   }
 
-  async exportCalendarEvents(schoolId, startDate, endDate, options = {}) {
+  async exportCalendarEvents(institutionId, startDate, endDate, options = {}) {
     const { format = 'json', entityTypes } = options;
-    const events = await this.getCalendarEvents(schoolId, startDate, endDate, { entityTypes });
+    const events = await this.getCalendarEvents(institutionId, startDate, endDate, { entityTypes });
     return events;
   }
 
-  async getCalendarConflicts(schoolId, startDate, endDate, options = {}) {
+  async getCalendarConflicts(institutionId, startDate, endDate, options = {}) {
     const { resourceId } = options;
     const EventModel = (await import('../models/Event.js')).default;
     const ScheduleModel = (await import('../models/Schedule.js')).default;
@@ -231,7 +231,7 @@ class CalendarService {
     const conflicts = [];
     
     const events = await EventModel.find({
-      schoolId,
+      institutionId,
       $or: [
         { startDate: { $gte: startDate, $lte: endDate } },
         { endDate: { $gte: startDate, $lte: endDate } }
@@ -240,7 +240,7 @@ class CalendarService {
     });
 
     const schedules = await ScheduleModel.find({
-      schoolId,
+      institutionId,
       date: { $gte: startDate, $lte: endDate },
       isDeleted: false
     });

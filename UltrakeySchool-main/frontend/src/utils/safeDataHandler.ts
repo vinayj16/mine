@@ -1,11 +1,3 @@
-/**
- * Safe Data Handler - Ensures all API responses return proper data structures
- * Prevents "Cannot read properties of undefined" errors
- */
-
-/**
- * Ensures the value is an array, returns empty array if not
- */
 export function ensureArray<T>(value: any): T[] {
   if (Array.isArray(value)) {
     return value

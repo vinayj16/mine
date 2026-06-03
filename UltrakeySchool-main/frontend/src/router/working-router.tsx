@@ -53,14 +53,13 @@ import SportsPage from '../pages/management/SportsPage'
 import AdminDashboard from '../pages/dashboard/Admin/AdminDashboard'
 import AdminStudentManagementPage from '../pages/dashboard/Admin/AdminStudentManagementPage'
 import AdminTeacherManagementPage from '../pages/dashboard/Admin/AdminTeacherManagementPage'
+
 import AdminAttendancePage from '../pages/dashboard/Admin/AdminAttendancePage'
 import AdminExaminationsPage from '../pages/dashboard/Admin/AdminExaminationsPage'
 import AdminFeesPage from '../pages/dashboard/Admin/AdminFeesPage'
 
 // Accountant Pages
 import AccountantDashboardPage from '../pages/dashboard/Accountant/AccountantDashboardPage'
-import SubscriptionPage from '../pages/dashboard/Accountant/SubscriptionPage'
-import ApplicationsPage from '../pages/dashboard/Accountant/ApplicationsPage'
 import FeeCollectionPage from '../pages/dashboard/Accountant/FeeCollectionPage'
 
 // People
@@ -86,7 +85,7 @@ const router = createBrowserRouter([
     path: '/',
     element: <Login />
   },
-  
+
   // Super Admin Routes with layout
   {
     path: '/super-admin',
@@ -136,15 +135,15 @@ const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'students', element: <Navigate to="/dashboard" /> },
-      { path: 'teachers', element: <Navigate to="/dashboard"/> },
+      { path: 'teachers', element: <Navigate to="/dashboard" /> },
       { path: 'parents', element: <Navigate to="/dashboard" /> },
       { path: 'exams', element: <Navigate to="/dashboard" /> },
-      { path: 'fees', element: <Navigate to="/dashboard"/> },
+      { path: 'fees', element: <Navigate to="/dashboard" /> },
       { path: 'library', element: <Navigate to="/dashboard" /> },
       { path: 'reports', element: <Navigate to="/dashboard" /> },
 
       // Staff routes
-      { path: 'staff', element: <Navigate to="/dashboard"/> },
+      { path: 'staff', element: <Navigate to="/dashboard" /> },
       { path: 'attendance/staff', element: <Navigate to="/dashboard" /> },
       { path: 'notice-board', element: <Navigate to="/dashboard" /> },
       { path: 'events', element: <Navigate to="/dashboard" /> },
@@ -219,8 +218,6 @@ const router = createBrowserRouter([
     element: <MainLayout />,
     children: [
       { index: true, element: <AccountantDashboardPage /> },
-      { path: 'subscription', element: <SubscriptionPage /> },
-      { path: 'applications', element: <ApplicationsPage /> },
       { path: 'fee-collection', element: <FeeCollectionPage /> },
     ]
   },
@@ -228,7 +225,7 @@ const router = createBrowserRouter([
   // Catch-all route for 404 - MUST BE LAST
   {
     path: '*',
-    element: <Navigate to="/login"/>
+    element: <Navigate to="/login" />
   }
 ])
 

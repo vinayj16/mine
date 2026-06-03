@@ -25,7 +25,7 @@ const validateObjectId = (id, fieldName = 'id') => {
 const getApplications = async (req, res, next) => {
   try {
     const { status, academicYear, classId, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 20 } = req.query;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate status
     if (status && !VALID_STATUSES.includes(status)) {
@@ -50,8 +50,8 @@ const getApplications = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'limit', message: 'Limit must be between 1 and 100' }]);
     }
 
-    logger.info(`Fetching admission applications for school ${schoolId}`);
-    const applications = await admissionService.getApplications(schoolId, {
+    logger.info(`Fetching admission applications for school ${institutionId}`);
+    const applications = await admissionService.getApplications(institutionId, {
       status,
       academicYear,
       classId,
@@ -77,7 +77,7 @@ const getApplications = async (req, res, next) => {
  */
 const submitApplication = async (req, res, next) => {
   try {
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { studentName, classId, academicYear, dateOfBirth, guardianName, guardianPhone, guardianEmail } = req.body;
 
     // Validate required fields
@@ -113,8 +113,8 @@ const submitApplication = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Submitting admission application for school ${schoolId}`);
-    const application = await admissionService.submitApplication(schoolId, req.body);
+    logger.info(`Submitting admission application for school ${institutionId}`);
+    const application = await admissionService.submitApplication(institutionId, req.body);
 
     return createdResponse(res, application, 'Application submitted successfully');
   } catch (error) {
@@ -129,7 +129,7 @@ const submitApplication = async (req, res, next) => {
 const getApplicationById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate ID
     const validation = validateObjectId(id, 'applicationId');
@@ -137,8 +137,8 @@ const getApplicationById = async (req, res, next) => {
       return validationErrorResponse(res, [validation.error]);
     }
 
-    logger.info(`Fetching application ${id} for school ${schoolId}`);
-    const application = await admissionService.getApplicationById(schoolId, id);
+    logger.info(`Fetching application ${id} for school ${institutionId}`);
+    const application = await admissionService.getApplicationById(institutionId, id);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -157,7 +157,7 @@ const getApplicationById = async (req, res, next) => {
 const updateApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate ID
     const validation = validateObjectId(id, 'applicationId');
@@ -175,8 +175,8 @@ const updateApplication = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'guardianPhone', message: 'Invalid phone format' }]);
     }
 
-    logger.info(`Updating application ${id} for school ${schoolId}`);
-    const application = await admissionService.updateApplication(schoolId, id, req.body);
+    logger.info(`Updating application ${id} for school ${institutionId}`);
+    const application = await admissionService.updateApplication(institutionId, id, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -195,7 +195,7 @@ const updateApplication = async (req, res, next) => {
 const reviewApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { comments, rating } = req.body;
 
     // Validate ID
@@ -210,7 +210,7 @@ const reviewApplication = async (req, res, next) => {
     }
 
     logger.info(`Reviewing application ${id} by user ${userId}`);
-    const application = await admissionService.reviewApplication(schoolId, id, userId, req.body);
+    const application = await admissionService.reviewApplication(institutionId, id, userId, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -229,7 +229,7 @@ const reviewApplication = async (req, res, next) => {
 const approveApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { comments } = req.body;
 
     // Validate ID
@@ -239,7 +239,7 @@ const approveApplication = async (req, res, next) => {
     }
 
     logger.info(`Approving application ${id} by user ${userId}`);
-    const application = await admissionService.approveApplication(schoolId, id, userId, req.body);
+    const application = await admissionService.approveApplication(institutionId, id, userId, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -258,7 +258,7 @@ const approveApplication = async (req, res, next) => {
 const rejectApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { reason } = req.body;
 
     // Validate ID
@@ -273,7 +273,7 @@ const rejectApplication = async (req, res, next) => {
     }
 
     logger.info(`Rejecting application ${id} by user ${userId}`);
-    const application = await admissionService.rejectApplication(schoolId, id, userId, req.body);
+    const application = await admissionService.rejectApplication(institutionId, id, userId, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -292,7 +292,7 @@ const rejectApplication = async (req, res, next) => {
 const getAvailableSeats = async (req, res, next) => {
   try {
     const { academicYear, classId } = req.query;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate academicYear
     if (academicYear && !/^\d{4}-\d{4}$/.test(academicYear)) {
@@ -307,8 +307,8 @@ const getAvailableSeats = async (req, res, next) => {
       }
     }
 
-    logger.info(`Fetching available seats for school ${schoolId}`);
-    const seats = await admissionService.getAvailableSeats(schoolId, { academicYear, classId });
+    logger.info(`Fetching available seats for school ${institutionId}`);
+    const seats = await admissionService.getAvailableSeats(institutionId, { academicYear, classId });
 
     return successResponse(res, seats, 'Available seats fetched successfully');
   } catch (error) {
@@ -322,7 +322,7 @@ const getAvailableSeats = async (req, res, next) => {
  */
 const allocateSeat = async (req, res, next) => {
   try {
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { applicationId, classId, section } = req.body;
 
     // Validate required fields
@@ -349,7 +349,7 @@ const allocateSeat = async (req, res, next) => {
     }
 
     logger.info(`Allocating seat for application ${applicationId}`);
-    const allocation = await admissionService.allocateSeat(schoolId, req.body, userId);
+    const allocation = await admissionService.allocateSeat(institutionId, req.body, userId);
 
     return successResponse(res, allocation, 'Seat allocated successfully');
   } catch (error) {
@@ -364,15 +364,15 @@ const allocateSeat = async (req, res, next) => {
 const getAdmissionCriteria = async (req, res, next) => {
   try {
     const { academicYear } = req.query;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate academicYear if provided
     if (academicYear && !/^\d{4}-\d{4}$/.test(academicYear)) {
       return validationErrorResponse(res, [{ field: 'academicYear', message: 'Academic year must be in format YYYY-YYYY' }]);
     }
 
-    logger.info(`Fetching admission criteria for school ${schoolId}`);
-    const criteria = await admissionService.getAdmissionCriteria(schoolId, academicYear);
+    logger.info(`Fetching admission criteria for school ${institutionId}`);
+    const criteria = await admissionService.getAdmissionCriteria(institutionId, academicYear);
 
     return successResponse(res, criteria, 'Admission criteria fetched successfully');
   } catch (error) {
@@ -386,7 +386,7 @@ const getAdmissionCriteria = async (req, res, next) => {
  */
 const setAdmissionCriteria = async (req, res, next) => {
   try {
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { academicYear, minAge, maxAge, requiredDocuments } = req.body;
 
     // Validate required fields
@@ -408,8 +408,8 @@ const setAdmissionCriteria = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Setting admission criteria for school ${schoolId}`);
-    const criteria = await admissionService.setAdmissionCriteria(schoolId, req.body, userId);
+    logger.info(`Setting admission criteria for school ${institutionId}`);
+    const criteria = await admissionService.setAdmissionCriteria(institutionId, req.body, userId);
 
     return successResponse(res, criteria, 'Admission criteria set successfully');
   } catch (error) {
@@ -425,7 +425,7 @@ const setAdmissionCriteria = async (req, res, next) => {
 const scheduleEntranceTest = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { testDate, testType, venue, duration } = req.body;
 
     // Validate ID
@@ -456,7 +456,7 @@ const scheduleEntranceTest = async (req, res, next) => {
     }
 
     logger.info(`Scheduling entrance test for application ${id}`);
-    const application = await admissionService.scheduleEntranceTest(schoolId, id, req.body);
+    const application = await admissionService.scheduleEntranceTest(institutionId, id, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -475,7 +475,7 @@ const scheduleEntranceTest = async (req, res, next) => {
 const submitEntranceTestResult = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { score, maxScore, remarks, passed } = req.body;
 
     // Validate ID
@@ -505,7 +505,7 @@ const submitEntranceTestResult = async (req, res, next) => {
     }
 
     logger.info(`Submitting test result for application ${id}`);
-    const application = await admissionService.submitEntranceTestResult(schoolId, id, req.body);
+    const application = await admissionService.submitEntranceTestResult(institutionId, id, req.body);
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -523,7 +523,7 @@ const submitEntranceTestResult = async (req, res, next) => {
  */
 const generateMeritList = async (req, res, next) => {
   try {
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { academicYear, classId, criteria } = req.body;
 
     // Validate required fields
@@ -542,8 +542,8 @@ const generateMeritList = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Generating merit list for school ${schoolId}, academic year ${academicYear}`);
-    const meritList = await admissionService.generateMeritList(schoolId, req.body);
+    logger.info(`Generating merit list for school ${institutionId}, academic year ${academicYear}`);
+    const meritList = await admissionService.generateMeritList(institutionId, req.body);
 
     return successResponse(res, meritList, 'Merit list generated successfully');
   } catch (error) {
@@ -558,7 +558,7 @@ const generateMeritList = async (req, res, next) => {
 const getMeritList = async (req, res, next) => {
   try {
     const { academicYear, classId, page = 1, limit = 50 } = req.query;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate academicYear
     if (academicYear && !/^\d{4}-\d{4}$/.test(academicYear)) {
@@ -583,8 +583,8 @@ const getMeritList = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'limit', message: 'Limit must be between 1 and 100' }]);
     }
 
-    logger.info(`Fetching merit list for school ${schoolId}`);
-    const meritList = await admissionService.getMeritList(schoolId, {
+    logger.info(`Fetching merit list for school ${institutionId}`);
+    const meritList = await admissionService.getMeritList(institutionId, {
       academicYear,
       classId,
       page: pageNum,
@@ -606,15 +606,15 @@ const getMeritList = async (req, res, next) => {
 const getAdmissionStatistics = async (req, res, next) => {
   try {
     const { academicYear, startDate, endDate } = req.query;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate academicYear if provided
     if (academicYear && !/^\d{4}-\d{4}$/.test(academicYear)) {
       return validationErrorResponse(res, [{ field: 'academicYear', message: 'Academic year must be in format YYYY-YYYY' }]);
     }
 
-    logger.info(`Fetching admission statistics for school ${schoolId}`);
-    const stats = await admissionService.getAdmissionStatistics(schoolId, { academicYear, startDate, endDate });
+    logger.info(`Fetching admission statistics for school ${institutionId}`);
+    const stats = await admissionService.getAdmissionStatistics(institutionId, { academicYear, startDate, endDate });
 
     return successResponse(res, stats, 'Admission statistics fetched successfully');
   } catch (error) {
@@ -629,7 +629,7 @@ const getAdmissionStatistics = async (req, res, next) => {
  */
 const bulkUpdateStatus = async (req, res, next) => {
   try {
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { applicationIds, status, comments } = req.body;
 
     // Validate applicationIds
@@ -649,7 +649,7 @@ const bulkUpdateStatus = async (req, res, next) => {
     }
 
     logger.info(`Bulk updating ${applicationIds.length} applications to status ${status}`);
-    const result = await admissionService.bulkUpdateStatus(schoolId, applicationIds, status, userId, comments);
+    const result = await admissionService.bulkUpdateStatus(institutionId, applicationIds, status, userId, comments);
 
     return successResponse(res, result, `${result.updated} applications updated successfully`);
   } catch (error) {
@@ -664,7 +664,7 @@ const bulkUpdateStatus = async (req, res, next) => {
 const deleteApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate ID
     const validation = validateObjectId(id, 'applicationId');
@@ -673,7 +673,7 @@ const deleteApplication = async (req, res, next) => {
     }
 
     logger.info(`Deleting application ${id}`);
-    const result = await admissionService.deleteApplication(schoolId, id);
+    const result = await admissionService.deleteApplication(institutionId, id);
 
     if (!result) {
       return notFoundResponse(res, 'Application not found');
@@ -692,7 +692,7 @@ const deleteApplication = async (req, res, next) => {
 const waitlistApplication = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId, userId } = req.user;
+    const { institutionId, userId } = req.user;
     const { priority, reason } = req.body;
 
     // Validate ID
@@ -707,7 +707,7 @@ const waitlistApplication = async (req, res, next) => {
     }
 
     logger.info(`Waitlisting application ${id}`);
-    const application = await admissionService.waitlistApplication(schoolId, id, userId, { priority, reason });
+    const application = await admissionService.waitlistApplication(institutionId, id, userId, { priority, reason });
 
     if (!application) {
       return notFoundResponse(res, 'Application not found');
@@ -725,7 +725,7 @@ const waitlistApplication = async (req, res, next) => {
  */
 const exportApplications = async (req, res, next) => {
   try {
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { status, academicYear, classId, format = 'json' } = req.query;
 
     // Validate format
@@ -734,8 +734,8 @@ const exportApplications = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'format', message: `Format must be one of: ${validFormats.join(', ')}` }]);
     }
 
-    logger.info(`Exporting applications for school ${schoolId} in ${format} format`);
-    const applications = await admissionService.getApplications(schoolId, {
+    logger.info(`Exporting applications for school ${institutionId} in ${format} format`);
+    const applications = await admissionService.getApplications(institutionId, {
       status,
       academicYear,
       classId,
@@ -765,7 +765,7 @@ const exportApplications = async (req, res, next) => {
 const getApplicationTimeline = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
 
     // Validate ID
     const validation = validateObjectId(id, 'applicationId');
@@ -774,7 +774,7 @@ const getApplicationTimeline = async (req, res, next) => {
     }
 
     logger.info(`Fetching timeline for application ${id}`);
-    const timeline = await admissionService.getApplicationTimeline(schoolId, id);
+    const timeline = await admissionService.getApplicationTimeline(institutionId, id);
 
     if (!timeline) {
       return notFoundResponse(res, 'Application not found');
@@ -793,7 +793,7 @@ const getApplicationTimeline = async (req, res, next) => {
 const sendNotification = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { schoolId } = req.user;
+    const { institutionId } = req.user;
     const { type, message, channel = 'email' } = req.body;
 
     // Validate ID
@@ -820,7 +820,7 @@ const sendNotification = async (req, res, next) => {
     }
 
     logger.info(`Sending ${type} notification for application ${id} via ${channel}`);
-    const result = await admissionService.sendNotification(schoolId, id, { type, message, channel });
+    const result = await admissionService.sendNotification(institutionId, id, { type, message, channel });
 
     return successResponse(res, result, 'Notification sent successfully');
   } catch (error) {

@@ -44,6 +44,8 @@ export interface ExamFilters {
   status?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  institutionId?: string;
+  institutionId?: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -79,6 +81,8 @@ export const examService = {
     if (filters.status) params.status = filters.status;
     if (filters.sortBy) params.sortBy = filters.sortBy;
     if (filters.sortOrder) params.sortOrder = filters.sortOrder;
+    if (filters.institutionId) params.institutionId = filters.institutionId;
+    if (filters.institutionId) params.institutionId = filters.institutionId;
 
     const response: ApiResponse<PaginatedResponse<Exam>> = await apiService.get(
       API_ENDPOINTS.EXAMS.LIST,
@@ -113,7 +117,12 @@ export const examService = {
     );
     
     if (!response.success || !response.data) {
-      throw new Error(response.message || 'Failed to create exam');
+      // Include validation error details in the error message
+      const errPayload = (response as any).error;
+      const details = errPayload?.details;
+      const detailMsg = Array.isArray(details) ? details.join('; ') : '';
+      const msg = errPayload?.message || response.message || 'Failed to create exam';
+      throw new Error(detailMsg ? `${msg}: ${detailMsg}` : msg);
     }
     
     return response.data;

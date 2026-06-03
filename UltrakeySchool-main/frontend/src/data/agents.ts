@@ -1,6 +1,3 @@
-// Real-time Agent Data Interface and API Integration
-// This file now provides type definitions and real API integration
-
 export interface Institution {
   _id: string
   name: string
@@ -59,7 +56,8 @@ export const agentApi = {
       const agents = await agentService.getAll()
       
       // Transform API data to match our interface
-      return agents.map((agent: { _id: any; createdAt: any }) => ({
+      // agents is Agent[] from agentService.getAll() -- let TS infer the type
+      return agents.map((agent) => ({
         ...agent,
         id: agent._id,
         joinDate: agent.createdAt,

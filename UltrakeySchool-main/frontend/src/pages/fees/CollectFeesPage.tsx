@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 interface FeeRecord {
   _id: string;
@@ -33,6 +39,7 @@ const CollectFeesPage: React.FC = () => {
   const [showCollectModal, setShowCollectModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<FeeRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [razorpayKey, setRazorpayKey] = useState<string>('');
   
   const [formData, setFormData] = useState({
     feesGroup: '',
@@ -43,6 +50,59 @@ const CollectFeesPage: React.FC = () => {
     referenceNo: '',
     notes: ''
   });
+
+  // Load Razorpay script once
+  const loadRazorpayScript = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve();
+      document.body.appendChild(script);
+    });
+  }, []);
+
+  // Fetch Razorpay key on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await apiClient.get('/fees/payment-config');
+        if (response.data?.success && response.data?.data?.razorpayKey) {
+          setRazorpayKey(response.data.data.razorpayKey);
+        }
+      } catch (err) {
+        console.warn('Could not fetch payment config, will use default key');
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  useEffect(() => {
+    fetchPendingFees();
+  }, []);
+
+  const fetchPendingFees = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await apiClient.get('/fees/pending');
+      
+      if (response.data.success && response.data.data) {
+        setFeeRecords(response.data.data);
+      }
+    } catch (err: any) {
+      console.error('Error fetching pending fees:', err);
+      setError(err.message || 'Failed to load fee records');
+      toast.error('Failed to load fee records');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const exportToCSV = () => {
     if (!feeRecords.length) { toast.error('No data to export'); return; }
@@ -86,29 +146,6 @@ const CollectFeesPage: React.FC = () => {
     toast.success('PDF generated');
   };
 
-  useEffect(() => {
-    fetchPendingFees();
-  }, []);
-
-  const fetchPendingFees = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiClient.get('/fees/pending');
-      
-      if (response.data.success && response.data.data) {
-        setFeeRecords(response.data.data);
-      }
-    } catch (err: any) {
-      console.error('Error fetching pending fees:', err);
-      setError(err.message || 'Failed to load fee records');
-      toast.error('Failed to load fee records');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -118,11 +155,114 @@ const CollectFeesPage: React.FC = () => {
     }));
   };
 
+  // Handle Razorpay payment
+  const handleRazorpayPayment = async () => {
+    if (!selectedStudent || !razorpayKey) {
+      toast.error('Payment configuration not ready');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      
+      // First initiate the payment on backend
+      const initiateResponse = await apiClient.post(`/fees/invoices/${selectedStudent._id}/pay`, {
+        amount: parseFloat(formData.amount),
+        paymentMethod: 'razorpay'
+      });
+
+      if (!initiateResponse.data?.success) {
+        throw new Error(initiateResponse.data?.message || 'Failed to initiate payment');
+      }
+
+      const paymentData = initiateResponse.data.data;
+      
+      // Load Razorpay script if not already loaded
+      await loadRazorpayScript();
+
+      // Open Razorpay checkout
+      const options = {
+        key: paymentData.razorpay_key || razorpayKey,
+        amount: Math.round(parseFloat(formData.amount) * 100),
+        currency: 'INR',
+        name: 'EduSearch',
+        description: `Fee Payment - ${selectedStudent.studentId?.firstName} ${selectedStudent.studentId?.lastName}`,
+        order_id: paymentData.razorpay_order_id,
+        prefill: {
+          name: `${selectedStudent.studentId?.firstName} ${selectedStudent.studentId?.lastName}`,
+          contact: ''
+        },
+        notes: {
+          feeId: selectedStudent._id,
+          studentId: selectedStudent.studentId?._id
+        },
+        handler: async (response: any) => {
+          try {
+            // Verify payment on backend
+            const verifyResponse = await apiClient.post('/fees/payments/verify', {
+              paymentId: paymentData.payment_id || paymentData.razorpay_order_id,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature
+            });
+
+            if (verifyResponse.data?.success) {
+              toast.success('Payment successful!');
+              setShowCollectModal(false);
+              setFormData({
+                feesGroup: '',
+                feesType: '',
+                amount: '',
+                collectionDate: new Date().toISOString().split('T')[0],
+                paymentType: '',
+                referenceNo: '',
+                notes: ''
+              });
+              fetchPendingFees();
+            } else {
+              toast.error(verifyResponse.data?.message || 'Payment verification failed');
+            }
+          } catch (err: any) {
+            console.error('Error verifying payment:', err);
+            toast.error(err.response?.data?.message || 'Payment verification failed');
+          } finally {
+            setSubmitting(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+            toast.info('Payment cancelled');
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response: any) => {
+        console.error('Razorpay payment failed:', response.error);
+        toast.error(response.error?.description || 'Payment failed');
+        setSubmitting(false);
+      });
+      rzp.open();
+
+    } catch (err: any) {
+      console.error('Error initiating Razorpay payment:', err);
+      toast.error(err.response?.data?.message || err.message || 'Failed to initiate payment');
+      setSubmitting(false);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedStudent) return;
+
+    // If Razorpay is selected, handle via Razorpay flow
+    if (formData.paymentType === 'razorpay' || formData.paymentType === 'Razorpay') {
+      await handleRazorpayPayment();
+      return;
+    }
     
     try {
       setSubmitting(true);
@@ -131,7 +271,7 @@ const CollectFeesPage: React.FC = () => {
         feeId: selectedStudent._id,
         studentId: selectedStudent.studentId._id,
         amount: parseFloat(formData.amount),
-        paymentMethod: formData.paymentType,
+        paymentMethod: formData.paymentType.toLowerCase(),
         paymentDate: formData.collectionDate,
         referenceNo: formData.referenceNo,
         notes: formData.notes,
@@ -181,7 +321,7 @@ const CollectFeesPage: React.FC = () => {
 
   // Handle view details button click
   const handleViewDetails = (record: FeeRecord) => {
-    navigate(`/student-fees/${record.studentId._id}`, { state: { student: record } });
+    navigate(`/dashboard/student/fees`, { state: { studentId: record.studentId._id, student: record } });
   };
 
   // Show loading state
@@ -278,97 +418,16 @@ const CollectFeesPage: React.FC = () => {
                 readOnly
               />
             </div>
-            <div className="dropdown mb-3 me-2">
-              <button 
-                className="btn btn-outline-light bg-white dropdown-toggle"
-                data-bs-toggle="dropdown" 
-                data-bs-auto-close="outside"
-              >
-                <i className="ti ti-filter me-2"></i>Filter
-              </button>
-              <div className="dropdown-menu drop-width">
-                <form>
-                  <div className="d-flex align-items-center border-bottom p-3">
-                    <h4>Filter</h4>
-                  </div>
-                  <div className="p-3 border-bottom">
-                    <div className="row">
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Admission No</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Roll No</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-12">
-                        <div className="mb-3">
-                          <label className="form-label">Student</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Class</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-3">
-                          <label className="form-label">Section</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-3 d-flex align-items-center justify-content-end">
-                    <button type="button" className="btn btn-light me-3">Reset</button>
-                    <button type="submit" className="btn btn-primary">Apply</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-            
-            <div className="dropdown mb-3">
-              <button className="btn btn-outline-light bg-white dropdown-toggle" data-bs-toggle="dropdown">
-                <i className="ti ti-sort-ascending-2 me-2"></i>Sort by A-Z
-              </button>
-              <ul className="dropdown-menu p-3">
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1 active">
-                    Ascending
-                  </a>
-                </li>
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    Descending
-                  </a>
-                </li>
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    Recently Viewed
-                  </a>
-                </li>
-                <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    Recently Added
-                  </a>
-                </li>
-              </ul>
+            <div className="input-icon-start mb-3 me-2 position-relative">
+              <span className="icon-addon">
+                <i className="ti ti-search"></i>
+              </span>
+              <input 
+                type="text" 
+                className="form-control bookingrange" 
+                placeholder="Search students..."
+                style={{ paddingLeft: '2rem', minWidth: '200px' }}
+              />
             </div>
           </div>
         </div>
@@ -517,7 +576,7 @@ const CollectFeesPage: React.FC = () => {
                       <div className="col-lg-3 col-md-6">
                         <div className="mb-3">
                           <span className="text-muted small d-block">Total Outstanding</span>
-                          <p className="mb-0 fw-medium">${selectedStudent.remainingAmount?.toLocaleString() || 0}</p>
+                          <p className="mb-0 fw-medium text-danger">₹{selectedStudent.remainingAmount?.toLocaleString() || 0}</p>
                         </div>
                       </div>
                       <div className="col-lg-3 col-md-6">
@@ -625,23 +684,33 @@ const CollectFeesPage: React.FC = () => {
                         >
                           <option value="">Select</option>
                           <option>Cash</option>
-                          <option>Credit Card</option>
-                          <option>Debit Card</option>
+                          <option>Cheque</option>
                           <option>Bank Transfer</option>
+                          <option>DD</option>
+                          <option>Card</option>
                           <option>UPI</option>
+                          <option 
+                            value="Razorpay"
+                            style={{ fontWeight: 600, color: '#3399cc' }}
+                          >
+                            💳 Pay Online (Razorpay)
+                          </option>
                         </select>
                       </div>
                     </div>
                     <div className="col-lg-6">
                       <div className="mb-3">
-                        <label className="form-label">Payment Reference No</label>
+                        <label className="form-label">
+                          {formData.paymentType === 'Razorpay' ? 'Transaction Reference (auto-generated)' : 'Payment Reference No'}
+                        </label>
                         <input 
                           type="text" 
                           className="form-control"
-                          placeholder="Enter Payment Reference No"
+                          placeholder={formData.paymentType === 'Razorpay' ? 'Auto-generated on successful payment' : 'Enter Payment Reference No'}
                           name="referenceNo"
                           value={formData.referenceNo}
                           onChange={handleInputChange}
+                          disabled={formData.paymentType === 'Razorpay'}
                         />
                       </div>
                     </div>
@@ -659,6 +728,21 @@ const CollectFeesPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Razorpay info panel */}
+                  {formData.paymentType === 'Razorpay' && (
+                    <div className="alert alert-info d-flex align-items-center mt-3 mb-0 p-3">
+                      <div className="me-3">
+                        <i className="ti ti-shield-lock" style={{ fontSize: '1.5rem' }}></i>
+                      </div>
+                      <div>
+                        <strong>Secure Online Payment</strong>
+                        <p className="mb-0 small text-muted">
+                          Payment will be processed via Razorpay. You will be redirected to a secure checkout page to complete the transaction using UPI, Credit/Debit Card, Net Banking, or Wallet.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="modal-footer">
                   <button 
@@ -669,20 +753,42 @@ const CollectFeesPage: React.FC = () => {
                   >
                     Cancel
                   </button>
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary"
-                    disabled={submitting}
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        Processing...
-                      </>
-                    ) : (
-                      'Pay Fees'
-                    )}
-                  </button>
+                  {formData.paymentType === 'Razorpay' ? (
+                    <button 
+                      type="button"
+                      className="btn btn-primary d-flex align-items-center"
+                      onClick={handleRazorpayPayment}
+                      disabled={submitting || !razorpayKey}
+                      style={{ background: 'linear-gradient(135deg, #3399cc, #1a6b9c)', border: 'none' }}
+                    >
+                      {submitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Opening Razorpay...
+                        </>
+                      ) : (
+                        <>
+                          <i className="ti ti-lock me-2"></i>
+                          Pay ₹{parseFloat(formData.amount || '0').toLocaleString()} Online
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary"
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Processing...
+                        </>
+                      ) : (
+                        'Collect Fees'
+                      )}
+                    </button>
+                  )}
                 </div>
               </form>
             </div>

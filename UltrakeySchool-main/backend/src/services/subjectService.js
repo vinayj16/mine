@@ -1,18 +1,25 @@
+import mongoose from 'mongoose';
 import Subject from '../models/Subject.js';
 
 class SubjectService {
-  async createSubject(schoolId, subjectData) {
-    // Map schoolId to institutionId (model uses institutionId)
-    const institutionId = subjectData.institutionId || schoolId;
-    const subject = await Subject.create({ ...subjectData, institutionId, schoolId });
+  async createSubject(institutionId, subjectData) {
+    institutionId = subjectData.institutionId || institutionId;
+    const subject = await Subject.create({ ...subjectData, institutionId });
     return subject;
   }
 
-  async getSubjects(schoolId, filters = {}, options = {}) {
+  async getSubjects(institutionId, filters = {}, options = {}) {
     const { page = 1, limit = 20 } = options;
-    // Fix: Use institutionId from schoolId or filters if available for proper filtering
-    const querySchoolId = schoolId || filters.schoolId || filters.institutionId;
-    const query = querySchoolId ? { schoolId: querySchoolId, ...filters } : { ...filters };
+    const queryInstitutionId = institutionId || filters.institutionId;
+    const query = {};
+    if (queryInstitutionId) {
+      query.$or = [
+        { institutionId: queryInstitutionId },
+        { institutionId: new mongoose.Types.ObjectId(queryInstitutionId) }
+      ];
+    }
+    Object.assign(query, filters);
+    delete query.institutionId;
     const skip = (page - 1) * limit;
 
     const [subjects, total] = await Promise.all([
@@ -23,15 +30,15 @@ class SubjectService {
     return { subjects, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
-  async getSubjectById(subjectId, schoolId) {
-    const subject = await Subject.findOne({ _id: subjectId, schoolId });
+  async getSubjectById(subjectId, institutionId) {
+    const subject = await Subject.findOne({ _id: subjectId, institutionId });
     if (!subject) throw new Error('Subject not found');
     return subject;
   }
 
-  async updateSubject(subjectId, schoolId, updates) {
+  async updateSubject(subjectId, institutionId, updates) {
     const subject = await Subject.findOneAndUpdate(
-      { _id: subjectId, schoolId },
+      { _id: subjectId, institutionId },
       { $set: updates },
       { new: true }
     );
@@ -39,24 +46,24 @@ class SubjectService {
     return subject;
   }
 
-  async deleteSubject(subjectId, schoolId) {
-    const subject = await Subject.findOneAndDelete({ _id: subjectId, schoolId });
+  async deleteSubject(subjectId, institutionId) {
+    const subject = await Subject.findOneAndDelete({ _id: subjectId, institutionId });
     if (!subject) throw new Error('Subject not found');
     return subject;
   }
 
-  async getSubjectsByDepartment(schoolId, department) {
-    return await Subject.find({ schoolId, department, isActive: true });
+  async getSubjectsByDepartment(institutionId, department) {
+    return await Subject.find({ institutionId, department, isActive: true });
   }
 
-  async getSubjectsByType(schoolId, type) {
-    return await Subject.find({ schoolId, type, isActive: true });
+  async getSubjectsByType(institutionId, type) {
+    return await Subject.find({ institutionId, type, isActive: true });
   }
 
-  async searchSubjects(schoolId, query) {
+  async searchSubjects(institutionId, query) {
     const regex = new RegExp(query, 'i');
     return await Subject.find({
-      schoolId,
+      institutionId,
       isActive: true,
       $or: [{ name: regex }, { code: regex }]
     });

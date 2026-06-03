@@ -1,107 +1,112 @@
-/**
- * Rate Limiter Middleware
- * Provides API rate limiting functionality
- */
-
 import rateLimit from 'express-rate-limit';
-import { tooManyRequestsResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 
-// General API rate limiter
-export const apiLimiter = rateLimit({
+// Default options: 100 requests per 15 minutes per IP
+const defaultOptions = {
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: (req, res) => {
-    logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
-    return tooManyRequestsResponse(res, 'Too many requests from this IP, please try again later.');
-  },
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (req, res) => {
-    logger.warn(`Rate limit exceeded for IP: ${req.ip}, Path: ${req.path}`);
-    return tooManyRequestsResponse(res, 'Too many requests from this IP, please try again later.');
+  message: {
+    success: false,
+    error: 'Too many requests. Please try again later.',
+    code: 'RATE_LIMIT_EXCEEDED'
+  }
+};
+
+/**
+ * Global rate limiter — applied to all API routes
+ */
+export const globalLimiter = rateLimit({
+  ...defaultOptions,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_GLOBAL_MAX) || 300, // 300 requests per window
+  handler: (req, res, next, options) => {
+    logger.warn(`[RateLimit] Global limit exceeded: IP=${req.ip}, Path=${req.originalUrl}`);
+    res.status(429).json(options.message);
+  },
+  skip: (req) => {
+    // Skip rate limiting for super admins
+    if (req.user?.role === 'superadmin') return true;
+    return false;
   }
 });
 
-// Stricter limiter for authentication routes
+/**
+ * Strict rate limiter — for auth/login routes (5 requests per minute)
+ */
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs for auth
-  message: (req, res) => {
-    logger.warn(`Auth rate limit exceeded for IP: ${req.ip}`);
-    return tooManyRequestsResponse(res, 'Too many authentication attempts, please try again later.');
-  },
+  windowMs: 60 * 1000, // 1 minute
+  max: parseInt(process.env.RATE_LIMIT_AUTH_MAX) || 10, // 10 login attempts per minute
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
+  message: {
+    success: false,
+    error: 'Too many login attempts. Please try again later.',
+    code: 'AUTH_RATE_LIMIT_EXCEEDED'
+  },
   handler: (req, res) => {
-    return tooManyRequestsResponse(res, 'Too many authentication attempts, please try again later.');
+    logger.warn(`[RateLimit] Auth limit exceeded: IP=${req.ip}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many login attempts. Please try again after a minute.',
+      code: 'AUTH_RATE_LIMIT_EXCEEDED'
+    });
   }
 });
 
-// Login specific limiter
-export const loginLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // 5 attempts per hour
-  message: (req, res) => {
-    logger.warn(`Login rate limit exceeded for IP: ${req.ip}, Email: ${req.body.email}`);
-    return tooManyRequestsResponse(res, 'Too many login attempts, please try again after an hour.');
-  },
+/**
+ * Moderate rate limiter — for write/modify operations (30 requests per minute)
+ */
+export const writeLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: parseInt(process.env.RATE_LIMIT_WRITE_MAX) || 30,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true,
+  message: {
+    success: false,
+    error: 'Too many write requests. Please slow down.',
+    code: 'WRITE_RATE_LIMIT_EXCEEDED'
+  },
   handler: (req, res) => {
-    return tooManyRequestsResponse(res, 'Too many login attempts, please try again after an hour.');
+    logger.warn(`[RateLimit] Write limit exceeded: IP=${req.ip}, Path=${req.originalUrl}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many requests. Please slow down.',
+      code: 'WRITE_RATE_LIMIT_EXCEEDED'
+    });
   }
 });
 
-// Admin API limiter
-export const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // Higher limit for admin
-  message: (req, res) => {
-    return tooManyRequestsResponse(res, 'Too many admin requests, please try again later.');
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Public API limiter (stricter)
+/**
+ * API key rate limiter — for public/unauthenticated endpoints
+ */
 export const publicLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Lower limit for public endpoints
-  message: (req, res) => {
-    return tooManyRequestsResponse(res, 'Too many requests, please try again later.');
-  },
+  windowMs: 60 * 1000,
+  max: 20,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Too many requests. Please authenticate or try again later.',
+    code: 'PUBLIC_RATE_LIMIT_EXCEEDED'
+  }
 });
 
-// Create custom rate limiter
-export const createRateLimiter = (options) => {
+/**
+ * Create a custom rate limiter with specific options
+ */
+export const createRateLimiter = (options = {}) => {
   return rateLimit({
-    windowMs: options.windowMs || 15 * 60 * 1000,
-    max: options.max || 100,
-    message: options.message || 'Too many requests, please try again later.',
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (req, res) => {
-      return res.status(429).json({
-        success: false,
-        error: {
-          message: options.message || 'Too many requests, please try again later.',
-          code: 'RATE_LIMIT_EXCEEDED'
-        }
-      });
-    }
+    ...defaultOptions,
+    ...options
   });
 };
 
 export default {
-  apiLimiter,
+  globalLimiter,
   authLimiter,
-  loginLimiter,
-  adminLimiter,
+  writeLimiter,
   publicLimiter,
   createRateLimiter
 };

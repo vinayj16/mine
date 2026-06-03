@@ -1,17 +1,32 @@
+import mongoose from 'mongoose';
 import TransportReport from '../models/TransportReport.js';
+import TransportAssignment from '../models/TransportAssignment.js';
+import { StudentTransport, TransportRoute, Vehicle } from '../models/Transport.js';
+import Driver from '../models/Driver.js';
 
 class TransportReportService {
   async getAllReports(institutionId, filters = {}) {
-    const query = { institutionId, isActive: true };
-    
-    if (filters.reportType) query.reportType = filters.reportType;
-    if (filters.status) query.status = filters.status;
-    if (filters.period) query.period = filters.period;
-    
-    const reports = await TransportReport.find(query)
-      .sort({ generatedDate: -1 });
-    
-    return reports;
+    try {
+      const query = { 
+        $or: [
+          { institutionId: institutionId },
+          { tenant: institutionId }
+        ],
+        isActive: true 
+      };
+      
+      if (filters.reportType) query.reportType = filters.reportType;
+      if (filters.status) query.status = filters.status;
+      if (filters.period) query.period = filters.period;
+      
+      const reports = await TransportReport.find(query)
+        .sort({ generatedDate: -1 });
+      
+      return reports;
+    } catch (error) {
+      console.error('Error in getAllReports:', error);
+      return [];
+    }
   }
 
   async getReportById(id, institutionId) {
@@ -29,19 +44,25 @@ class TransportReportService {
   }
 
   async generateReport(institutionId, data) {
-    const report = await TransportReport.create({
-      institutionId,
-      ...data,
-      status: 'processing'
-    });
-    
-    setTimeout(async () => {
-      await TransportReport.findByIdAndUpdate(report._id, {
-        status: 'completed'
+    try {
+      console.log('Generating report in service with institutionId:', institutionId);
+      console.log('Report data:', JSON.stringify(data, null, 2));
+
+      // Ensure institutionId is an ObjectId
+      const id = typeof institutionId === 'string' ? new mongoose.Types.ObjectId(institutionId) : institutionId;
+
+      const report = await TransportReport.create({
+        institutionId: id,
+        ...data,
+        generatedDate: data.generatedDate || new Date()
       });
-    }, 5000);
-    
-    return report;
+      
+      console.log('Report created successfully:', report._id);
+      return report;
+    } catch (error) {
+      console.error('Error creating transport report in service:', error);
+      throw new Error('Failed to create report: ' + error.message);
+    }
   }
 
   async updateReport(id, institutionId, data) {
@@ -82,36 +103,44 @@ class TransportReportService {
   }
 
   async getTransportStatistics(institutionId) {
-    const TransportAssignment = (await import('../models/TransportAssignment.js')).default;
-    
-    const totalRoutes = await TransportAssignment.distinct('routeId', { 
-      institutionId, 
-      isActive: true 
-    }).then(routes => routes.length);
-    
-    const activeVehicles = await TransportAssignment.distinct('vehicleId', { 
-      institutionId, 
-      status: 'Active',
-      isActive: true 
-    }).then(vehicles => vehicles.length);
-    
-    const totalDrivers = await TransportAssignment.distinct('driverId', { 
-      institutionId, 
-      isActive: true 
-    }).then(drivers => drivers.length);
-    
-    const activeStudents = 450;
-    const monthlyRevenue = 125000;
-    const fuelConsumption = 850;
-    
-    return {
-      totalRoutes,
-      activeVehicles,
-      totalDrivers,
-      activeStudents,
-      monthlyRevenue,
-      fuelConsumption
-    };
+    try {
+      // Handle different field names across models
+      const routeQuery = { $or: [{ tenant: institutionId }, { institutionId: institutionId }], status: 'Active' };
+      const vehicleQuery = { $or: [{ tenant: institutionId }, { institutionId: institutionId }], status: { $in: ['Active', 'active'] } };
+      const studentQuery = { $or: [{ tenant: institutionId }, { institutionId: institutionId }], status: 'Active' };
+      const assignmentQuery = { $or: [{ tenant: institutionId }, { institutionId: institutionId }], isActive: true };
+      
+      const [
+        totalRoutes,
+        activeVehicles,
+        totalStudents,
+        totalAssignments
+      ] = await Promise.all([
+        TransportRoute.countDocuments(routeQuery).catch(() => 0),
+        Vehicle.countDocuments(vehicleQuery).catch(() => 0),
+        StudentTransport.countDocuments(studentQuery).catch(() => 0),
+        TransportAssignment.countDocuments(assignmentQuery).catch(() => 0)
+      ]);
+      
+      return {
+        totalRoutes,
+        totalVehicles: activeVehicles,
+        totalStudents,
+        activeAssignments: totalAssignments || totalStudents,
+        byRoute: [],
+        byVehicle: []
+      };
+    } catch (error) {
+      console.error('Error in getTransportStatistics:', error);
+      return {
+        totalRoutes: 0,
+        totalVehicles: 0,
+        totalStudents: 0,
+        activeAssignments: 0,
+        byRoute: [],
+        byVehicle: []
+      };
+    }
   }
 
   async getReportsByType(reportType, institutionId) {

@@ -45,7 +45,7 @@ const SmsConfigPage: React.FC = () => {
     }
   });
 
-  const institutionId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchConfig = async () => {
     try {
@@ -136,9 +136,17 @@ const SmsConfigPage: React.FC = () => {
 
     try {
       setTesting(true);
-      toast.info('Test SMS feature requires backend implementation');
+      const response = await apiClient.post('/settings/sms/test', {
+        institutionId,
+        provider: config.provider,
+        credentials: config.credentials,
+        settings: config.settings,
+      });
+      if (response.data.success) {
+        toast.success('Test SMS sent successfully');
+      }
     } catch (err: any) {
-      toast.error('Failed to send test SMS');
+      toast.error(err.response?.data?.message || 'Failed to send test SMS');
     } finally {
       setTesting(false);
     }

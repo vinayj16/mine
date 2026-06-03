@@ -2,7 +2,7 @@ import api from './api';
 
 export interface CallLog {
   _id: string;
-  schoolId: string;
+  institutionId: string;
   callerId: string;
   callerName?: string;
   callerRole?: string;
@@ -22,7 +22,7 @@ export interface CallLog {
 }
 
 export interface CallLogFormData {
-  schoolId: string;
+  institutionId: string;
   callerId: string;
   callerName?: string;
   callerRole?: string;
@@ -39,28 +39,28 @@ export interface CallLogFormData {
 }
 
 const callLogService = {
-  getAll: async (schoolId: string) => {
-    const response = await api.get(`/call-logs/schools/${schoolId}`);
+  getAll: async (institutionId: string) => {
+    const response = await api.get(`/call-logs/institutions/${institutionId}`);
     return response.data;
   },
 
-  getByUser: async (schoolId: string, userId: string) => {
-    const response = await api.get(`/call-logs/schools/${schoolId}/user/${userId}`);
+  getByUser: async (institutionId: string, userId: string) => {
+    const response = await api.get(`/call-logs/institutions/${institutionId}/users/${userId}`);
     return response.data;
   },
 
-  getById: async (schoolId: string, callId: string) => {
-    const response = await api.get(`/call-logs/schools/${schoolId}/${callId}`);
+  getById: async (institutionId: string, callId: string) => {
+    const response = await api.get(`/call-logs/institutions/${institutionId}/${callId}`);
     return response.data;
   },
 
-  create: async (schoolId: string, data: Omit<CallLogFormData, 'schoolId'>) => {
-    const response = await api.post(`/call-logs/schools/${schoolId}`, data);
+  create: async (institutionId: string, data: Omit<CallLogFormData, 'institutionId'>) => {
+    const response = await api.post(`/call-logs/institutions/${institutionId}`, data);
     return response.data;
   },
 
-  getAnalytics: async (schoolId: string) => {
-    const response = await api.get(`/call-logs/schools/${schoolId}/analytics`);
+  getAnalytics: async (institutionId: string) => {
+    const response = await api.get(`/call-logs/institutions/${institutionId}/analytics`);
     return response.data;
   }
 };

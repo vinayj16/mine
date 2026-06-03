@@ -7,11 +7,6 @@ const studentSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
-  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -42,8 +37,8 @@ const studentSchema = new mongoose.Schema({
   },
   gender: {
     type: String,
-    enum: ['male', 'female', 'other'],
-    required: true
+    enum: ['male', 'female', 'other', 'Not Specified'],
+    default: 'Not Specified'
   },
   bloodGroup: {
     type: String,
@@ -82,11 +77,15 @@ const studentSchema = new mongoose.Schema({
   },
   academicYear: {
     type: String,
-    required: true
+    required: true,
+    default: () => {
+      const year = new Date().getFullYear();
+      return year + '-' + (year + 1);
+    }
   },
   parentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Parent'
+    ref: 'User'
   },
   guardianId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -132,16 +131,24 @@ const studentSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     index: true
+  },
+  lastLogin: {
+    type: Date
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  autoCreate: false
 });
 
-studentSchema.index({ institutionId: 1, schoolId: 1, classId: 1, status: 1 });
-studentSchema.index({ institutionId: 1, schoolId: 1, admissionNumber: 1 }, { unique: true });
+studentSchema.index({ institutionId: 1, classId: 1, status: 1 });
+studentSchema.index({ institutionId: 1, admissionNumber: 1 }, { unique: true });
 studentSchema.index({ institutionId: 1, status: 1 });
 
 studentSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+studentSchema.virtual('name').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
 

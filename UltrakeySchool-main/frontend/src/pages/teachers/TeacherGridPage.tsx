@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import { getInstitutionId } from '../../utils/auth';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Teacher {
   _id: string;
@@ -47,8 +50,10 @@ const TeacherGridPage = () => {
     total: 0,
     totalPages: 0
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{teacherId: string; teacherName: string} | null>(null);
 
-  const schoolId = '507f1f77bcf86cd799439011'; // This should come from auth context
+  const institutionId = getInstitutionId();
 
   useEffect(() => {
     fetchTeachers();
@@ -60,7 +65,7 @@ const TeacherGridPage = () => {
       setError(null);
       const response = await apiClient.get('/teachers', {
         params: {
-          schoolId,
+          institutionId,
           page: pagination.page,
           limit: pagination.limit,
           search: searchTerm || undefined
@@ -102,6 +107,24 @@ const TeacherGridPage = () => {
     }
   };
 
+  const handleDeleteTeacher = async (teacherId: string, teacherName: string) => {
+    setShowDeleteModal(true);
+    setDeleteTarget({ teacherId, teacherName });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await apiClient.delete(`/teachers/${deleteTarget.teacherId}`);
+      toast.success('Teacher deleted successfully');
+      fetchTeachers();
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to delete teacher');
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPagination({ ...pagination, page: 1 });
@@ -134,6 +157,35 @@ const TeacherGridPage = () => {
       </div>
     );
   }
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = teachers.map(teacher => ({
+      'Employee ID': teacher.employeeId || teacher._id.slice(-6),
+      Name: `${teacher.firstName} ${teacher.lastName}`,
+      Email: teacher.email,
+      Phone: teacher.phone,
+      Department: teacher.departmentId?.name || 'N/A',
+      Designation: teacher.designation,
+      Status: teacher.status,
+      'Join Date': teacher.joinDate ? new Date(teacher.joinDate).toLocaleDateString() : 'N/A',
+      Subjects: teacher.subjects?.map(s => s.name).join(', ') || ''
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'teachers', [
+        { key: 'Employee ID', label: 'Employee ID' },
+        { key: 'Name', label: 'Name' },
+        { key: 'Email', label: 'Email' },
+        { key: 'Phone', label: 'Phone' },
+        { key: 'Department', label: 'Department' },
+        { key: 'Designation', label: 'Designation' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Join Date', label: 'Join Date' },
+        { key: 'Subjects', label: 'Subjects' }
+      ], 'Teachers Grid');
+    } else {
+      exportToExcel(exportData, 'teachers');
+    }
+  };
 
   return (
     <>
@@ -178,13 +230,13 @@ const TeacherGridPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>
@@ -281,7 +333,10 @@ const TeacherGridPage = () => {
                             </Link>
                           </li>
                           <li>
-                            <button className="dropdown-item rounded-1">
+                            <button
+                              className="dropdown-item rounded-1"
+                              onClick={() => handleDeleteTeacher(teacher._id, `${teacher.firstName} ${teacher.lastName}`)}
+                            >
                               <i className="ti ti-trash-x me-2" />
                               Delete
                             </button>
@@ -387,6 +442,8 @@ const TeacherGridPage = () => {
           )}
         </>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message={deleteTarget ? `Delete teacher "${deleteTarget.teacherName}"? This action cannot be undone.` : ''} />
     </>
   );
 };

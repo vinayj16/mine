@@ -10,7 +10,7 @@ router.use(protect);
 
 // CRUD Operations with authorization (TESTED & VERIFIED)
 router.post('/',  
-  authorize(['admin', 'principal',   'institution_admin']),
+  authorize(['admin', 'principal', 'institution_admin', 'teacher']),
   timetableController.createTimetable
 );
 
@@ -25,13 +25,23 @@ router.get('/:timetableId',
 );
 
 router.put('/:timetableId',  
-  authorize(['admin', 'principal', 'institution_admin']),
+  authorize(['admin', 'principal', 'institution_admin', 'teacher']),
   timetableController.updateTimetable
 );
 
 router.delete('/:timetableId',  
-  authorize(['admin', 'principal', 'institution_admin']),
+  authorize(['admin', 'principal', 'institution_admin', 'teacher']),
   timetableController.deleteTimetable
+);
+
+router.post('/:timetableId/periods',  
+  authorize(['admin', 'principal', 'institution_admin', 'teacher']),
+  timetableController.addPeriod
+);
+
+router.delete('/:timetableId/periods/:periodId',  
+  authorize(['admin', 'principal', 'institution_admin', 'teacher']),
+  timetableController.removePeriod
 );
 
 export default router;

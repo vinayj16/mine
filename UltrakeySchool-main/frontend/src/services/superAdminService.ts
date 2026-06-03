@@ -1,8 +1,12 @@
 import apiService from './api';
 
 export interface Institution {
+  subscription: any;
+  monthlyCost: number | undefined;
   _id: string;
   name: string;
+  institutionName?: string;
+  city?: string;
   type: string;
   plan?: string;
   status: 'Active' | 'Suspended' | 'Expired' | 'active' | 'inactive' | 'suspended' | 'pending' | 'closed';
@@ -234,10 +238,10 @@ export const superAdminService = {
   },
 
   // Get institutions by type
-  getInstitutionsByType: async (type: string): Promise<Institution[]> => {
+  getInstitutionsByType: async (type?: string): Promise<Institution[]> => {
     try {
-      // Use working endpoint with type filter
-      const response = await apiService.get<{institutions: Institution[], pagination: any}>('/institutions/working', { type });
+      const params = type ? { type } : {};
+      const response = await apiService.get<{institutions: Institution[], pagination: any}>('/institutions/working', params);
       
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch institutions by type');
@@ -285,6 +289,8 @@ export const superAdminService = {
         return {
           _id: inst._id,
           name: inst.name,
+          institutionName: inst.name,
+          city: inst.address?.city || inst.city,
           code: inst.instituteCode || inst.code,
           instituteCode: inst.instituteCode || inst.code,
           type,
@@ -303,7 +309,9 @@ export const superAdminService = {
           updatedAt: inst.updatedAt,
           principalName: inst.principalName,
           principalEmail: inst.principalEmail,
-          principalPhone: inst.principalPhone
+          principalPhone: inst.principalPhone,
+          subscription: inst.subscription,
+          monthlyCost: inst.monthlyCost
         }
       });
       
@@ -438,7 +446,7 @@ export const superAdminService = {
   // Audit Logs
   getAuditLogs: async (params?: Record<string, unknown>): Promise<Record<string, unknown>[]> => {
     try {
-      const response = await apiService.get<Record<string, unknown>[]>('/super-admin/audit-logs', params);
+      const response = await apiService.get<Record<string, unknown>[]>('/audit', params);
       
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch audit logs');
@@ -453,7 +461,7 @@ export const superAdminService = {
 
   getAuditLogSummary: async (): Promise<Record<string, unknown>> => {
     try {
-      const response = await apiService.get<Record<string, unknown>>('/super-admin/audit-logs/summary');
+      const response = await apiService.get<Record<string, unknown>>('/audit/summary');
       
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch audit log summary');
@@ -685,13 +693,15 @@ export const superAdminService = {
       if (params?.agentId) queryParams.agentId = params.agentId;
       if (params?.status) queryParams.status = params.status;
       
-      const response = await apiService.get<Record<string, unknown>[]>('/super-admin/commissions', Object.keys(queryParams).length ? queryParams : undefined);
+      const response = await apiService.get<Record<string, unknown>>('/commissions/admin/all', Object.keys(queryParams).length ? queryParams : undefined);
       
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch commissions');
       }
       
-      return response.data;
+      // Return the commissions array from the grouped response
+      const data = response.data as any;
+      return data.commissions || data.agentCommissions || [];
     } catch (error) {
       console.error('[Super Admin Service] Failed to fetch commissions:', error);
       throw error;
@@ -700,7 +710,7 @@ export const superAdminService = {
 
   getCommissionSummary: async (): Promise<Record<string, unknown>> => {
     try {
-      const response = await apiService.get<Record<string, unknown>>('/super-admin/commissions/summary');
+      const response = await apiService.get<Record<string, unknown>>('/commissions/admin/all');
       
       if (!response.success || !response.data) {
         throw new Error(response.message || 'Failed to fetch commission summary');

@@ -28,14 +28,10 @@ export const createTransportFee = async (req, res) => {
     logger.info('Creating transport fee');
     
     const { studentId, studentTransportId, feeAmount, dueDate, academicYear, term, discount, discountReason } = req.body;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Validation
     const errors = [];
-    
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
     
     const institutionIdError = validateObjectId(institutionId, 'Institution ID');
     if (institutionIdError) errors.push(institutionIdError);
@@ -70,7 +66,7 @@ export const createTransportFee = async (req, res) => {
     const studentTransport = await StudentTransport.findOne({
       _id: studentTransportId,
       studentId,
-      schoolId,
+      institutionId,
       status: 'active'
     });
     
@@ -91,7 +87,7 @@ export const createTransportFee = async (req, res) => {
     
     // Create transport fee
     const transportFee = await TransportFee.create({
-      schoolId,
+      institutionId,
       institutionId,
       studentId,
       studentTransportId,
@@ -104,7 +100,7 @@ export const createTransportFee = async (req, res) => {
     });
     
     // Invalidate cache
-    await deleteCachePattern(`transport:fees:${schoolId}:${institutionId}`);
+    await deleteCachePattern(`transport:fees:${institutionId}:${institutionId}`);
     
     logger.info('Transport fee created successfully:', { id: transportFee._id });
     return createdResponse(res, transportFee, 'Transport fee created successfully');
@@ -121,7 +117,6 @@ export const getStudentTransportFees = async (req, res) => {
     
     const { studentId } = req.params;
     const { status, academicYear, term } = req.query;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Validation
@@ -135,7 +130,7 @@ export const getStudentTransportFees = async (req, res) => {
     }
     
     // Try to get from cache first
-    const cacheKey = `transport:fees:student:${studentId}:${schoolId}:${institutionId || 'default'}:${status || 'all'}:${academicYear || 'all'}:${term || 'all'}`;
+    const cacheKey = `transport:fees:student:${studentId}:${institutionId}:${institutionId || 'default'}:${status || 'all'}:${academicYear || 'all'}:${term || 'all'}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -144,7 +139,7 @@ export const getStudentTransportFees = async (req, res) => {
     }
     
     // Build query
-    const query = { studentId, schoolId, institutionId };
+    const query = { studentId, institutionId, institutionId };
     if (status) query.paymentStatus = status;
     if (academicYear) query.academicYear = academicYear;
     if (term) query.term = term;
@@ -171,11 +166,10 @@ export const getTransportFees = async (req, res) => {
     logger.info('Fetching transport fees');
     
     const { status, academicYear, term, page = 1, limit = 20 } = req.query;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Try to get from cache first
-    const cacheKey = `transport:fees:${schoolId}:${institutionId || 'default'}:${status || 'all'}:${academicYear || 'all'}:${term || 'all'}:${page}:${limit}`;
+    const cacheKey = `transport:fees:${institutionId}:${institutionId || 'default'}:${status || 'all'}:${academicYear || 'all'}:${term || 'all'}:${page}:${limit}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -184,7 +178,7 @@ export const getTransportFees = async (req, res) => {
     }
     
     // Build query
-    const query = { schoolId, institutionId };
+    const query = { institutionId, institutionId };
     if (status) query.paymentStatus = status;
     if (academicYear) query.academicYear = academicYear;
     if (term) query.term = term;
@@ -232,7 +226,6 @@ export const payTransportFee = async (req, res) => {
     
     const { feeId } = req.params;
     const { paymentMethod, paymentReference, paymentDetails, paidAmount } = req.body;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     const userId = req.user.id;
     
@@ -251,7 +244,7 @@ export const payTransportFee = async (req, res) => {
     }
     
     // Find the fee
-    const fee = await TransportFee.findOne({ _id: feeId, schoolId, institutionId });
+    const fee = await TransportFee.findOne({ _id: feeId, institutionId, institutionId });
     
     if (!fee) {
       return notFoundResponse(res, 'Transport fee not found');
@@ -288,7 +281,7 @@ export const payTransportFee = async (req, res) => {
     }
     
     // Invalidate cache
-    await deleteCachePattern(`transport:fees:${schoolId}:${institutionId}`);
+    await deleteCachePattern(`transport:fees:${institutionId}:${institutionId}`);
     
     logger.info('Transport fee paid successfully:', { id: feeId });
     return successResponse(res, fee, 'Transport fee paid successfully');
@@ -304,7 +297,6 @@ export const getTransportFeeById = async (req, res) => {
     logger.info('Fetching transport fee by ID');
     
     const { feeId } = req.params;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Validation
@@ -317,7 +309,7 @@ export const getTransportFeeById = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const fee = await TransportFee.findOne({ _id: feeId, schoolId, institutionId })
+    const fee = await TransportFee.findOne({ _id: feeId, institutionId, institutionId })
       .populate('studentId', 'firstName lastName rollNumber email phone')
       .populate('studentTransportId', 'routeName vehicleNumber pickupPoint pickupTime dropPoint dropTime')
       .populate('collectedBy', 'name email');
@@ -341,7 +333,6 @@ export const updateTransportFee = async (req, res) => {
     
     const { feeId } = req.params;
     const { feeAmount, dueDate, discount, discountReason, remarks } = req.body;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Validation
@@ -354,7 +345,7 @@ export const updateTransportFee = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const fee = await TransportFee.findOne({ _id: feeId, schoolId, institutionId });
+    const fee = await TransportFee.findOne({ _id: feeId, institutionId, institutionId });
     
     if (!fee) {
       return notFoundResponse(res, 'Transport fee not found');
@@ -370,7 +361,7 @@ export const updateTransportFee = async (req, res) => {
     await fee.save();
     
     // Invalidate cache
-    await deleteCachePattern(`transport:fees:${schoolId}:${institutionId}`);
+    await deleteCachePattern(`transport:fees:${institutionId}:${institutionId}`);
     
     logger.info('Transport fee updated successfully');
     return successResponse(res, fee, 'Transport fee updated successfully');
@@ -386,7 +377,6 @@ export const deleteTransportFee = async (req, res) => {
     logger.info('Deleting transport fee');
     
     const { feeId } = req.params;
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     
     // Validation
@@ -399,7 +389,7 @@ export const deleteTransportFee = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const fee = await TransportFee.findOne({ _id: feeId, schoolId, institutionId });
+    const fee = await TransportFee.findOne({ _id: feeId, institutionId, institutionId });
     
     if (!fee) {
       return notFoundResponse(res, 'Transport fee not found');
@@ -412,7 +402,7 @@ export const deleteTransportFee = async (req, res) => {
     await TransportFee.deleteOne({ _id: feeId });
     
     // Invalidate cache
-    await deleteCachePattern(`transport:fees:${schoolId}:${institutionId}`);
+    await deleteCachePattern(`transport:fees:${institutionId}:${institutionId}`);
     
     logger.info('Transport fee deleted successfully');
     return successResponse(res, null, 'Transport fee deleted successfully');
@@ -427,12 +417,11 @@ export const getTransportFeeStats = async (req, res) => {
   try {
     logger.info('Fetching transport fee statistics');
     
-    const schoolId = req.user.schoolId;
     const institutionId = req.user.institutionId;
     const { academicYear } = req.query;
     
     // Try to get from cache first
-    const cacheKey = `transport:fees:stats:${schoolId}:${institutionId || 'default'}:${academicYear || 'all'}`;
+    const cacheKey = `transport:fees:stats:${institutionId}:${institutionId || 'default'}:${academicYear || 'all'}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -441,7 +430,7 @@ export const getTransportFeeStats = async (req, res) => {
     }
     
     // Build query
-    const query = { schoolId, institutionId };
+    const query = { institutionId, institutionId };
     if (academicYear) query.academicYear = academicYear;
     
     const [totalFees, paidFees, pendingFees, partialFees, overdueFees] = await Promise.all([

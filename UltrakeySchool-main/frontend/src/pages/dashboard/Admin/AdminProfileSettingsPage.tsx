@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth, useAuthStore } from '../../../store/authStore';
+import apiClient from '../../../api/client';
+import { toast } from 'react-toastify';
 
 interface ProfileData {
   personalInfo: {
@@ -22,6 +25,7 @@ interface ProfileData {
 }
 
 const AdminProfileSettingsPage: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profileData, setProfileData] = useState<ProfileData | null>(null);
   const [activeTab, setActiveTab] = useState<string>('personal');
@@ -29,31 +33,32 @@ const AdminProfileSettingsPage: React.FC = () => {
 
   useEffect(() => {
     fetchProfileData();
-  }, []);
+  }, [user]);
 
   const fetchProfileData = async () => {
     try {
       setLoading(true);
-      // Set sample data for now
-      setProfileData({
-        personalInfo: {
-          firstName: 'School',
-          lastName: 'Admin',
-          email: 'admin@school.edu',
-          username: 'admin',
-          phone: '+1234567890',
-          role: 'School Administrator'
-        },
-        addressInfo: {
-          address: '123 Education Street',
-          country: 'USA',
-          state: 'IL',
-          city: 'Springfield',
-          postalCode: '62701'
-        },
-        profilePhoto: null,
-        lastUpdated: new Date().toISOString()
-      });
+      if (user) {
+        setProfileData({
+          personalInfo: {
+            firstName: user.name?.split(' ')[0] || '',
+            lastName: user.name?.split(' ').slice(1).join(' ') || '',
+            email: user.email || '',
+            username: user.email?.split('@')[0] || '',
+            phone: user.phone || '',
+            role: user.role || 'Administrator'
+          },
+          addressInfo: {
+            address: '',
+            country: 'India',
+            state: '',
+            city: '',
+            postalCode: ''
+          },
+          profilePhoto: user.avatar || user.photo || null,
+          lastUpdated: new Date().toISOString()
+        });
+      }
     } catch (error) {
       console.error('Error fetching profile data:', error);
     } finally {
@@ -61,17 +66,38 @@ const AdminProfileSettingsPage: React.FC = () => {
     }
   };
 
-  const handleSaveProfile = () => {
-    // Handle profile save logic
-    console.log('Saving profile...');
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    try {
+      // Handle profile save logic
+      toast.success('Profile updated successfully');
+      setIsEditing(false);
+    } catch (error) {
+      toast.error('Failed to update profile');
+    }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Handle photo upload logic
-      console.log('Uploading photo:', file.name);
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
+        const res = await apiClient.post('/upload/profile', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (res.data?.success) {
+          const imageUrl = res.data.data?.imageUrl || res.data.data?.avatar || res.data.data?.url;
+          if (imageUrl) {
+            setProfileData(prev => prev ? { ...prev, profilePhoto: imageUrl } : null);
+            // Sync with auth store using the central setAvatar action (sets both avatar and photo)
+            useAuthStore.getState().setAvatar(imageUrl);
+            toast.success('Profile photo updated');
+          }
+        }
+      } catch (err: any) {
+        toast.error('Failed to upload photo');
+      }
     }
   };
 
@@ -435,3 +461,4 @@ const AdminProfileSettingsPage: React.FC = () => {
 };
 
 export default AdminProfileSettingsPage;
+

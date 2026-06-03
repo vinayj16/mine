@@ -57,7 +57,7 @@ const validateDateRange = (startDate, endDate) => {
 };
 
 // Helper function to get institution ID
-const getInstitutionId = (req) => req.user?.schoolId || req.user?.institutionId || req.tenantId;
+const getInstitutionId = (req) => req.user?.institutionId || req.user?.institutionId || req.tenantId;
 
 // Get comprehensive student report
 const getStudentReport = async (req, res) => {
@@ -66,7 +66,7 @@ const getStudentReport = async (req, res) => {
     
     const { studentId } = req.params;
     const { academicYear } = req.query;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -74,7 +74,7 @@ const getStudentReport = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -97,11 +97,11 @@ const getStudentReport = async (req, res) => {
     const currentYear = academicYear || new Date().getFullYear();
     
     const [studentDetails, attendance, fees, results, homework] = await Promise.all([
-      studentService.getStudentDetails(studentId, schoolId),
-      studentService.getStudentAttendance(studentId, schoolId, { startDate: new Date(currentYear + '-01-01') }),
-      studentService.getStudentFees(studentId, schoolId, { academicYear: currentYear }),
-      studentService.getStudentResults(studentId, schoolId, { academicYear: currentYear }),
-      homeWorkService.getHomeWorks(schoolId, { studentId }, { page: 1, limit: 100 })
+      studentService.getStudentDetails(studentId, institutionId),
+      studentService.getStudentAttendance(studentId, institutionId, { startDate: new Date(currentYear + '-01-01') }),
+      studentService.getStudentFees(studentId, institutionId, { academicYear: currentYear }),
+      studentService.getStudentResults(studentId, institutionId, { academicYear: currentYear }),
+      homeWorkService.getHomeWorks(institutionId, { studentId }, { page: 1, limit: 100 })
     ]);
     
     if (!studentDetails) {
@@ -169,12 +169,12 @@ const getAttendanceReport = async (req, res) => {
     logger.info('Generating attendance report');
     
     const { classId, sectionId, startDate, endDate, date } = req.query;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -202,7 +202,7 @@ const getAttendanceReport = async (req, res) => {
     
     // Get attendance data
     const targetDate = date ? new Date(date) : new Date();
-    const attendance = await attendanceService.getBulkAttendance(schoolId, 'student', targetDate);
+    const attendance = await attendanceService.getBulkAttendance(institutionId, 'student', targetDate);
     
     // Filter by class and section if provided
     let filteredAttendance = attendance || [];
@@ -245,12 +245,12 @@ const getFeeReport = async (req, res) => {
     logger.info('Generating fee report');
     
     const { period, format } = req.query;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.query.institutionId || req.query.institutionId || req.user?.institutionId || req.user?.institutionId || req.tenantId;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -267,7 +267,7 @@ const getFeeReport = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const report = await feeService.getFeesReport(schoolId, period, reportFormat);
+    const report = await feeService.getFeesReport(institutionId, period, reportFormat);
     
     logger.info('Fee report generated successfully');
     return successResponse(res, report, 'Fee report generated successfully');
@@ -480,12 +480,12 @@ const getAcademicPerformanceReport = async (req, res) => {
     logger.info('Generating academic performance report');
     
     const { classId, sectionId, subjectId, academicYear } = req.query;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -508,7 +508,7 @@ const getAcademicPerformanceReport = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const report = await studentService.getAcademicPerformanceReport(schoolId, {
+    const report = await studentService.getAcademicPerformanceReport(institutionId, {
       classId,
       sectionId,
       subjectId,
@@ -529,12 +529,12 @@ const getHomeworkReport = async (req, res) => {
     logger.info('Generating homework report');
     
     const { classId, sectionId, subjectId, startDate, endDate } = req.query;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -560,7 +560,7 @@ const getHomeworkReport = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const report = await homeWorkService.getHomeworkReport(schoolId, {
+    const report = await homeWorkService.getHomeworkReport(institutionId, {
       classId,
       sectionId,
       subjectId,
@@ -582,12 +582,12 @@ const exportReport = async (req, res) => {
     logger.info('Exporting report');
     
     const { reportType, format, parameters } = req.body;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
     
-    if (!schoolId) {
+    if (!institutionId) {
       errors.push('School ID is required');
     }
     
@@ -611,7 +611,7 @@ const exportReport = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await scheduledReportService.exportReport(schoolId, {
+    const exportData = await scheduledReportService.exportReport(institutionId, {
       reportType,
       format: format.toLowerCase(),
       parameters

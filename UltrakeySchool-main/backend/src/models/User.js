@@ -52,18 +52,12 @@ const userSchema = new mongoose.Schema({
   }],
   institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Institution'
-  },
-  institution: {
-    type: String,
-    default: null
+    ref: 'Institution',
+    required: false
   },
   institutionCode: {
     type: String,
     default: null
-  },
-  schoolId: {
-    type: String
   },
   avatar: {
     type: String
@@ -269,13 +263,35 @@ const userSchema = new mongoose.Schema({
       default: false
     }
   },
-  personalQRCode: {
-    data: String,
-    imageUrl: String,
-    generatedAt: Date
+  // Library membership fields
+  isLibraryMember: {
+    type: Boolean,
+    default: false
+  },
+  libraryMemberSince: {
+    type: Date,
+    default: null
+  },
+  libraryMemberExpiry: {
+    type: Date,
+    default: null
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+userSchema.virtual('age').get(function() {
+  if (!this.dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(this.dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
 });
 
 userSchema.index({ institutionId: 1, role: 1 });

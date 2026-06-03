@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const studentResultSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -105,7 +105,7 @@ const studentResultSchema = new mongoose.Schema({
   timestamps: true
 });
 
-studentResultSchema.index({ schoolId: 1, studentId: 1, academicYear: 1 });
+studentResultSchema.index({ institutionId: 1, studentId: 1, academicYear: 1 });
 studentResultSchema.index({ examId: 1, studentId: 1 }, { unique: true });
 
 const StudentResult = mongoose.model('StudentResult', studentResultSchema);

@@ -60,6 +60,8 @@ export interface StudentFilters {
   class?: string;
   section?: string;
   status?: string;
+  branchId?: string;
+  institutionId?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -83,9 +85,11 @@ export const studentService = {
         page: filters.page || 1,
         limit: filters.limit || 10,
         ...(filters.search && { search: filters.search }),
-        ...(filters.class && { class: filters.class }),
+        ...(filters.class && { classId: filters.class }),
         ...(filters.section && { section: filters.section }),
         ...(filters.status && { status: filters.status }),
+        ...(filters.branchId && { branchId: filters.branchId }),
+        ...(filters.institutionId && { institutionId: filters.institutionId }),
         ...(filters.sortBy && { sortBy: filters.sortBy }),
         ...(filters.sortOrder && { sortOrder: filters.sortOrder }),
       };
@@ -120,6 +124,22 @@ export const studentService = {
       return response.data;
     } catch (error) {
       console.error('[Student Service] Failed to fetch student:', error);
+      throw error;
+    }
+  },
+
+  // Get logged-in student's profile (self-service)
+  async getMyProfile(): Promise<Student> {
+    try {
+      const response = await apiService.get<Student>('/students/me');
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch student profile');
+      }
+      
+      return response.data;
+    } catch (error) {
+      console.error('[Student Service] Failed to fetch my profile:', error);
       throw error;
     }
   },

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { apiService } from '../../services/api';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 interface AccountRequest {
   _id: string;
@@ -17,6 +19,8 @@ const PendingRequestsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
   const fetchRequests = async () => {
     try {
@@ -40,22 +44,29 @@ const PendingRequestsPage: React.FC = () => {
       await apiService.patch(`/admin/account-requests/${id}/approve`, {});
       setRequests(prev => prev.map(r => r._id === id ? { ...r, status: 'approved' } : r));
     } catch (err: any) {
-      alert(err?.message || 'Failed to approve request');
+      toast.error(err?.message || 'Failed to approve request');
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleReject = async (id: string) => {
-    if (!window.confirm('Reject this request?')) return;
+  const handleReject = (id: string) => {
+    setShowConfirm(true);
+    setConfirmTarget(id);
+  };
+
+  const handleConfirmReject = async () => {
+    if (!confirmTarget) return;
     try {
-      setActionLoading(id);
-      await apiService.patch(`/admin/account-requests/${id}/reject`, {});
-      setRequests(prev => prev.map(r => r._id === id ? { ...r, status: 'rejected' } : r));
+      setActionLoading(confirmTarget);
+      await apiService.patch(`/admin/account-requests/${confirmTarget}/reject`, {});
+      setRequests(prev => prev.map(r => r._id === confirmTarget ? { ...r, status: 'rejected' } : r));
     } catch (err: any) {
-      alert(err?.message || 'Failed to reject request');
+      toast.error(err?.message || 'Failed to reject request');
     } finally {
       setActionLoading(null);
+      setShowConfirm(false);
+      setConfirmTarget(null);
     }
   };
 
@@ -68,7 +79,7 @@ const PendingRequestsPage: React.FC = () => {
   };
 
   return (
-    <div className="container-fluid">
+    <><div className="container-fluid">
       <div className="d-md-flex d-block align-items-center justify-content-between mb-4">
         <div>
           <h3 className="page-title mb-1">Pending Requests</h3>
@@ -207,6 +218,8 @@ const PendingRequestsPage: React.FC = () => {
         </div>
       )}
     </div>
+      <ConfirmModal isOpen={showConfirm} onClose={() => { setShowConfirm(false); setConfirmTarget(null); }} onConfirm={handleConfirmReject} message="Reject this request?" />
+    </>
   );
 };
 

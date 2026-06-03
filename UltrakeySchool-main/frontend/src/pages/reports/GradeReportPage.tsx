@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import Avatar from '../../components/common/Avatar';
 
 interface SubjectMarks {
   subjectId?: string;
@@ -50,49 +52,73 @@ const GradeReportPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gradeReports, setGradeReports] = useState<GradeReport[]>([]);
+  const [studentInfo, setStudentInfo] = useState<{ name: string; class: string; roll: string } | null>(null);
   const [filters, setFilters] = useState({
     classId: '',
     examId: '',
-    academicYear: '2024-2025',
+    academicYear: '',
     term: '',
-    status: 'published'
+    status: ''
   });
+  const currentYear = new Date().getFullYear();
+  const acYears = [`${currentYear}-${currentYear+1}`, `${currentYear-1}-${currentYear}`, `${currentYear-2}-${currentYear-1}`];
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011';
+  // Get institutionId from localStorage
+  const getInstitutionId = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) { const user = JSON.parse(userStr); return user.institutionId || user.institutionId || ''; }
+    } catch { /* empty */ }
+    return localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || '';
+  };
+  const institutionId = getInstitutionId();
 
   const fetchGradeReports = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      let studentId = '';
+      try {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          if (user.role === 'student') {
+            const meResp = await apiClient.get('/students/me');
+            if (meResp.data?.success) {
+              const me = meResp.data.data;
+              studentId = me._id;
+              setStudentInfo({
+                name: `${me.firstName || ''} ${me.lastName || ''}`.trim() || me.name || 'Student',
+                class: me.classId?.name || '',
+                roll: me.rollNumber || ''
+              });
+            }
+          }
+        }
+      } catch { /* empty - fall through with filters */ }
+
       const params: any = { 
-        schoolId
+        institutionId
       };
       
-      if (filters.classId) params.classId = filters.classId;
-      if (filters.examId) params.examId = filters.examId;
+      if (studentId) params.studentId = studentId;
       if (filters.academicYear) params.academicYear = filters.academicYear;
       if (filters.term) params.term = filters.term;
       if (filters.status) params.status = filters.status;
 
-      const response = await apiClient.get(`/results/schools/${schoolId}`, {
+      const response = await apiClient.get(`/results`, {
         params
       });
 
       if (response.data.success) {
         const results = response.data.data || [];
         setGradeReports(results);
-        
-        if (results.length === 0) {
-          toast.info('No grade reports found for the selected filters');
-        }
       }
     } catch (err: any) {
       console.error('Error fetching grade reports:', err);
-      const errorMessage = err.response?.data?.message || 'Failed to load grade reports';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      setError('Failed to load grade reports');
+      toast.error('Failed to load grade reports');
     } finally {
       setLoading(false);
     }
@@ -121,15 +147,28 @@ const GradeReportPage: React.FC = () => {
     setFilters({
       classId: '',
       examId: '',
-      academicYear: '2024-2025',
+      academicYear: '',
       term: '',
-      status: 'published'
+      status: ''
     });
+    setGradeReports([]);
     fetchGradeReports();
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export to ${type} feature coming soon`);
+    if (!gradeReports.length) { toast.error('No data to export'); return; }
+    const exportData = gradeReports.map(r => ({
+      'Admission No': r.studentId?.admissionNumber || '',
+      'Student Name': `${r.studentId?.firstName || ''} ${r.studentId?.lastName || ''}`,
+      Total: r.totalMarksObtained || 0,
+      'Percent(%)': r.percentage || 0,
+      Grade: r.overallGrade || '-'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'grade-report', Object.keys(exportData[0]).map(k => ({ key: k, label: k })));
+    } else {
+      exportToExcel(exportData, 'grade-report');
+    }
   };
 
   const getGradeClass = (grade: string) => {
@@ -223,7 +262,7 @@ const GradeReportPage: React.FC = () => {
                   type="text" 
                   className="form-control date-range bookingrange" 
                   placeholder="Select"
-                  value="Academic Year : 2024 / 2025" 
+                  value={studentInfo ? `${studentInfo.name}${studentInfo.class ? ' - ' + studentInfo.class : ''}` : 'Grade Report'} 
                   readOnly
                 />
               </div>
@@ -283,9 +322,7 @@ const GradeReportPage: React.FC = () => {
                         onChange={handleFilterChange}
                       >
                         <option value="">All Years</option>
-                        <option value="2024-2025">2024-2025</option>
-                        <option value="2023-2024">2023-2024</option>
-                        <option value="2022-2023">2022-2023</option>
+                        {acYears.map(y => <option key={y} value={y}>{y}</option>)}
                       </select>
                     </div>
                   </div>
@@ -369,8 +406,8 @@ const GradeReportPage: React.FC = () => {
           {!loading && !error && gradeReports.length === 0 && (
             <div className="card-body text-center py-5">
               <i className="ti ti-report-analytics" style={{ fontSize: '48px', color: '#ccc' }}></i>
-              <p className="mt-2 text-muted">No grade reports found</p>
-              <p className="text-muted small">Grade reports will appear here once exam results are recorded</p>
+              <p className="mt-2 text-muted">No grade reports found for this student</p>
+              <p className="text-muted small">Grade reports will appear here once exam results are recorded for the selected filters</p>
             </div>
           )}
 
@@ -383,8 +420,8 @@ const GradeReportPage: React.FC = () => {
                   <tr>
                     <th>Admission No</th>
                     <th>Student Name</th>
-                    {gradeReports[0]?.subjects.map((subject, idx) => (
-                      <th key={idx}>{subject.subjectName}</th>
+                    {(gradeReports[0]?.subjects || []).map((subject, idx) => (
+                      <th key={idx}>{subject?.subjectName || 'Subject ' + (idx + 1)}</th>
                     ))}
                     <th>Total</th>
                     <th>Percent(%)</th>
@@ -392,51 +429,50 @@ const GradeReportPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {gradeReports.map((report) => (
+                  {gradeReports.map((report) => {
+                    const sid = report.studentId || {};
+                    const sidName = `${sid.firstName || ''} ${sid.lastName || ''}`.trim() || 'Student';
+                    return (
                     <tr key={report._id}>
                       <td>
                         <Link to="#" className="link-primary">
-                          {report.studentId.admissionNumber}
+                          {sid.admissionNumber || 'N/A'}
                         </Link>
                       </td>
                       <td>
                         <div className="d-flex align-items-center">
-                          {report.studentId.avatar ? (
-                            <img
-                              src={report.studentId.avatar}
-                              className="avatar avatar-md rounded-circle me-2"
-                              alt={`${report.studentId.firstName} ${report.studentId.lastName}`}
-                            />
-                          ) : (
-                            <div className="avatar avatar-md rounded-circle me-2 bg-light d-flex align-items-center justify-content-center">
-                              <i className="ti ti-user fs-16 text-muted"></i>
-                            </div>
-                          )}
+                          <Avatar
+                            name={sidName}
+                            src={sid.avatar}
+                            size={36}
+                            className="me-2"
+                          />
                           <div>
                             <p className="text-dark mb-0">
                               <Link to="#">
-                                {report.studentId.firstName} {report.studentId.lastName}
+                                {sidName}
                               </Link>
                             </p>
-                            {report.studentId.rollNumber && (
-                              <span className="fs-12">Roll No : {report.studentId.rollNumber}</span>
+                            {sid.rollNumber && (
+                              <span className="fs-12">Roll No : {sid.rollNumber}</span>
                             )}
                           </div>
                         </div>
                       </td>
-                      {report.subjects.map((subject, idx) => (
+                      {(report.subjects || []).map((subject, idx) => (
                         <td 
                           key={idx}
-                          className={isFailingMark(subject.marksObtained) ? 'text-danger' : ''}
+                          className={isFailingMark(subject?.marksObtained ?? 0) ? 'text-danger' : ''}
                         >
-                          {subject.marksObtained}/{subject.totalMarks}
+                          {subject?.marksObtained ?? 0}/{subject?.totalMarks ?? 0}
                         </td>
                       ))}
-                      <td>{report.totalMarksObtained}/{report.totalMaxMarks}</td>
-                      <td>{report.percentage.toFixed(2)}%</td>
-                      <td className={getGradeClass(report.overallGrade)}>{report.overallGrade}</td>
+                      <td>{report.totalMarksObtained || 0}/{report.totalMaxMarks || 0}</td>
+                      <td>{(report.percentage ?? 0).toFixed(2)}%</td>
+                      <td className={getGradeClass(report.overallGrade || '')}>{report.overallGrade || '-'}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

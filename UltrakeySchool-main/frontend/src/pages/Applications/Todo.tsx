@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
 import todoService from "../../services/todoService";
+import ConfirmModal from "../../components/common/ConfirmModal";
 
 const TodoDropdown: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
@@ -41,14 +42,6 @@ const getUserId = (): string => {
   return '';
 };
 
-const getUserName = (): string => {
-  const userData = localStorage.getItem('user');
-  if (userData) {
-    const parsed = JSON.parse(userData);
-    return parsed.name || 'User';
-  }
-  return 'User';
-};
 
 const TodoPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("inbox");
@@ -56,6 +49,8 @@ const TodoPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPermanentDeleteModal, setShowPermanentDeleteModal] = useState(false);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
@@ -70,7 +65,6 @@ const TodoPage: React.FC = () => {
   });
 
   const userId = getUserId();
-  const userName = getUserName();
 
   const loadTodosFromStorage = (userId: string): Todo[] => {
     try {
@@ -93,100 +87,88 @@ const TodoPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const stored = localStorage.getItem(`todos_${userId}`);
-    if (stored) {
-      try {
-        setTodos(JSON.parse(stored));
-      } catch {
-        setTodos([]);
-      }
-    }
+    fetchTodos();
   }, [userId]);
 
-  const saveTodos = (newTodos: Todo[]) => {
-    localStorage.setItem(`todos_${userId}`, JSON.stringify(newTodos));
-    setTodos(newTodos);
-  };
 
-  const addTodo = () => {
+
+  const addTodo = async () => {
     if (!newTodo.title?.trim()) {
       toast.error('Please enter a title');
       return;
     }
-    const todo: Todo = {
-      _id: `todo_${Date.now()}`,
-      title: newTodo.title || '',
-      description: newTodo.description || '',
-      priority: (newTodo.priority as 'high' | 'medium' | 'low') || 'medium',
-      status: 'new',
-      completed: false,
-      important: newTodo.important || false,
-      userId,
-      userName,
-      tags: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const updated = [todo, ...todos];
-    saveTodos(updated);
-    setNewTodo({ title: "", description: "", priority: "medium", status: "new", important: false });
-    setShowAddModal(false);
-    toast.success('Task added');
+    
+    let uid = userId;
+    let uname = '';
+    if (!uid) {
+      try { const u = JSON.parse(localStorage.getItem('user') || '{}'); uid = u.id || u._id || ''; uname = u.name || ''; } catch { /* */ }
+    }
+    try {
+      setLoading(true);
+      await todoService.createTodo({
+        title: newTodo.title,
+        description: newTodo.description || '',
+        priority: newTodo.priority,
+        status: newTodo.status,
+        important: newTodo.important || false,
+        userId: uid,
+        userName: uname,
+      });
+      
+      toast.success('Task added');
+      setNewTodo({ title: "", description: "", priority: "medium", status: "new", important: false });
+      setShowAddModal(false);
+      fetchTodos();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to add task');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const currentFilteredTodos = todos.filter(t => {
-    if (activeTab === 'inbox') return t.status !== 'trash';
+    if (activeTab === 'inbox') return t.status !== 'trash' && !t.completed;
     if (activeTab === 'important') return t.important && t.status !== 'trash';
-    if (activeTab === 'completed') return t.completed;
+    if (activeTab === 'completed' || activeTab === 'done') return t.completed;
+    if (activeTab === 'trash') return t.status === 'trash';
     return true;
   });
 
   const fetchTodos = async () => {
     try {
       setLoading(true);
-      
-      // First try to load from localStorage
-      if (userId) {
-        const savedTodos = loadTodosFromStorage(userId);
-        if (savedTodos.length > 0) {
-          // Filter saved todos based on active tab
-          let filteredTodos = savedTodos;
-          if (activeTab === 'done') {
-            filteredTodos = savedTodos.filter((t) => t.completed);
-          } else if (activeTab === 'trash') {
-            filteredTodos = savedTodos.filter((t) => t.status === "trash");
-          } else if (activeTab === 'important') {
-            filteredTodos = savedTodos.filter((t) => t.important && t.status !== "trash");
-          } else {
-            filteredTodos = savedTodos.filter((t) => t.status !== "trash" && !t.completed);
-          }
-          setTodos(filteredTodos);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // If no saved todos or userId not available, fetch from API
+
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      const isSuperAdmin = (userData.role || '').toLowerCase() === 'superadmin' || (userData.role || '').toLowerCase() === 'super_admin';
+
       const response = await todoService.getAllTodos({
         status: activeTab === 'done' ? 'completed' : activeTab === 'trash' ? 'trash' : undefined,
         important: activeTab === 'important' ? true : undefined,
-        userId: userId
+        userId: isSuperAdmin ? undefined : userId
       });
 
-      const fetchedTodos = (response.data?.todos || response.data || []).map((todo: any) => ({
+      // API response: { success, data: { todos, pagination }, message }
+      const todosData = response?.data?.todos || response?.data || [];
+      const fetchedTodos = (Array.isArray(todosData) ? todosData : Array.isArray(response) ? response : []).map((todo: any) => ({
         ...todo,
         status: todo.status as Todo['status']
       }));
       
-      // Save fetched todos to localStorage
-      if (userId && fetchedTodos.length > 0) {
+      // Save fetched todos to localStorage for backup
+      if (userId) {
         saveTodosToStorage(userId, fetchedTodos);
       }
       
       setTodos(fetchedTodos);
     } catch (error: any) {
       console.error('Error fetching todos:', error);
-      toast.error(error.response?.data?.message || 'Failed to fetch todos');
+      // Fallback to local storage
+      const savedTodos = loadTodosFromStorage(userId);
+      if (savedTodos.length > 0) {
+        setTodos(savedTodos);
+      } else {
+        toast.error(error.response?.data?.message || 'Failed to fetch todos');
+      }
     } finally {
       setLoading(false);
     }
@@ -286,14 +268,21 @@ const TodoPage: React.FC = () => {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    if (!window.confirm('Permanently delete this todo?')) return;
+    setPermanentDeleteTarget(id);
+    setShowPermanentDeleteModal(true);
+  };
+
+  const handlePermanentDeleteConfirm = async () => {
+    if (!permanentDeleteTarget) return;
     try {
-      await todoService.permanentDelete(id);
+      await todoService.permanentDelete(permanentDeleteTarget);
       toast.success('Todo permanently deleted');
       fetchTodos();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to delete todo');
     }
+    setShowPermanentDeleteModal(false);
+    setPermanentDeleteTarget(null);
   };
 
   const handleToggleImportant = async (id: string) => {
@@ -657,6 +646,8 @@ const TodoPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showPermanentDeleteModal} onClose={() => { setShowPermanentDeleteModal(false); setPermanentDeleteTarget(null); }} onConfirm={handlePermanentDeleteConfirm} message="Permanently delete this todo?" />
 
       {showDeleteModal && selectedTodo && (
         <div className="modal fade show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={(e) => e.target === e.currentTarget && setShowDeleteModal(false)}>

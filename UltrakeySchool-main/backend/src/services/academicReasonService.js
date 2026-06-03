@@ -4,10 +4,10 @@ class AcademicReasonService {
   /**
    * Create a new academic reason
    */
-  async createReason(schoolId, reasonData, userId) {
+  async createReason(institutionId, reasonData, userId) {
     const reason = await AcademicReason.create({
       ...reasonData,
-      schoolId,
+      institutionId,
       createdBy: userId
     });
     return reason;
@@ -16,10 +16,10 @@ class AcademicReasonService {
   /**
    * Get all reasons with filters
    */
-  async getReasons(schoolId, filters = {}, options = {}) {
+  async getReasons(institutionId, filters = {}, options = {}) {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = options;
     
-    const query = { schoolId, ...filters };
+    const query = { institutionId, ...filters };
     const skip = (page - 1) * limit;
     
     const [reasons, total] = await Promise.all([
@@ -44,8 +44,8 @@ class AcademicReasonService {
   /**
    * Get reason by ID
    */
-  async getReasonById(reasonId, schoolId) {
-    const reason = await AcademicReason.findOne({ _id: reasonId, schoolId });
+  async getReasonById(reasonId, institutionId) {
+    const reason = await AcademicReason.findOne({ _id: reasonId, institutionId });
     if (!reason) {
       throw new Error('Reason not found');
     }
@@ -55,9 +55,9 @@ class AcademicReasonService {
   /**
    * Update reason
    */
-  async updateReason(reasonId, schoolId, updates, userId) {
+  async updateReason(reasonId, institutionId, updates, userId) {
     const reason = await AcademicReason.findOneAndUpdate(
-      { _id: reasonId, schoolId },
+      { _id: reasonId, institutionId },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     );
@@ -70,9 +70,9 @@ class AcademicReasonService {
   /**
    * Delete reason (soft delete)
    */
-  async deleteReason(reasonId, schoolId) {
+  async deleteReason(reasonId, institutionId) {
     const reason = await AcademicReason.findOneAndUpdate(
-      { _id: reasonId, schoolId },
+      { _id: reasonId, institutionId },
       { status: 'inactive' },
       { new: true }
     );
@@ -85,29 +85,29 @@ class AcademicReasonService {
   /**
    * Get reasons by role
    */
-  async getReasonsByRole(schoolId, role) {
-    return await AcademicReason.find({ schoolId, role, status: 'active' });
+  async getReasonsByRole(institutionId, role) {
+    return await AcademicReason.find({ institutionId, role, status: 'active' });
   }
 
   /**
    * Get reasons by category
    */
-  async getReasonsByCategory(schoolId, category) {
-    return await AcademicReason.find({ schoolId, category, status: 'active' });
+  async getReasonsByCategory(institutionId, category) {
+    return await AcademicReason.find({ institutionId, category, status: 'active' });
   }
 
   /**
    * Get reasons by severity
    */
-  async getReasonsBySeverity(schoolId, severity) {
-    return await AcademicReason.find({ schoolId, severity, status: 'active' });
+  async getReasonsBySeverity(institutionId, severity) {
+    return await AcademicReason.find({ institutionId, severity, status: 'active' });
   }
 
   /**
    * Get analytics
    */
-  async getAnalytics(schoolId) {
-    const reasons = await AcademicReason.find({ schoolId });
+  async getAnalytics(institutionId) {
+    const reasons = await AcademicReason.find({ institutionId });
     const activeReasons = reasons.filter(r => r.status === 'active');
 
     const reasonsByCategory = {};
@@ -138,9 +138,9 @@ class AcademicReasonService {
   /**
    * Increment usage count
    */
-  async incrementUsage(reasonId, schoolId) {
+  async incrementUsage(reasonId, institutionId) {
     const reason = await AcademicReason.findOneAndUpdate(
-      { _id: reasonId, schoolId },
+      { _id: reasonId, institutionId },
       { 
         $inc: { usageCount: 1 },
         lastUsed: new Date()
@@ -153,9 +153,9 @@ class AcademicReasonService {
   /**
    * Bulk delete reasons
    */
-  async bulkDeleteReasons(reasonIds, schoolId) {
+  async bulkDeleteReasons(reasonIds, institutionId) {
     const result = await AcademicReason.updateMany(
-      { _id: { $in: reasonIds }, schoolId },
+      { _id: { $in: reasonIds }, institutionId },
       { status: 'inactive' }
     );
     return { deletedCount: result.modifiedCount };
@@ -164,8 +164,8 @@ class AcademicReasonService {
   /**
    * Toggle reason status
    */
-  async toggleStatus(reasonId, schoolId) {
-    const reason = await AcademicReason.findOne({ _id: reasonId, schoolId });
+  async toggleStatus(reasonId, institutionId) {
+    const reason = await AcademicReason.findOne({ _id: reasonId, institutionId });
     if (!reason) {
       throw new Error('Reason not found');
     }
@@ -177,8 +177,8 @@ class AcademicReasonService {
   /**
    * Get most used reasons
    */
-  async getMostUsedReasons(schoolId, limit = 10, filters = {}) {
-    const query = { schoolId, status: 'active', ...filters };
+  async getMostUsedReasons(institutionId, limit = 10, filters = {}) {
+    const query = { institutionId, status: 'active', ...filters };
     return await AcademicReason.find(query)
       .sort({ usageCount: -1 })
       .limit(limit);
@@ -187,10 +187,10 @@ class AcademicReasonService {
   /**
    * Search reasons with filters
    */
-  async searchReasons(schoolId, query, limit = 20, filters = {}) {
+  async searchReasons(institutionId, query, limit = 20, filters = {}) {
     const regex = new RegExp(query, 'i');
     const searchQuery = {
-      schoolId,
+      institutionId,
       status: 'active',
       $or: [
         { reason: regex },
@@ -204,8 +204,8 @@ class AcademicReasonService {
   /**
    * Export reasons to CSV
    */
-  async exportToCSV(schoolId, filters = {}) {
-    const reasons = await AcademicReason.find({ schoolId, ...filters });
+  async exportToCSV(institutionId, filters = {}) {
+    const reasons = await AcademicReason.find({ institutionId, ...filters });
     
     if (reasons.length === 0) {
       return 'reason,description,role,category,severity,status,usageCount\n';

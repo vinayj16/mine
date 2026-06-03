@@ -361,7 +361,7 @@ export const alerting = {
     logger.error(`CRITICAL ALERT: ${message}`, context);
 
     if (Sentry) {
-      errorTracking.captureMessage(`🚨 CRITICAL: ${message}`, 'fatal', {
+      errorTracking.captureMessage(`[CRITICAL] ${message}`, 'fatal', {
         ...context,
         alert_type: 'critical'
       });
@@ -378,7 +378,7 @@ export const alerting = {
     logger.warn(`SYSTEM ALERT: ${message}`, context);
 
     if (Sentry) {
-      errorTracking.captureMessage(`⚠️ SYSTEM: ${message}`, 'warning', {
+      errorTracking.captureMessage(`[SYSTEM] ${message}`, 'warning', {
         ...context,
         alert_type: 'system'
       });
@@ -392,7 +392,7 @@ export const alerting = {
     logger.warn(`PERFORMANCE ALERT: ${message}`, context);
 
     if (Sentry) {
-      errorTracking.captureMessage(`🐌 PERFORMANCE: ${message}`, 'warning', {
+      errorTracking.captureMessage(`[PERFORMANCE] ${message}`, 'warning', {
         ...context,
         alert_type: 'performance'
       });

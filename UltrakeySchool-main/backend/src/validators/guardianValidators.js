@@ -1,7 +1,7 @@
 import { body, param, query } from 'express-validator';
 
-export const schoolIdValidator = [
-  param('schoolId')
+export const institutionIdValidator = [
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID')
 ];
@@ -19,7 +19,7 @@ export const studentIdValidator = [
 ];
 
 export const createGuardianValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   body('firstName')
@@ -42,7 +42,7 @@ export const createGuardianValidator = [
 ];
 
 export const updateGuardianValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   param('guardianId')
@@ -65,7 +65,7 @@ export const updateGuardianValidator = [
 ];
 
 export const addChildValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   param('guardianId')
@@ -89,7 +89,7 @@ export const addChildValidator = [
 ];
 
 export const updatePermissionsValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   param('guardianId')
@@ -119,7 +119,7 @@ export const updatePermissionsValidator = [
 ];
 
 export const searchValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   query('q')
@@ -128,7 +128,7 @@ export const searchValidator = [
 ];
 
 export const permissionValidator = [
-  param('schoolId')
+  param('institutionId')
     .notEmpty().withMessage('School ID is required')
     .isMongoId().withMessage('Invalid school ID'),
   param('permission')

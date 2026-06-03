@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import { libraryService } from '../../services/libraryService';
 
 interface IssuedBook {
   _id: string;
@@ -32,9 +35,23 @@ const LibraryIssueBookPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [showBookDetails, setShowBookDetails] = useState(false);
   const [selectedBook, setSelectedBook] = useState<IssuedBook | null>(null);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [issueLoading, setIssueLoading] = useState(false);
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [selectedBookId, setSelectedBookId] = useState<string>('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
+  const [issueDate, setIssueDate] = useState<string>('');
+  const [dueDate, setDueDate] = useState<string>('');
+  const [remarks, setRemarks] = useState<string>('');
+  const [books, setBooks] = useState<Array<{_id: string; title: string; availableCopies: number}>>([]);
+  const [members, setMembers] = useState<Array<{_id: string; name: string; userType: string}>>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<IssuedBook | null>(null);
 
   useEffect(() => {
     fetchIssuedBooks();
+    fetchAvailableBooks();
+    fetchInstitutionMembers();
   }, []);
 
   const fetchIssuedBooks = async () => {
@@ -44,7 +61,9 @@ const LibraryIssueBookPage: React.FC = () => {
       const response = await apiClient.get('/library/issues');
       
       if (response.data.success) {
-        setIssuedBooks(response.data.data || []);
+        const payload = response.data.data;
+        const issueList = Array.isArray(payload) ? payload : payload?.issues || [];
+        setIssuedBooks(issueList);
       }
     } catch (error: any) {
       console.error('Error fetching issued books:', error);
@@ -56,61 +75,197 @@ const LibraryIssueBookPage: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Issued':
-        return 'bg-primary';
-      case 'Returned':
-        return 'bg-success';
-      case 'Overdue':
-        return 'bg-danger';
-      case 'Lost':
-        return 'bg-warning';
-      default:
-        return 'bg-secondary';
+  const fetchAvailableBooks = async () => {
+    try {
+      const response = await apiClient.get('/library/books', { params: { limit: 100 } });
+      if (response.data.success) {
+        const bookList = Array.isArray(response.data.data) ? response.data.data : response.data.data?.books || [];
+        // Filter books with available copies > 0
+        const availableBooks = bookList.filter((book: any) => 
+          (book.availableCopies ?? 0) > 0
+        ).map((book: any) => ({
+          _id: book._id,
+          title: book.title,
+          availableCopies: book.availableCopies
+        }));
+        setBooks(availableBooks);
+      }
+    } catch (error: any) {
+      console.error('Error fetching books:', error);
+      toast.error('Failed to fetch available books');
     }
   };
 
-  const handleViewDetails = (book: IssuedBook) => {
-    setSelectedBook(book);
-    setShowBookDetails(true);
+  const fetchInstitutionMembers = async () => {
+    try {
+      const response = await apiClient.get('/library/members');
+      if (response.data.success) {
+        const memberList = Array.isArray(response.data.data) ? response.data.data : response.data.data?.members || [];
+        setMembers(memberList.map((member: any) => ({
+          _id: member._id,
+          name: member.name,
+          userType: member.userType || 'Student'
+        })));
+      }
+    } catch (error: any) {
+      console.error('Error fetching members:', error);
+      toast.error('Failed to fetch members');
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
-      </div>
-    );
-  }
+  const handleIssueBook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBookId || !selectedMemberId || !issueDate) {
+      setIssueError('Please fill in all required fields');
+      return;
+    }
 
-  if (error) {
-    return (
-      <div className="card">
-        <div className="card-body text-center py-5">
-          <i className="ti ti-alert-circle fs-1 text-danger mb-3"></i>
-          <h4 className="mb-3">Error Loading Issued Books</h4>
-          <p className="text-muted mb-4">{error}</p>
-          <button className="btn btn-primary" onClick={fetchIssuedBooks}>
-            <i className="ti ti-refresh me-2"></i>Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+    try {
+      setIssueLoading(true);
+      setIssueError(null);
+      
+        const issueData = {
+          bookId: selectedBookId,
+          userId: selectedMemberId,
+          issueDate: issueDate || new Date().toISOString().split('T')[0],
+        };
 
-  return (
+      const response = await apiClient.post('/library/issues', issueData);
+      
+      if (response.data.success) {
+        toast.success('Book issued successfully!');
+        setShowIssueModal(false);
+        fetchIssuedBooks(); // Refresh issued books list
+        // Reset form
+        setSelectedBookId('');
+        setSelectedMemberId('');
+        setIssueDate('');
+        setDueDate('');
+        setRemarks('');
+      } else {
+        setIssueError(response.data.message || 'Failed to issue book');
+      }
+    } catch (error: any) {
+      console.error('Error issuing book:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to issue book';
+      setIssueError(errorMessage);
+    } finally {
+      setIssueLoading(false);
+    }
+  };
+
+   const formatDate = (dateString: string): string => {
+     if (!dateString) return 'N/A';
+     return new Date(dateString).toLocaleDateString('en-IN', {
+       year: 'numeric',
+       month: 'short',
+       day: 'numeric'
+     });
+   };
+
+   const getStatusBadge = (status: string) => {
+     switch (status) {
+       case 'Issued':
+         return 'bg-primary';
+       case 'Returned':
+         return 'bg-success';
+       case 'Overdue':
+         return 'bg-danger';
+       case 'Lost':
+         return 'bg-warning';
+       default:
+         return 'bg-secondary';
+     }
+   };
+
+   const handleReturnBook = async (book: IssuedBook) => {
+     setShowDeleteModal(true);
+     setDeleteTarget(book);
+   };
+
+   const handleDeleteConfirm = async () => {
+     if (!deleteTarget) return;
+     try {
+       await libraryService.returnBook(deleteTarget._id);
+       toast.success('Book returned successfully');
+       fetchIssuedBooks();
+       setShowDeleteModal(false);
+       setDeleteTarget(null);
+     } catch (error: any) {
+       toast.error(error.response?.data?.message || 'Failed to return book');
+     }
+   };
+
+   const handleRenewBook = async (book: IssuedBook) => {
+     try {
+       await libraryService.renewBook(book._id);
+       toast.success('Book renewed successfully');
+       fetchIssuedBooks();
+     } catch (error: any) {
+       toast.error(error.response?.data?.message || 'Failed to renew book');
+     }
+   };
+
+   const handleViewDetails = (book: IssuedBook) => {
+     setSelectedBook(book);
+     setShowBookDetails(true);
+   };
+
+   if (loading) {
+     return (
+       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
+         <div className="spinner-border text-primary" role="status">
+           <span className="visually-hidden">Loading...</span>
+         </div>
+       </div>
+     );
+   }
+
+   if (error) {
+     return (
+       <div className="card">
+         <div className="card-body text-center py-5">
+           <i className="ti ti-alert-circle fs-1 text-danger mb-3"></i>
+           <h4 className="mb-3">Error Loading Issued Books</h4>
+           <p className="text-muted mb-4">{error}</p>
+           <button className="btn btn-primary" onClick={fetchIssuedBooks}>
+             <i className="ti ti-refresh me-2"></i>Retry
+           </button>
+         </div>
+       </div>
+     );
+   }
+
+   const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = issuedBooks.map(book => ({
+      ID: book._id.slice(-8),
+      'Date of Issue': formatDate(book.issueDate),
+      'Due Date': formatDate(book.dueDate),
+      'Issue To': book.user?.name || 'Unknown User',
+      'User Type': book.userType || 'Student',
+      'Books Issued': 1,
+      'Book Returned': book.returnDate ? 1 : 0,
+      Status: book.status,
+      'Fine (₹)': book.fine > 0 ? book.fine.toFixed(2) : '0'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'issued-books', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Date of Issue', label: 'Date of Issue' },
+        { key: 'Due Date', label: 'Due Date' },
+        { key: 'Issue To', label: 'Issue To' },
+        { key: 'User Type', label: 'User Type' },
+        { key: 'Books Issued', label: 'Books Issued' },
+        { key: 'Book Returned', label: 'Book Returned' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Fine (₹)', label: 'Fine (₹)' }
+      ], 'Issue Book');
+    } else {
+      exportToExcel(exportData, 'issued-books');
+    }
+  };
+
+   return (
     <>
       {/* Page Header */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
@@ -128,45 +283,53 @@ const LibraryIssueBookPage: React.FC = () => {
                 </ol>
               </nav>
             </div>
-            <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-              <div className="pe-1 mb-2">
-                <button 
-                  className="btn btn-outline-light bg-white btn-icon me-1" 
-                  onClick={fetchIssuedBooks}
-                  title="Refresh"
-                >
-                  <i className="ti ti-refresh"></i>
+        <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+          <div className="pe-1 mb-2">
+            <button 
+              className="btn btn-outline-light bg-white btn-icon me-1" 
+              onClick={fetchIssuedBooks}
+              title="Refresh"
+            >
+              <i className="ti ti-refresh"></i>
+            </button>
+          </div>
+          <div className="pe-1 mb-2">
+            <button 
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              onClick={() => window.print()}
+            >
+              <i className="ti ti-printer"></i>
+            </button>
+          </div>
+          <div className="pe-1 mb-2">
+            <button 
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              onClick={() => setShowIssueModal(true)}
+            >
+              <i className="ti ti-book-upload"></i> Issue Book
+            </button>
+          </div>
+          <div className="dropdown me-2 mb-2">
+            <button 
+              className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
+              data-bs-toggle="dropdown"
+            >
+              <i className="ti ti-file-export me-2"></i>Export
+            </button>
+            <ul className="dropdown-menu dropdown-menu-end p-3">
+              <li>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                  <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
-              </div>
-              <div className="pe-1 mb-2">
-                <button 
-                  className="btn btn-outline-light bg-white btn-icon me-1"
-                  onClick={() => window.print()}
-                >
-                  <i className="ti ti-printer"></i>
+              </li>
+              <li>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                  <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
-              </div>
-              <div className="dropdown me-2 mb-2">
-                <button 
-                  className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
-                  data-bs-toggle="dropdown"
-                >
-                  <i className="ti ti-file-export me-2"></i>Export
-                </button>
-                <ul className="dropdown-menu dropdown-menu-end p-3">
-                  <li>
-                    <a href="#!" className="dropdown-item rounded-1">
-                      <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#!" className="dropdown-item rounded-1">
-                      <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
+              </li>
+            </ul>
+          </div>
+        </div>
           </div>
 
           {/* Books List */}
@@ -349,12 +512,45 @@ const LibraryIssueBookPage: React.FC = () => {
                             </span>
                           </td>
                           <td>
-                            <button 
-                              className="btn btn-light"
-                              onClick={() => handleViewDetails(book)}
-                            >
-                              View Details
-                            </button>
+                            <div className="dropdown">
+                              <button
+                                className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                              >
+                                <i className="ti ti-dots-vertical fs-14"></i>
+                              </button>
+                              <ul className="dropdown-menu dropdown-menu-end p-3">
+                                <li>
+                                  <button
+                                    className="dropdown-item rounded-1"
+                                    onClick={() => handleViewDetails(book)}
+                                  >
+                                    <i className="ti ti-menu me-2"></i>View Details
+                                  </button>
+                                </li>
+                                {(book.status === 'Issued' || book.status === 'Overdue') && (
+                                  <li>
+                                    <button
+                                      className="dropdown-item rounded-1"
+                                      onClick={() => handleReturnBook(book)}
+                                    >
+                                      <i className="ti ti-arrow-back-up me-2"></i>Return Book
+                                    </button>
+                                  </li>
+                                )}
+                                {book.status === 'Issued' && (
+                                  <li>
+                                    <button
+                                      className="dropdown-item rounded-1"
+                                      onClick={() => handleRenewBook(book)}
+                                    >
+                                      <i className="ti ti-refresh me-2"></i>Renew
+                                    </button>
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -364,7 +560,7 @@ const LibraryIssueBookPage: React.FC = () => {
               </div>
             </div>
           </div>
-     
+      
       {/* Book Details Modal */}
       {showBookDetails && selectedBook && (
         <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -408,7 +604,7 @@ const LibraryIssueBookPage: React.FC = () => {
                             )}
                           </span>
                           <h6>
-                            {selectedBook.user.name} <br />
+                            {selectedBook.user?.name || 'Unknown User'} <br />
                             {selectedBook.userType}
                           </h6>
                         </div>
@@ -440,7 +636,7 @@ const LibraryIssueBookPage: React.FC = () => {
                       {selectedBook.fine > 0 && (
                         <li>
                           <span>Fine</span>
-                          <h6 className="text-danger">${selectedBook.fine.toFixed(2)}</h6>
+                          <h6 className="text-danger">₹{selectedBook.fine.toFixed(2)}</h6>
                         </li>
                       )}
                       {selectedBook.returnDate && (
@@ -463,8 +659,114 @@ const LibraryIssueBookPage: React.FC = () => {
           </div>
         </div>
       )}
-    </>
-  );
-};
 
+      {/* Issue Book Modal */}
+    {showIssueModal && (
+      <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h4 className="modal-title">Issue Book to Member</h4>
+              <button 
+                type="button" 
+                className="btn-close custom-btn-close" 
+                onClick={() => setShowIssueModal(false)}
+                aria-label="Close"
+              >
+                <i className="ti ti-x"></i>
+              </button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleIssueBook}>
+                <div className="mb-3">
+                  <label className="form-label">Select Book</label>
+                  <select 
+                    className="form-select"
+                    value={selectedBookId}
+                    onChange={(e) => setSelectedBookId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select a book</option>
+                    {books.map(book => (
+                      <option key={book._id} value={book._id}>
+                        {book.title} (Available: {book.availableCopies})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Select Member</label>
+                  <select 
+                    className="form-select"
+                    value={selectedMemberId}
+                    onChange={(e) => setSelectedMemberId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select a member</option>
+                    {members.map(member => (
+                      <option key={member._id} value={member._id}>
+                        {member.name} ({member.userType})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Issue Date</label>
+                  <input 
+                    type="date"
+                    className="form-control"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Due Date (Optional)</label>
+                  <input 
+                    type="date"
+                    className="form-control"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Remarks (Optional)</label>
+                  <textarea 
+                    className="form-control"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                      rows={3}
+                  />
+                </div>
+                {issueError && (
+                  <div className="alert alert-danger">
+                    {issueError}
+                  </div>
+                )}
+                <div className="d-flex justify-content-between">
+                  <button 
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setShowIssueModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={issueLoading}
+                  >
+                    {issueLoading ? 'Issuing...' : 'Issue Book'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message={deleteTarget ? `Return book "${deleteTarget.book?.title || 'this book'}"?` : ''} />
+</>
+  )};
 export default LibraryIssueBookPage;

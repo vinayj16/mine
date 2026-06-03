@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import attendanceService from '../../services/attendanceService';
+import { exportToExcel, exportToPDF } from '../../utils/exportUtils';
+import apiClient from '../../api/client';
+import { getInstitutionId } from '../../utils/auth';
 
 interface Teacher {
   id: string;
@@ -22,26 +24,47 @@ const TeacherAttendancePage = () => {
 
   useEffect(() => {
     fetchTeachers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   const fetchTeachers = async () => {
     try {
       setLoading(true);
-      const data = await attendanceService.getAll({
-        userType: 'teacher',
-        date: selectedDate
+      const institutionId = getInstitutionId();
+
+      // Fetch all teachers for this institution
+      const teachersRes = await apiClient.get('/teachers', {
+        params: { institutionId }
       });
-      
-      // Transform backend data to match frontend structure
-      const transformedData = data.map((record: any) => ({
-        id: record.id || record._id,
-        name: record.fullName || record.name || `${record.firstName || ''} ${record.lastName || ''}`.trim(),
-        class: record.className || record.class || 'N/A',
-        avatar: record.avatar || record.photo || '/assets/img/teachers/default-avatar.jpg',
-        attendance: record.status || 'present',
-        notes: record.remarks || record.notes || ''
-      }));
-      
+      const teacherList = teachersRes.data?.data || teachersRes.data?.teachers || teachersRes.data || [];
+
+      // Fetch attendance records for the selected date
+      const attendanceRes = await apiClient.get('/attendance/bulk', {
+        params: { userType: 'teacher', date: selectedDate, institutionId }
+      });
+      const attendanceRecords = attendanceRes.data?.data || [];
+
+      // Build attendance lookup map (userId -> attendance record)
+      const attendanceMap: Record<string, any> = {};
+      attendanceRecords.forEach((rec: any) => {
+        const userId = rec.userId?._id || rec.userId?.toString() || rec.userId;
+        attendanceMap[userId] = rec;
+      });
+
+      // Merge teacher list with attendance records
+      const transformedData = teacherList.map((teacher: any) => {
+        const teacherId = teacher._id || teacher.id;
+        const attRecord = attendanceMap[teacherId] || {};
+        return {
+          id: teacherId,
+          name: teacher.fullName || teacher.name || `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim(),
+          class: teacher.className || teacher.class || 'N/A',
+          avatar: teacher.avatar || teacher.photo || '/assets/img/teachers/default-avatar.jpg',
+          attendance: attRecord.status || 'present',
+          notes: attRecord.remarks || attRecord.notes || ''
+        };
+      });
+
       setTeachers(transformedData);
     } catch (error: any) {
       console.error('Error fetching teachers:', error);
@@ -86,26 +109,51 @@ const TeacherAttendancePage = () => {
     
     try {
       setSaving(true);
-      
-      // Save attendance for each teacher
-      for (const teacher of teachers) {
-        await attendanceService.create({
-          id: teacher.id,
-          studentId: teacher.id,
-          date: selectedDate,
-          status: teacher.attendance,
-          remarks: teacher.notes || undefined
-        });
-      }
+
+      const institutionId = getInstitutionId();
+      const attendanceRecords = teachers.map(teacher => ({
+        userId: teacher.id,
+        userType: 'teacher',
+        status: teacher.attendance,
+        remarks: teacher.notes || ''
+      }));
+
+      await apiClient.post('/attendance/bulk-mark', {
+        attendanceRecords,
+        date: selectedDate,
+        institutionId
+      });
 
       toast.success('Teacher attendance saved successfully');
       await fetchTeachers();
     } catch (error: any) {
       console.error('Error saving attendance:', error);
-      toast.error(error.message || 'Failed to save teacher attendance');
+      toast.error(error.response?.data?.message || error.message || 'Failed to save teacher attendance');
     } finally {
       setSaving(false);
     }
+  };
+
+  const getTeacherAttendanceExportRows = () => teachers.map((teacher) => ({
+    ID: teacher.id,
+    Name: teacher.name,
+    Class: teacher.class,
+    Attendance: teacher.attendance,
+    Notes: teacher.notes,
+  }));
+
+  const handleTeacherExportPDF = () => {
+    exportToPDF(getTeacherAttendanceExportRows(), 'teacher-attendance', [
+      { key: 'ID', label: 'ID' },
+      { key: 'Name', label: 'Name' },
+      { key: 'Class', label: 'Class' },
+      { key: 'Attendance', label: 'Attendance' },
+      { key: 'Notes', label: 'Notes' },
+    ], 'Teacher Attendance');
+  };
+
+  const handleTeacherExportExcel = () => {
+    exportToExcel(getTeacherAttendanceExportRows(), 'teacher-attendance');
   };
 
   const handleRefresh = () => {
@@ -155,12 +203,12 @@ const TeacherAttendancePage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button type="button" className="dropdown-item rounded-1" onClick={handleTeacherExportPDF}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button type="button" className="dropdown-item rounded-1" onClick={handleTeacherExportExcel}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
                 </button>
               </li>
@@ -332,12 +380,12 @@ const TeacherAttendancePage = () => {
                                 <img
                                   src={teacher.avatar}
                                   className="img-fluid rounded-circle"
-                                  alt={teacher.name}
+                                  alt={teacher.name || teacher.fullName || `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim() || 'Teacher'}
                                 />
                               </Link>
                               <div className="ms-2">
                                 <p className="text-dark mb-0">
-                                  <Link to="#">{teacher.name}</Link>
+                                  <Link to="#">{teacher.name || teacher.fullName || `${teacher.firstName || ''} ${teacher.lastName || ''}`.trim()}</Link>
                                 </p>
                               </div>
                             </div>

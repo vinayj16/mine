@@ -81,83 +81,100 @@ const emailService = {
   },
 
   sendEmail: async (data: Partial<Email>) => {
-    const response = await apiClient.post(`${API_URL}/send`, data);
+    const response = await apiClient.post(API_URL, data);
     return response.data;
   },
 
   saveDraft: async (data: Partial<Email>) => {
-    const response = await apiClient.post(`${API_URL}/draft`, data);
+    const response = await apiClient.post(API_URL, { ...data, folder: 'drafts', status: 'draft' });
     return response.data;
   },
 
-  scheduleEmail: async (data: Partial<Email>) => {
-    const response = await apiClient.post(`${API_URL}/schedule`, data);
-    return response.data;
-  },
-
-  replyToEmail: async (id: string, data: Partial<Email>) => {
-    const response = await apiClient.post(`${API_URL}/${id}/reply`, data);
-    return response.data;
-  },
-
-  forwardEmail: async (id: string, data: Partial<Email>) => {
-    const response = await apiClient.post(`${API_URL}/${id}/forward`, data);
-    return response.data;
-  },
-
-  markAsRead: async (ids: string[], isRead: boolean) => {
-    const response = await apiClient.post(`${API_URL}/mark-read`, { ids, isRead });
+  markAsRead: async (id: string | string[], isRead: boolean) => {
+    if (Array.isArray(id)) {
+      const results = [];
+      for (const singleId of id) {
+        try {
+          const res = await apiClient.patch(`${API_URL}/${singleId}/read`, { isRead });
+          results.push(res.data);
+        } catch (err) {
+          console.error(`Failed to mark email ${singleId} as read:`, err);
+        }
+      }
+      return { success: true, data: results };
+    }
+    const response = await apiClient.patch(`${API_URL}/${id}/read`, { isRead });
     return response.data;
   },
 
   toggleStar: async (id: string) => {
-    const response = await apiClient.patch(`${API_URL}/${id}/star`);
+    const email = await apiClient.get(`${API_URL}/${id}`);
+    const current = email.data?.data?.isStarred || false;
+    const response = await apiClient.patch(`${API_URL}/${id}/star`, { isStarred: !current });
     return response.data;
   },
 
   toggleImportant: async (id: string) => {
-    const response = await apiClient.patch(`${API_URL}/${id}/important`);
+    const email = await apiClient.get(`${API_URL}/${id}`);
+    const current = email.data?.data?.isImportant || false;
+    const response = await apiClient.patch(`${API_URL}/${id}/important`, { isImportant: !current });
     return response.data;
   },
 
-  moveToFolder: async (ids: string[], folder: string) => {
-    const response = await apiClient.post(`${API_URL}/move-folder`, { ids, folder });
+  moveToFolder: async (id: string | string[], folder: string) => {
+    if (Array.isArray(id)) {
+      const results = [];
+      for (const singleId of id) {
+        try {
+          const res = await apiClient.patch(`${API_URL}/${singleId}/move`, { folder });
+          results.push(res.data);
+        } catch (err) {
+          console.error(`Failed to move email ${singleId}:`, err);
+        }
+      }
+      return { success: true, data: results };
+    }
+    const response = await apiClient.patch(`${API_URL}/${id}/move`, { folder });
     return response.data;
   },
 
-  addTags: async (id: string, tags: string[]) => {
-    const response = await apiClient.post(`${API_URL}/${id}/tags`, { tags });
-    return response.data;
-  },
-
-  removeTags: async (id: string, tags: string[]) => {
-    const response = await apiClient.delete(`${API_URL}/${id}/tags`, { data: { tags } });
-    return response.data;
-  },
-
-  addLabels: async (id: string, labels: string[]) => {
-    const response = await apiClient.post(`${API_URL}/${id}/labels`, { labels });
-    return response.data;
-  },
-
-  removeLabels: async (id: string, labels: string[]) => {
-    const response = await apiClient.delete(`${API_URL}/${id}/labels`, { data: { labels } });
-    return response.data;
+  bulkMoveToFolder: async (ids: string[], folder: string) => {
+    const results = [];
+    for (const id of ids) {
+      try {
+        const res = await apiClient.patch(`${API_URL}/${id}/move`, { folder });
+        results.push(res.data);
+      } catch (err) {
+        console.error(`Failed to move email ${id}:`, err);
+      }
+    }
+    return { success: true, data: results };
   },
 
   bulkDelete: async (ids: string[]) => {
-    const response = await apiClient.post(`${API_URL}/bulk/delete`, { ids });
-    return response.data;
+    return emailService.bulkMoveToFolder(ids, 'trash');
   },
 
   permanentDelete: async (ids: string[]) => {
-    const response = await apiClient.post(`${API_URL}/bulk/permanent-delete`, { ids });
-    return response.data;
+    const results = [];
+    for (const id of ids) {
+      try {
+        const res = await apiClient.delete(`${API_URL}/${id}`);
+        results.push(res.data);
+      } catch (err) {
+        console.error(`Failed to permanently delete email ${id}:`, err);
+      }
+    }
+    return { success: true, data: results };
   },
 
-  emptyTrash: async (userId?: string, institutionId?: string) => {
-    const response = await apiClient.delete(`${API_URL}/trash/empty`, { params: { userId, institutionId } });
-    return response.data;
+  emptyTrash: async (userId?: string) => {
+    const params: Record<string, any> = { folder: 'trash', limit: 100 };
+    if (userId) params.userId = userId;
+    const response = await apiClient.get(API_URL, { params });
+    const trashEmails = response.data?.data || [];
+    const ids = trashEmails.map((e: any) => e._id);
+    return emailService.permanentDelete(ids);
   },
 
   getStatistics: async (userId?: string, institutionId?: string) => {
@@ -166,17 +183,17 @@ const emailService = {
   },
 
   searchEmails: async (search: string, userId?: string, institutionId?: string) => {
-    const response = await apiClient.get(`${API_URL}/search`, { params: { search, userId, institutionId } });
+    const response = await apiClient.get(API_URL, { params: { search, userId, institutionId } });
     return response.data;
   },
 
-  getRecentEmails: async (userId?: string, institutionId?: string, days?: number) => {
-    const response = await apiClient.get(`${API_URL}/recent`, { params: { userId, institutionId, days } });
+  getRecentEmails: async (userId?: string, institutionId?: string) => {
+    const response = await apiClient.get(API_URL, { params: { userId, institutionId, limit: 10 } });
     return response.data;
   },
 
   getEmailsByThread: async (threadId: string) => {
-    const response = await apiClient.get(`${API_URL}/thread/${threadId}`);
+    const response = await apiClient.get(API_URL, { params: { threadId } });
     return response.data;
   }
 };

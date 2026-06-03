@@ -1,6 +1,4 @@
 import GdprSettings from '../models/GdprSettings.js';
-import DataExportRequest from '../models/DataExportRequest.js';
-import DataErasureRequest from '../models/DataErasureRequest.js';
 import AuditLog from '../models/AuditLog.js';
 import crypto from 'crypto';
 
@@ -89,7 +87,7 @@ class GdprSettingsService {
       requestedData = ['all'],
       format = 'json',
       filters = {},
-      schoolId = null
+      institutionId = null
     } = requestData;
     
     const exportRequest = await DataExportRequest.create({
@@ -99,7 +97,7 @@ class GdprSettingsService {
       requestedData,
       format,
       filters,
-      schoolId,
+      institutionId,
       verificationToken,
       status: 'pending'
     });

@@ -69,12 +69,16 @@ router.post("/create", async (req, res) => {
       name,
       type,
       instituteCode: institutionCode,
-      email: email.toLowerCase(),
-      phone,
-      address,
-      city,
-      state,
-      country,
+      contact: {
+        email: email?.toLowerCase(),
+        phone,
+        address: {
+          street: address,
+          city,
+          state,
+          country
+        }
+      },
       status: "active",
       createdBy: req.user.id,
       subscription: {

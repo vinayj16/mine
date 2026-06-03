@@ -35,8 +35,8 @@ export const enforceInstitutionIsolation = async (req, res, next) => {
     // Add institution filter to query parameters
     req.institutionFilter = { institutionId: userInstitutionId };
     
-    // For routes that use schoolId parameter, ensure it matches user's institution
-    if (req.params.schoolId && req.params.schoolId !== userInstitutionId.toString()) {
+    // For routes that use institutionId parameter, ensure it matches user's institution
+    if (req.params.institutionId && req.params.institutionId !== userInstitutionId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied: Cannot access data from other institutions'

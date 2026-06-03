@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import { apiClient } from '../../api/client'
 import { toast } from 'react-toastify'
+import uploadService from '../../services/uploadService'
+import { useAuthStore } from '../../store/authStore'
+import ConfirmModal from '../../components/common/ConfirmModal'
+import Avatar from '../../components/common/Avatar'
 
 interface UserProfile {
   id: string;
@@ -36,19 +41,49 @@ const ProfileSettings: React.FC = () => {
   const [error] = useState<string | null>(null)
   const [saving] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   useEffect(() => {
     fetchProfile()
   }, [])
+
+  // Keep previewUrl in sync with the avatar from the server.
+  // We only update it when the value actually changes so we do not flash on every render.
+  useEffect(() => {
+    if (profile.avatar !== previewUrl) {
+      setPreviewUrl(profile.avatar || '');
+    }
+  }, [profile.avatar]);
 
   const fetchProfile = async () => {
     try {
       setLoading(true)
       
       try {
-        const response = await apiClient.get('/user/profile')
-        if (response.data?.success && response.data.data) {
-          setProfile(response.data.data)
+        const response = await apiClient.get('/auth/profile')
+        if (response.data?.success) {
+          const userData = response.data.data?.user || response.data.data;
+          if (userData) {
+            setProfile({
+              id: userData.id || userData._id || '',
+              name: userData.name || '',
+              email: userData.email || '',
+              phone: userData.phone || '',
+              avatar: userData.avatar || userData.photo || '',
+              address: userData.address || { street: '', city: '', state: '', zipCode: '', country: '' }
+            });
+            const avatarUrl = userData.avatar || userData.photo || '';
+            if (avatarUrl) {
+              setPreviewUrl(avatarUrl);
+            }
+            // Sync avatar to auth store so header/sidebar reflect it
+            const currentUser = useAuthStore.getState().user;
+            if (currentUser && avatarUrl && currentUser.avatar !== avatarUrl) {
+              const updatedUser = { ...currentUser, avatar: avatarUrl, photo: avatarUrl };
+              useAuthStore.setState({ user: updatedUser });
+              localStorage.setItem('user', JSON.stringify(updatedUser));
+            }
+          }
         }
       } catch {
         // Use demo data - already set as initial state
@@ -87,13 +122,14 @@ const ProfileSettings: React.FC = () => {
     try {
       setLoading(true)
       
-      const response = await apiClient.put('/user/profile', profile)
+      const response = await apiClient.put('/auth/profile', profile)
       
       if (response.data?.success) {
         toast.success('Profile updated successfully')
       } else {
         toast.error(response.data?.message || 'Failed to update profile')
       }
+      fetchProfile();
     } catch (err: any) {
       console.error('Error updating profile:', err)
       toast.error('Failed to update profile')
@@ -102,16 +138,16 @@ const ProfileSettings: React.FC = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        alert('Please select an image file (JPG or PNG)');
+        toast.warn('Please select an image file (JPG or PNG)');
         return;
       }
       
       if (file.size > 5 * 1024 * 1024) {
-        alert('File size must be less than 5MB');
+        toast.warn('File size must be less than 5MB');
         return;
       }
       
@@ -120,6 +156,26 @@ const ProfileSettings: React.FC = () => {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      const result = await uploadService.uploadProfileImage(file);
+      if (result.success && result.file) {
+        // Backend may return { file: { url } } or { imageUrl } depending on version.
+        const imageUrl = (result.file && (result.file.url || result.file.secure_url)) || result.imageUrl || result.avatar || result.url;
+        if (!imageUrl) {
+          toast.error('Upload succeeded but no image URL was returned');
+          return;
+        }
+        toast.success('Profile photo uploaded successfully');
+        setPreviewUrl(imageUrl);
+        setProfile(prev => ({ ...prev, avatar: imageUrl, photo: imageUrl }));
+        // Use the central setAvatar action so the header, sidebar, and every dashboard
+        // that reads user.avatar from the auth store re-renders with the new image.
+        useAuthStore.getState().setAvatar(imageUrl);
+        // Re-fetch profile in the background so the rest of the app stays consistent on refresh
+        fetchProfile();
+      } else {
+        toast.error(result.error || 'Failed to upload photo');
+      }
     }
   };
 
@@ -127,11 +183,24 @@ const ProfileSettings: React.FC = () => {
     fetchProfile();
   };
 
-  const handleDeletePhoto = async () => {
-    if (window.confirm('Are you sure you want to delete your profile photo?')) {
-      setPreviewUrl('/assets/img/profiles/avatar-27.jpg');
-    }
+  const handleDeletePhoto = () => {
+    setShowDeleteModal(true);
   };
+
+  const handleDeletePhotoConfirm = async () => {
+    // Try to clear the avatar on the backend so the change survives a refresh.
+    try {
+      await apiClient.delete('/upload/profile');
+    } catch { /* API may not implement delete; fall back to local clear */ }
+    setPreviewUrl('');
+    setProfile(prev => ({ ...prev, avatar: '', photo: '' }));
+    useAuthStore.getState().setAvatar('');
+    toast.success('Profile photo removed');
+    setShowDeleteModal(false);
+  };
+
+  const location = useLocation();
+  const parentPath = location.pathname.replace(/\/profile(\/.*)?$/, '').replace(/\/settings(\/.*)?$/, '');
 
   const nameParts = profile.name.split(' ');
   const firstName = nameParts[0] || '';
@@ -172,10 +241,9 @@ const ProfileSettings: React.FC = () => {
       <div className="row">
         <div className="col-xxl-2 col-xl-3">
           <div className="pt-3 d-flex flex-column list-group mb-4">
-            <a href="/profile-settings" className="d-block rounded p-2 active">Profile Settings</a>
-            <a href="/security-settings" className="d-block rounded p-2">Security Settings</a>
-            <a href="/notifications-settings" className="d-block rounded p-2">Notifications</a>
-            <a href="/connected-apps" className="d-block rounded p-2">Connected Apps</a>
+            <NavLink to={parentPath ? `${parentPath}/profile` : '/settings/profile'} className={({ isActive }) => `d-block rounded p-2 ${isActive ? 'active' : ''}`}>Profile Settings</NavLink>
+            <NavLink to={parentPath ? `${parentPath}/settings` : '/settings'} className={({ isActive }) => `d-block rounded p-2 ${isActive ? 'active' : ''}`}>Settings</NavLink>
+            <NavLink to={parentPath ? `${parentPath}/notifications` : '/settings/notifications'} className={({ isActive }) => `d-block rounded p-2 ${isActive ? 'active' : ''}`}>Notifications</NavLink>
           </div>
         </div>
         <div className="col-xxl-10 col-xl-9">
@@ -364,7 +432,11 @@ const ProfileSettings: React.FC = () => {
                       <div className="card-body p-3 pb-0">
                         <div className="settings-profile-upload">
                           <span className="profile-pic">
-                            <img src={previewUrl} alt="Profile" />
+                            <Avatar
+                              name={profile.name}
+                              src={previewUrl || null}
+                              size={100}
+                            />
                           </span>
                           <div className="title-upload">
                             <h5>Edit Your Photo</h5>
@@ -415,6 +487,7 @@ const ProfileSettings: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={handleDeletePhotoConfirm} message="Are you sure you want to delete your profile photo?" />
     </div>
   );
 };

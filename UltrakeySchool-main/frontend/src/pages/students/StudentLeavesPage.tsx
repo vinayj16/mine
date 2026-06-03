@@ -2,17 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { studentService } from '../../services/studentService';
-import StudentSelector from '../../components/students/StudentSelector';
 
 interface Student {
-  id: string;
+  id?: string;
+  _id?: string;
   firstName: string;
   lastName: string;
   email?: string;
   phone: string;
   class: string;
+  classId?: { name?: string };
   section?: string;
+  sectionId?: { name?: string };
   rollNumber: string;
+  admissionNumber?: string;
   gender: 'male' | 'female' | 'other';
   dateOfBirth: string;
   address: string;
@@ -34,10 +37,12 @@ interface LeaveRecord {
   leaveType: string;
   startDate: string;
   endDate: string;
-  totalDays: number;
+  totalDays?: number;
+  numberOfDays?: number;
   reason: string;
   status: 'approved' | 'pending' | 'rejected';
-  appliedDate: string;
+  appliedDate?: string;
+  appliedOn?: string;
   reviewedDate?: string;
   reviewComments?: string;
 }
@@ -86,20 +91,20 @@ const StudentLeavesPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'leave' | 'attendance'>('leave');
   const [showApplyLeaveModal, setShowApplyLeaveModal] = useState(false);
 
-  const schoolId = '507f1f77bcf86cd799439011';
 
   const fetchStudent = async () => {
-    if (!id) {
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
 
-      const student = await studentService.getById(id);
-      setStudent(student);
+      let studentData;
+      if (id) {
+        studentData = await studentService.getById(id);
+      } else {
+        // Self-service: fetch the logged-in student's profile
+        studentData = await studentService.getMyProfile();
+      }
+      setStudent(studentData);
     } catch (err: any) {
       console.error('Error fetching student:', err);
       const errorMessage = err.message || 'Failed to load student details';
@@ -111,12 +116,13 @@ const StudentLeavesPage: React.FC = () => {
   };
 
   const fetchLeaves = async () => {
-    if (!id) return;
+    const studentId = id || student?.id || student?.id;
+    if (!studentId) return;
 
     try {
       setLeavesLoading(true);
 
-      const leavesData = await studentService.getLeaves(id, {
+      const leavesData = await studentService.getLeaves(id || '', {
         status: 'pending',
         limit: 10
       });
@@ -136,17 +142,17 @@ const StudentLeavesPage: React.FC = () => {
   };
 
   const fetchAttendance = async () => {
-    if (!id) return;
+    const studentId = id || student?.id || student?.id;
+    if (!studentId) return;
 
     try {
       setAttendanceLoading(true);
 
-      const attendanceData = await studentService.getAttendance(id, {
-        limit: 30
-      });
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const attendanceData = await studentService.getAttendance(id || '', thirtyDaysAgo) as any;
       
-      setAttendance(attendanceData.data || []);
-      setAttendanceSummary(attendanceData.summary || {
+      setAttendance(Array.isArray(attendanceData) ? attendanceData : attendanceData?.data || []);
+      setAttendanceSummary(attendanceData?.summary || {
         totalDays: 0,
         present: 0,
         absent: 0,
@@ -181,7 +187,7 @@ const StudentLeavesPage: React.FC = () => {
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const formatDateRange = (start?: string, end?: string) => {
@@ -218,15 +224,6 @@ const StudentLeavesPage: React.FC = () => {
   }
 
   if (error || !student) {
-    if (!id && !error) {
-      return (
-        <StudentSelector
-          redirectPath="/students/leaves"
-          title="Select Student for Leaves"
-          description="Choose a student to view their leave records"
-        />
-      );
-    }
     return (
       <div className="card">
         <div className="card-body text-center py-5">
@@ -242,7 +239,7 @@ const StudentLeavesPage: React.FC = () => {
   }
 
   const fullName = `${student.firstName} ${student.lastName}`;
-  const classLabel = [student.class, student.section].filter(Boolean).join(', ') || 'N/A';
+  const classLabel = [student.classId?.name || student.class, student.sectionId?.name || student.section].filter(Boolean).join(', ') || 'N/A';
 
   return (
     <>
@@ -268,7 +265,7 @@ const StudentLeavesPage: React.FC = () => {
             <i className="ti ti-lock me-2" />
             Login Details
           </button>
-          <Link to={`/students/edit/${id}`} className="btn btn-primary d-flex align-items-center mb-2">
+          <Link to={`/students/edit/${student._id || id}`} className="btn btn-primary d-flex align-items-center mb-2">
             <i className="ti ti-edit-circle me-2" />
             Edit Student
           </Link>
@@ -301,7 +298,7 @@ const StudentLeavesPage: React.FC = () => {
                 <h6 className="mb-3">Basic Information</h6>
                 <div className="mb-2">
                   <p className="text-muted mb-1">Admission No</p>
-                  <p className="fw-medium mb-0">{student.id}</p>
+                  <p className="fw-medium mb-0">{student.admissionNumber || student.id}</p>
                 </div>
                 <div className="mb-2">
                   <p className="text-muted mb-1">Roll No</p>
@@ -355,21 +352,21 @@ const StudentLeavesPage: React.FC = () => {
             <div className="tab-pane fade show active">
               {/* Leave Summary */}
               <div className="row gx-3">
-                {leaveSummary.map((summary) => (
-                  <div className="col-lg-6 col-xxl-3 d-flex" key={summary.leaveType}>
+                {leaveSummary ? Object.entries(leaveSummary).map(([leaveType, data]: [string, any]) => (
+                  <div className="col-lg-6 col-xxl-3 d-flex" key={leaveType}>
                     <div className="card flex-fill">
                       <div className="card-body">
                         <h5 className="mb-2">
-                          {summary.leaveType} ({summary.total})
+                          {capitalize(leaveType)} ({data.total})
                         </h5>
                         <div className="d-flex align-items-center flex-wrap">
-                          <p className="border-end pe-2 me-2 mb-0">Used: {summary.used}</p>
-                          <p className="mb-0">Available: {summary.available}</p>
+                          <p className="border-end pe-2 me-2 mb-0">Used: {data.used}</p>
+                          <p className="mb-0">Available: {data.available}</p>
                         </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : null}
               </div>
 
               {/* Leave Records */}
@@ -415,8 +412,8 @@ const StudentLeavesPage: React.FC = () => {
                             <tr key={record._id}>
                               <td className="text-dark">{record.leaveType}</td>
                               <td>{formatDateRange(record.startDate, record.endDate)}</td>
-                              <td>{record.numberOfDays}</td>
-                              <td>{formatDate(record.appliedOn)}</td>
+                              <td>{record.numberOfDays || record.totalDays || 0}</td>
+                              <td>{formatDate(record.appliedOn || record.appliedDate || '')}</td>
                               <td>
                                 <span className={`badge ${getStatusBadge(record.status)} d-inline-flex align-items-center`}>
                                   <i className="ti ti-circle-filled fs-5 me-1" />

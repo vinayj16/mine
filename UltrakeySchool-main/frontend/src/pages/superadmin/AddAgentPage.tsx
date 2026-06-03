@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import agentService, { type CreateAgentInput } from '../../services/agentService'
 
 const AddAgentPage: React.FC = () => {
@@ -97,13 +98,13 @@ const AddAgentPage: React.FC = () => {
         await agentService.create(agentData)
         
         // Show success message
-        alert('Agent added successfully!')
+        toast.success('Agent added successfully!')
         
         // Navigate back to agents list
         navigate('/super-admin/agents')
       } catch (error: any) {
         console.error('Error creating agent:', error)
-        alert(error.message || 'Failed to add agent. Please try again.')
+        toast.error(error.message || 'Failed to add agent. Please try again.')
       } finally {
         setIsLoading(false)
       }

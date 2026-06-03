@@ -2,13 +2,13 @@ import SidebarPreference from '../models/SidebarPreference.js';
 import MenuCustomization from '../models/MenuCustomization.js';
 
 class SidebarService {
-  async getUserPreferences(userId, schoolId) {
-    let preferences = await SidebarPreference.findOne({ userId, schoolId });
+  async getUserPreferences(userId, institutionId) {
+    let preferences = await SidebarPreference.findOne({ userId, institutionId });
     
     if (!preferences) {
       preferences = await SidebarPreference.create({
         userId,
-        schoolId,
+        institutionId,
         isCollapsed: false,
         pinnedItems: [],
         recentItems: [],
@@ -26,9 +26,9 @@ class SidebarService {
     return preferences;
   }
 
-  async updatePreferences(userId, schoolId, updates) {
+  async updatePreferences(userId, institutionId, updates) {
     const preferences = await SidebarPreference.findOneAndUpdate(
-      { userId, schoolId },
+      { userId, institutionId },
       { $set: updates },
       { new: true, upsert: true, runValidators: true }
     );
@@ -36,35 +36,35 @@ class SidebarService {
     return preferences;
   }
 
-  async toggleCollapsed(userId, schoolId, isCollapsed) {
-    return await this.updatePreferences(userId, schoolId, { isCollapsed });
+  async toggleCollapsed(userId, institutionId, isCollapsed) {
+    return await this.updatePreferences(userId, institutionId, { isCollapsed });
   }
 
-  async addRecentItem(userId, schoolId, item) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async addRecentItem(userId, institutionId, item) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     return await preferences.addRecentItem(item);
   }
 
-  async clearRecentItems(userId, schoolId) {
-    return await this.updatePreferences(userId, schoolId, { recentItems: [] });
+  async clearRecentItems(userId, institutionId) {
+    return await this.updatePreferences(userId, institutionId, { recentItems: [] });
   }
 
-  async addBookmark(userId, schoolId, bookmark) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async addBookmark(userId, institutionId, bookmark) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     return await preferences.addBookmark(bookmark);
   }
 
-  async removeBookmark(userId, schoolId, bookmarkId) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async removeBookmark(userId, institutionId, bookmarkId) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     return await preferences.removeBookmark(bookmarkId);
   }
 
-  async updateBookmarkOrder(userId, schoolId, bookmarks) {
-    return await this.updatePreferences(userId, schoolId, { bookmarks });
+  async updateBookmarkOrder(userId, institutionId, bookmarks) {
+    return await this.updatePreferences(userId, institutionId, { bookmarks });
   }
 
-  async addQuickAction(userId, schoolId, action) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async addQuickAction(userId, institutionId, action) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     
     const exists = preferences.quickActions.some(a => a.id === action.id);
     if (!exists) {
@@ -78,28 +78,28 @@ class SidebarService {
     return preferences;
   }
 
-  async removeQuickAction(userId, schoolId, actionId) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async removeQuickAction(userId, institutionId, actionId) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     preferences.quickActions = preferences.quickActions.filter(a => a.id !== actionId);
     await preferences.save();
     return preferences;
   }
 
-  async toggleQuickAction(userId, schoolId, actionId, enabled) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async toggleQuickAction(userId, institutionId, actionId, enabled) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     return await preferences.toggleQuickAction(actionId, enabled);
   }
 
-  async updateQuickActionOrder(userId, schoolId, quickActions) {
-    return await this.updatePreferences(userId, schoolId, { quickActions });
+  async updateQuickActionOrder(userId, institutionId, quickActions) {
+    return await this.updatePreferences(userId, institutionId, { quickActions });
   }
 
-  async updateExpandedMenus(userId, schoolId, expandedMenus) {
-    return await this.updatePreferences(userId, schoolId, { expandedMenus });
+  async updateExpandedMenus(userId, institutionId, expandedMenus) {
+    return await this.updatePreferences(userId, institutionId, { expandedMenus });
   }
 
-  async hideMenuItem(userId, schoolId, menuItemId) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async hideMenuItem(userId, institutionId, menuItemId) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     
     if (!preferences.hiddenMenuItems.includes(menuItemId)) {
       preferences.hiddenMenuItems.push(menuItemId);
@@ -109,19 +109,19 @@ class SidebarService {
     return preferences;
   }
 
-  async showMenuItem(userId, schoolId, menuItemId) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async showMenuItem(userId, institutionId, menuItemId) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     preferences.hiddenMenuItems = preferences.hiddenMenuItems.filter(id => id !== menuItemId);
     await preferences.save();
     return preferences;
   }
 
-  async getMenuCustomization(schoolId, role) {
-    let customization = await MenuCustomization.findOne({ schoolId, role, isActive: true });
+  async getMenuCustomization(institutionId, role) {
+    let customization = await MenuCustomization.findOne({ institutionId, role, isActive: true });
     
     if (!customization) {
       customization = await MenuCustomization.create({
-        schoolId,
+        institutionId,
         role,
         menuItems: this.getDefaultMenuItems(role),
         customMenuItems: [],
@@ -133,9 +133,9 @@ class SidebarService {
     return customization;
   }
 
-  async updateMenuCustomization(schoolId, role, updates) {
+  async updateMenuCustomization(institutionId, role, updates) {
     const customization = await MenuCustomization.findOneAndUpdate(
-      { schoolId, role },
+      { institutionId, role },
       { $set: updates },
       { new: true, upsert: true, runValidators: true }
     );
@@ -143,25 +143,25 @@ class SidebarService {
     return customization;
   }
 
-  async addCustomMenuItem(schoolId, role, menuItem, userId) {
-    const customization = await this.getMenuCustomization(schoolId, role);
+  async addCustomMenuItem(institutionId, role, menuItem, userId) {
+    const customization = await this.getMenuCustomization(institutionId, role);
     return await customization.addCustomMenuItem(menuItem, userId);
   }
 
-  async removeCustomMenuItem(schoolId, role, menuItemId) {
-    const customization = await this.getMenuCustomization(schoolId, role);
+  async removeCustomMenuItem(institutionId, role, menuItemId) {
+    const customization = await this.getMenuCustomization(institutionId, role);
     return await customization.removeCustomMenuItem(menuItemId);
   }
 
-  async updateMenuItemVisibility(schoolId, role, menuItemId, visible) {
-    const customization = await this.getMenuCustomization(schoolId, role);
+  async updateMenuItemVisibility(institutionId, role, menuItemId, visible) {
+    const customization = await this.getMenuCustomization(institutionId, role);
     return await customization.updateMenuItemVisibility(menuItemId, visible);
   }
 
-  async getSidebarData(userId, schoolId, role) {
+  async getSidebarData(userId, institutionId, role) {
     const [preferences, menuCustomization] = await Promise.all([
-      this.getUserPreferences(userId, schoolId),
-      this.getMenuCustomization(schoolId, role)
+      this.getUserPreferences(userId, institutionId),
+      this.getMenuCustomization(institutionId, role)
     ]);
 
     const filteredMenuItems = this.filterMenuItems(
@@ -482,13 +482,13 @@ class SidebarService {
     return defaultItems;
   }
 
-  async resetPreferences(userId, schoolId) {
-    await SidebarPreference.findOneAndDelete({ userId, schoolId });
-    return await this.getUserPreferences(userId, schoolId);
+  async resetPreferences(userId, institutionId) {
+    await SidebarPreference.findOneAndDelete({ userId, institutionId });
+    return await this.getUserPreferences(userId, institutionId);
   }
 
-  async exportPreferences(userId, schoolId) {
-    const preferences = await this.getUserPreferences(userId, schoolId);
+  async exportPreferences(userId, institutionId) {
+    const preferences = await this.getUserPreferences(userId, institutionId);
     return {
       isCollapsed: preferences.isCollapsed,
       pinnedItems: preferences.pinnedItems,
@@ -504,8 +504,8 @@ class SidebarService {
     };
   }
 
-  async importPreferences(userId, schoolId, preferencesData) {
-    return await this.updatePreferences(userId, schoolId, preferencesData);
+  async importPreferences(userId, institutionId, preferencesData) {
+    return await this.updatePreferences(userId, institutionId, preferencesData);
   }
 }
 

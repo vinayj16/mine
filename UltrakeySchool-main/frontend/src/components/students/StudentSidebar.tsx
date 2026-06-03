@@ -8,6 +8,12 @@ type StudentSidebarProps = {
 
 const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
   const [activeTab, setActiveTab] = useState<'hostel' | 'transportation'>('hostel')
+  const avatar = profile.avatar || '/assets/img/students/student-default.jpg'
+  const basicInfo = profile.basicInfo || []
+  const primaryContact = profile.primaryContact || { phone: '-', email: '-' }
+  const siblings = profile.siblings || []
+  const hostel = profile.hostel
+  const transport = profile.transport
 
   const handleTabClick = (tab: 'hostel' | 'transportation') => {
     setActiveTab(tab)
@@ -18,7 +24,7 @@ const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
         <div className="card-header">
           <div className="d-flex align-items-center flex-wrap row-gap-3">
             <div className="d-flex align-items-center justify-content-center avatar avatar-xxl border border-dashed me-2 flex-shrink-0 text-dark frames">
-              <img src={profile.avatar} className="img-fluid" alt={profile.name} />
+              <img src={avatar} className="img-fluid" alt={profile.name} />
             </div>
             <div className="overflow-hidden">
               <span className={`badge badge-soft-${profile.status === 'Active' ? 'success' : 'danger'} d-inline-flex align-items-center mb-1`}>
@@ -36,7 +42,7 @@ const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
           <dl className="row mb-0">
             <dt className="col-6 fw-medium text-dark mb-3">Roll No</dt>
             <dd className="col-6 mb-3">{profile.rollNo}</dd>
-            {profile.basicInfo.map((item) => (
+            {basicInfo.map((item) => (
               <Fragment key={item.label}>
                 <dt className="col-6 fw-medium text-dark mb-3">{item.label}</dt>
                 <dd className="col-6 mb-3">{item.value}</dd>
@@ -52,18 +58,20 @@ const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
       <div className="card border-white">
         <div className="card-body">
           <h5 className="mb-3">Primary Contact Info</h5>
-          <SidebarContactRow icon="ti ti-phone" title="Phone Number" value={profile.primaryContact.phone} />
-          <SidebarContactRow icon="ti ti-mail" title="Email Address" value={profile.primaryContact.email} />
+          <SidebarContactRow icon="ti ti-phone" title="Phone Number" value={primaryContact.phone || '-'} />
+          <SidebarContactRow icon="ti ti-mail" title="Email Address" value={primaryContact.email || '-'} />
         </div>
       </div>
 
       <div className="card border-white">
         <div className="card-body">
           <h5 className="mb-3">Sibling Information</h5>
-          {profile.siblings.map((sibling) => (
+          {siblings.length === 0 ? (
+            <p className="text-muted mb-0">No sibling details available.</p>
+          ) : siblings.map((sibling) => (
             <div className="d-flex align-items-center bg-light-300 rounded p-3 mb-3" key={sibling.name}>
               <span className="avatar avatar-lg">
-                <img src={sibling.avatar} className="img-fluid rounded" alt={sibling.name} />
+                <img src={sibling.avatar || '/assets/img/students/student-default.jpg'} className="img-fluid rounded" alt={sibling.name} />
               </span>
               <div className="ms-2">
                 <h5 className="fs-14 mb-0">{sibling.name}</h5>
@@ -98,17 +106,22 @@ const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
           </ul>
           <div>
             {activeTab === 'hostel' && (
-              <div className="d-flex align-items-center mb-3">
-                <span className="avatar avatar-md bg-light-300 rounded me-2 flex-shrink-0 text-default">
-                  <i className="ti ti-building-fortress fs-16" />
-                </span>
-                <div>
-                  <h6 className="fs-14 mb-1">{profile.hostel.name}</h6>
-                  <p className="text-primary mb-0">{profile.hostel.room}</p>
+              hostel ? (
+                <div className="d-flex align-items-center mb-3">
+                  <span className="avatar avatar-md bg-light-300 rounded me-2 flex-shrink-0 text-default">
+                    <i className="ti ti-building-fortress fs-16" />
+                  </span>
+                  <div>
+                    <h6 className="fs-14 mb-1">{hostel.name || '-'}</h6>
+                    <p className="text-primary mb-0">{hostel.room || '-'}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="text-muted mb-3">No hostel details available.</p>
+              )
             )}
             {activeTab === 'transportation' && (
+              transport ? (
               <>
                 <div className="d-flex align-items-center mb-3">
                   <span className="avatar avatar-md bg-light-300 rounded me-2 flex-shrink-0 text-default">
@@ -116,24 +129,27 @@ const StudentSidebar = ({ profile, onAddFees }: StudentSidebarProps) => {
                   </span>
                   <div>
                     <span className="fs-12 mb-1 d-block">Route</span>
-                    <p className="mb-0">{profile.transport.route}</p>
+                    <p className="mb-0">{transport.route || '-'}</p>
                   </div>
                 </div>
                 <div className="row">
                   <div className="col-sm-6">
                     <div className="mb-3">
                       <span className="fs-12 mb-1 d-block">Bus Number</span>
-                      <p className="mb-0">{profile.transport.busNumber}</p>
+                      <p className="mb-0">{transport.busNumber || '-'}</p>
                     </div>
                   </div>
                   <div className="col-sm-6">
                     <div className="mb-3">
                       <span className="fs-12 mb-1 d-block">Pickup Point</span>
-                      <p className="mb-0">{profile.transport.pickupPoint}</p>
+                      <p className="mb-0">{transport.pickupPoint || '-'}</p>
                     </div>
                   </div>
                 </div>
               </>
+              ) : (
+                <p className="text-muted mb-3">No transportation details available.</p>
+              )
             )}
           </div>
         </div>

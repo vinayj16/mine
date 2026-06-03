@@ -40,7 +40,7 @@ const StaffOverviewPage: React.FC = () => {
     try {
       setLoading(true)
       try {
-        const response = await apiClient.get('/staff/institution')
+        const response = await apiClient.get('/hrm/staff/institution')
         if (response.data?.success && response.data?.data) {
           const apiData = response.data.data
           // Validate and ensure arrays exist

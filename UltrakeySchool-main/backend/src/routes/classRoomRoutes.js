@@ -11,8 +11,8 @@ router.use(protect);
 // Auto-add required fields from JWT or defaults
 router.use((req, res, next) => {
   if (req.method === 'POST') {
-    const userInstitutionId = req.user?.institutionId || req.user?.institution;
-    const bodyInstitutionId = req.body.institutionId || req.body.schoolId;
+    const userInstitutionId = req.user?.institutionId || req.user?.institution || req.user?.institutionId;
+    const bodyInstitutionId = req.body.institutionId || req.body.institutionId;
     const institutionId = bodyInstitutionId || userInstitutionId;
     
     if (institutionId) {

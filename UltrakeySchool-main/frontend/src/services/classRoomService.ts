@@ -26,7 +26,9 @@ export interface CreateClassRoomInput {
   building?: string;
   floor?: number;
   facilities?: string[];
+  roomType?: string;
   status?: 'active' | 'inactive' | 'maintenance';
+  institutionId?: string;
 }
 
 export interface UpdateClassRoomInput extends Partial<CreateClassRoomInput> {
@@ -45,6 +47,7 @@ export interface ClassRoomFilters {
   maxCapacity?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  institutionId?: string;
 }
 
 export interface PaginatedClassRoomResponse {
@@ -63,7 +66,7 @@ export const classRoomService = {
       const queryParams: Record<string, string> = {};
       
       // Get institution ID from localStorage
-      const institutionId = localStorage.getItem('schoolId') || localStorage.getItem('institutionId') || '';
+      const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || '';
       if (institutionId) {
         queryParams.institutionId = institutionId;
       }
@@ -194,6 +197,24 @@ export const classRoomService = {
       console.error('Error fetching classroom statistics:', error);
       throw error;
     }
+  },
+
+  async assignClass(roomId: string, classId: string): Promise<ClassRoom> {
+    const response: ApiResponse<ClassRoom> = await apiService.patch(
+      `classrooms/${roomId}/assign`,
+      { classId }
+    );
+    if (!response.success) throw new Error(response.message || 'Failed to assign class');
+    return response.data!;
+  },
+
+  async unassignClass(roomId: string): Promise<ClassRoom> {
+    const response: ApiResponse<ClassRoom> = await apiService.patch(
+      `classrooms/${roomId}/unassign`,
+      {}
+    );
+    if (!response.success) throw new Error(response.message || 'Failed to unassign class');
+    return response.data!;
   },
 
   async getAvailable(): Promise<ClassRoom[]> {

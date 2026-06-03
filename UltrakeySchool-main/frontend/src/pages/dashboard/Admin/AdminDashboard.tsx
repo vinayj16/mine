@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../../api/client';
+import { useAuth } from '../../../store/authStore'
+import InstitutionDetailsCard from '../../../components/dashboard/InstitutionDetailsCard'
 
 interface DashboardData {
   overview: {
@@ -42,6 +44,7 @@ interface DashboardData {
 }
 
 const AdminDashboard: React.FC = () => {
+  const { user, institutionData } = useAuth();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
 
@@ -53,17 +56,18 @@ const AdminDashboard: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || '' : '';
       
       // Fetch from multiple endpoints - use /dashboard prefix for controller endpoints
       const results = await Promise.allSettled([
-        apiClient.get('/students', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
-        apiClient.get('/teachers', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
-        apiClient.get('/classes', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/students', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/teachers', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/classes', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
         apiClient.get('/dashboard/admin/overview').catch(() => ({ data: { success: false, data: null } })),
-        apiClient.get('/dashboard/admin/stats').catch(() => ({ data: { success: false, data: null } }))
+        apiClient.get('/dashboard/admin/stats').catch(() => ({ data: { success: false, data: null } })),
+        apiClient.get('/attendance/stats', { params: { dateRange: 'today' } }).catch(() => ({ data: { success: false, data: null } }))
       ]);
       
       const studentsResponse = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -71,6 +75,7 @@ const AdminDashboard: React.FC = () => {
       const classesResponse = results[2].status === 'fulfilled' ? results[2].value : null;
       const overviewResponse = results[3].status === 'fulfilled' && results[3].value?.data?.success ? results[3].value : null;
       const statsResponse = results[4].status === 'fulfilled' && results[4].value?.data?.success ? results[4].value : null;
+      const attendanceStatsResponse = results[5].status === 'fulfilled' ? results[5].value : null;
       
       // Get real student and teacher counts
       const students = studentsResponse?.data?.data || [];
@@ -82,6 +87,13 @@ const AdminDashboard: React.FC = () => {
       const overviewData = overviewResponse?.data?.data;
       const statsData = statsResponse?.data?.data;
       
+      // Get real attendance counts from /attendance/stats
+      const attendanceStats = attendanceStatsResponse?.data?.data || null;
+      const studentAttendanceStats = attendanceStats?.students || {};
+      const teacherAttendanceStats = attendanceStats?.teachers || {};
+      const realPresentToday = (studentAttendanceStats.present || 0) + (teacherAttendanceStats.present || 0);
+      const realAbsentToday = (studentAttendanceStats.absent || 0) + (teacherAttendanceStats.absent || 0);
+      
       // Merge data - use real data from database or fallback to controller data
       const mergedData: DashboardData = {
         overview: {
@@ -89,12 +101,12 @@ const AdminDashboard: React.FC = () => {
           totalTeachers: overviewData?.totalTeachers ?? teachers.length,
           totalParents: overviewData?.totalParents ?? Math.floor(students.length * 0.8),
           totalClasses: overviewData?.totalClasses ?? (classes.length || 5),
-          attendanceRate: overviewData?.attendanceRate ?? 85,
+          attendanceRate: overviewData?.attendanceRate ?? (realPresentToday && realPresentToday + realAbsentToday > 0 ? Math.round((realPresentToday / (realPresentToday + realAbsentToday)) * 100) : 85),
           averageGrade: overviewData?.averageGrade ?? 75
         },
         quickStats: {
-          presentToday: statsData?.presentToday ?? Math.floor(students.length * 0.85),
-          absentToday: statsData?.absentToday ?? Math.floor(students.length * 0.10),
+          presentToday: realPresentToday || statsData?.presentToday || Math.floor(students.length * 0.85),
+          absentToday: realAbsentToday || statsData?.absentToday || Math.floor(students.length * 0.10),
           newAdmissions: statsData?.newAdmissions ?? activeStudents.filter((s: any) => {
             const joinDate = new Date(s.createdAt);
             const now = new Date();
@@ -146,6 +158,10 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="dashboard-page">
+      <InstitutionDetailsCard 
+        institution={institutionData || user?.institutionData} 
+        userRole={user?.role}
+      />
       {/* PAGE HEADER */}
       <div className="d-md-flex d-block align-items-center justify-content-between mb-4">
         <div className="my-auto mb-2 mb-md-0">
@@ -164,6 +180,7 @@ const AdminDashboard: React.FC = () => {
           </Link>
         </div>
       </div>
+
 
       {/* OVERVIEW CARDS */}
       <div className="row g-4 mb-4">

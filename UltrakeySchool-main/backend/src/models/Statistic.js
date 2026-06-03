@@ -21,9 +21,9 @@ const alertSchema = new mongoose.Schema({
 }, { _id: true });
 
 const statisticSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -102,8 +102,8 @@ const statisticSchema = new mongoose.Schema({
   timestamps: true
 });
 
-statisticSchema.index({ schoolId: 1, statId: 1, createdAt: -1 });
-statisticSchema.index({ schoolId: 1, category: 1 });
+statisticSchema.index({ institutionId: 1, statId: 1, createdAt: -1 });
+statisticSchema.index({ institutionId: 1, category: 1 });
 
 statisticSchema.pre('save', function(next) {
   this.total = this.active + this.inactive;

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const hostelAttendanceSchema = new mongoose.Schema({
-  institution: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
     required: true
@@ -37,6 +37,6 @@ const hostelAttendanceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-hostelAttendanceSchema.index({ institution: 1, room: 1, date: 1, student: 1 }, { unique: true });
+hostelAttendanceSchema.index({ institutionId: 1, room: 1, date: 1, student: 1 }, { unique: true });
 
 export default mongoose.model('HostelAttendance', hostelAttendanceSchema);

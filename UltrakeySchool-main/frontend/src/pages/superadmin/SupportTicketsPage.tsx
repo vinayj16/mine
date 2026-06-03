@@ -19,16 +19,14 @@ interface Ticket {
     name: string;
     email: string;
   };
+  createdAt: Date;
+  updatedAt: Date;
   assignment?: {
     assignedTo?: {
       _id: string;
       name: string;
       email: string;
     };
-  };
-  timeline: {
-    createdAt: Date;
-    updatedAt: Date;
   };
   messages?: any[];
 }
@@ -163,8 +161,11 @@ const SupportTicketsPage: React.FC = () => {
     return classes[priority] || 'bg-secondary';
   };
 
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+  const formatDate = (date: Date | string | undefined | null) => {
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -405,7 +406,7 @@ const SupportTicketsPage: React.FC = () => {
                         )}
                       </td>
                       <td>
-                        <small>{formatDate(ticket.timeline.updatedAt)}</small>
+                        <small>{formatDate(ticket.updatedAt)}</small>
                       </td>
                       <td>
                         <button
@@ -517,11 +518,11 @@ const SupportTicketsPage: React.FC = () => {
                   </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label text-muted">Created</label>
-                    <div>{formatDate(selectedTicket.timeline.createdAt)}</div>
+                    <div>{formatDate(selectedTicket.createdAt)}</div>
                   </div>
                   <div className="col-md-6 mb-3">
                     <label className="form-label text-muted">Last Updated</label>
-                    <div>{formatDate(selectedTicket.timeline.updatedAt)}</div>
+                    <div>{formatDate(selectedTicket.updatedAt)}</div>
                   </div>
                 </div>
               </div>
@@ -533,12 +534,16 @@ const SupportTicketsPage: React.FC = () => {
                 >
                   Close
                 </button>
-                <Link 
-                  to={`/ticket-details/${selectedTicket._id}`}
+                <button
                   className="btn btn-primary"
+                  onClick={() => {
+                    toast.info(`Full details for ${selectedTicket.ticketNumber}: ${selectedTicket.description || 'No additional details available'}`)
+                    setShowTicketModal(false)
+                  }}
                 >
+                  <i className="ti ti-info-circle me-1"></i>
                   View Full Details
-                </Link>
+                </button>
               </div>
             </div>
           </div>

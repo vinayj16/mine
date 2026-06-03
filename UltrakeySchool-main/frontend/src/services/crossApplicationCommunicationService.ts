@@ -47,7 +47,7 @@ export interface UserVisibility {
 class CrossApplicationCommunicationService {
   private readonly STORAGE_KEY = 'cross_app_communication';
   private readonly USER_VISIBILITY_KEY = 'user_visibility';
-  private eventListeners: Map<string, Function[]> = new Map();
+  private eventListeners: Map<string, ((...args: any[]) => any)[]> = new Map();
 
   // Send message between applications
   sendMessage(message: Omit<CommunicationMessage, 'id' | 'timestamp'>): string {
@@ -75,7 +75,7 @@ class CrossApplicationCommunicationService {
   getMessages(userId: string, type?: string, institutionId?: string): CommunicationMessage[] {
     try {
       const allMessages = this.getAllStoredMessages();
-      let filtered = allMessages.filter(msg => {
+      const filtered = allMessages.filter(msg => {
         const isRecipient = Array.isArray(msg.to) ? msg.to.includes(userId) : msg.to === userId;
         const isSender = msg.from === userId;
         
@@ -208,7 +208,7 @@ class CrossApplicationCommunicationService {
   }
 
   // Add event listener
-  addEventListener(event: 'message' | 'channel' | 'visibility', callback: Function): void {
+  addEventListener(event: 'message' | 'channel' | 'visibility', callback: (...args: any[]) => any): void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
@@ -216,7 +216,7 @@ class CrossApplicationCommunicationService {
   }
 
   // Remove event listener
-  removeEventListener(event: 'message' | 'channel' | 'visibility', callback: Function): void {
+  removeEventListener(event: 'message' | 'channel' | 'visibility', callback: (...args: any[]) => any): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
       const index = listeners.indexOf(callback);
@@ -315,7 +315,7 @@ class CrossApplicationCommunicationService {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(message)
       });
@@ -323,8 +323,7 @@ class CrossApplicationCommunicationService {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-          } catch (error) {
+    } catch (error) {
       console.error('[CrossAppCommunication] Error sending to backend:', error);
     }
   }
@@ -335,7 +334,7 @@ class CrossApplicationCommunicationService {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(visibility)
       });

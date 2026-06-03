@@ -1,8 +1,9 @@
 import express from 'express';
-import uploadController from '../controllers/uploadController.js';
+import uploadModule from '../controllers/uploadController.js';
 const {
-  uploadController, uploadMiddleware
-} = uploadController;
+  uploadController,
+  uploadMiddleware
+} = uploadModule;
 
 import { protect } from '../middleware/authMiddleware.js';
 import { authorize } from '../middleware/authGuard.js';
@@ -230,6 +231,10 @@ router.post('/multiple', // ✓✓
 router.post('/profile/:userId?', // ✓✓
   uploadMiddleware.single('image'),
   uploadController.uploadProfileImage
+); // ✓✓
+
+router.delete('/profile/:userId?', // ✓✓
+  uploadController.deleteProfileImage
 ); // ✓✓
 
 /**

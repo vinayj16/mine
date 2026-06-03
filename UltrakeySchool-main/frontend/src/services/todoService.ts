@@ -55,12 +55,12 @@ const todoService = {
   },
 
   toggleComplete: async (id: string) => {
-    const response = await apiClient.patch(`${API_URL}/${id}/toggle-complete`);
+    const response = await apiClient.patch(`${API_URL}/${id}/complete`);
     return response.data;
   },
 
   toggleImportant: async (id: string) => {
-    const response = await apiClient.patch(`${API_URL}/${id}/toggle-important`);
+    const response = await apiClient.patch(`${API_URL}/${id}/important`);
     return response.data;
   },
 
@@ -80,17 +80,17 @@ const todoService = {
   },
 
   bulkDelete: async (ids: string[]) => {
-    const response = await apiClient.post(`${API_URL}/bulk/delete`, { ids });
+    const response = await apiClient.post(`${API_URL}/bulk-delete`, { ids });
     return response.data;
   },
 
   bulkMarkDone: async (ids: string[]) => {
-    const response = await apiClient.post(`${API_URL}/bulk/mark-done`, { ids });
+    const response = await apiClient.post(`${API_URL}/bulk-mark-done`, { ids });
     return response.data;
   },
 
   bulkMarkUndone: async (ids: string[]) => {
-    const response = await apiClient.post(`${API_URL}/bulk/mark-undone`, { ids });
+    const response = await apiClient.post(`${API_URL}/bulk-mark-undone`, { ids });
     return response.data;
   },
 

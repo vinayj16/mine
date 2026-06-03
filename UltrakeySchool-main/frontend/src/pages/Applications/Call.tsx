@@ -358,6 +358,10 @@ const Call: React.FC = () => {
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [mediaPermission, setMediaPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [activeTab, setActiveTab] = useState<'users' | 'history'>('users');
+  const [callLogs, setCallLogs] = useState<any[]>([]);
+  const [blockedUsersList, setBlockedUsersList] = useState<string[]>([]);
+  const [blocking, setBlocking] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -367,8 +371,72 @@ const Call: React.FC = () => {
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const incomingCallRef = useRef<IncomingCall | null>(null);
 
+  // Fetch blocked users
+  const fetchBlockedUsers = useCallback(() => {
+    import('../../services/api').then(({ default: apiClient }) => {
+      apiClient.get('/chat/blocked-users')
+        .then(response => {
+          if (response.data?.success) {
+            const list = response.data.data || [];
+            const ids = list.map((item: any) => item.blockedUserId?._id || item.blockedUserId || '');
+            setBlockedUsersList(ids.filter(Boolean));
+            sessionStorage.setItem('blockedUserIds', JSON.stringify(ids.filter(Boolean)));
+          }
+        })
+        .catch(err => console.error('Failed to fetch blocked users list:', err));
+    });
+  }, []);
+
+  const handleToggleBlockUser = async (userId: string) => {
+    try {
+      setBlocking(true);
+      const isBlocked = blockedUsersList.includes(userId);
+      const { default: apiClient } = await import('../../services/api');
+      if (isBlocked) {
+        await apiClient.post(`/chat/unblock/${userId}`);
+        toastService.success('User unblocked successfully');
+        const updated = blockedUsersList.filter(id => id !== userId);
+        setBlockedUsersList(updated);
+        sessionStorage.setItem('blockedUserIds', JSON.stringify(updated));
+      } else {
+        await apiClient.post(`/chat/block/${userId}`);
+        toastService.success('User blocked successfully');
+        const updated = [...blockedUsersList, userId];
+        setBlockedUsersList(updated);
+        sessionStorage.setItem('blockedUserIds', JSON.stringify(updated));
+      }
+    } catch (error: any) {
+      toastService.error(error.response?.data?.message || 'Failed to toggle block status');
+    } finally {
+      setBlocking(false);
+    }
+  };
+
   // Keep ref in sync with state (needed inside callbacks)
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
+
+  // Fetch call logs
+  const fetchCallLogs = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      const institutionId = stored ? JSON.parse(stored).institutionCode || 'default' : 'default';
+      if (currentUserId.current) {
+        import('../../services/callLogService').then(({ default: callLogService }) => {
+          callLogService.getByUser(institutionId, currentUserId.current)
+            .then(res => setCallLogs(res.data || res || []))
+            .catch(err => console.error('Error fetching call logs:', err));
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchCallLogs();
+    }
+  }, [activeTab, fetchCallLogs]);
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -387,18 +455,8 @@ const Call: React.FC = () => {
       }
     } catch { /* ignore */ }
 
-    // Pre-request media permission so browser doesn't block mid-call
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
-      .then(s => {
-        setMediaPermission('granted');
-        s.getTracks().forEach(t => t.stop()); // release immediately
-      })
-      .catch(() => {
-        // Try audio-only
-        navigator.mediaDevices?.getUserMedia({ audio: true })
-          .then(s => { setMediaPermission('granted'); s.getTracks().forEach(t => t.stop()); })
-          .catch(() => setMediaPermission('denied'));
-      });
+    // Fetch blocked users on mount
+    fetchBlockedUsers();
 
     // Fetch users
     userCommunicationService.getAllUsers()
@@ -651,6 +709,16 @@ const Call: React.FC = () => {
   // ── Socket handlers ───────────────────────────────────────────────────────
   const handleIncomingCall = useCallback((call: IncomingCall) => {
     console.log('📞 Incoming call:', call);
+    
+    // Auto-ignore if caller is blocked
+    const storedBlocked = sessionStorage.getItem('blockedUserIds') || '[]';
+    const parsedBlocked = JSON.parse(storedBlocked);
+    if (parsedBlocked.includes(call.from)) {
+      console.log(`🔇 Ignoring incoming call from blocked user: ${call.fromName}`);
+      socketService.rejectCall({ to: call.from });
+      return;
+    }
+
     setIncomingCall(call);
     
     // Enhanced toast notification
@@ -742,10 +810,10 @@ const Call: React.FC = () => {
       {/* Header */}
       <div style={headerStyles}>
         <div>
-          <h2 style={headerTitleStyles}>📹 Video &amp; Voice Calls</h2>
+          <h2 style={headerTitleStyles}><i className="ti ti-video"></i> Video &amp; Voice Calls</h2>
           <p style={headerSubStyles}>
             {mediaPermission === 'denied'
-              ? '⚠️ Camera/mic permission denied — voice only'
+              ? <><i className="ti ti-alert-triangle"></i> Camera/mic permission denied — voice only</>
               : 'Connect with users in real time'}
           </p>
         </div>
@@ -760,77 +828,132 @@ const Call: React.FC = () => {
         {/* ── Left: user list ── */}
         <aside style={sidebarStyles}>
           <div style={sidebarHeaderStyles}>
-            <h3 style={sidebarTitleStyles}>Users ({users.length})</h3>
+            <h3 style={sidebarTitleStyles}>Calls</h3>
           </div>
-          <input
-            style={searchBoxStyles}
-            placeholder="Search users…"
-            value={searchQuery}
-            onChange={(e) => {
-              const q = e.target.value;
-              setSearchQuery(q);
-              if (!q.trim()) {
-                setUsers(allUsers);
-              } else {
-                const lower = q.toLowerCase();
-                setUsers(allUsers.filter(u =>
-                  u.name.toLowerCase().includes(lower) ||
-                  u.email.toLowerCase().includes(lower) ||
-                  u.role.toLowerCase().includes(lower)
-                ));
-              }
-            }}
-          />
-          <div style={userListStyles}>
-            {users.length === 0 ? (
-              <p style={emptyStateStyles}>
-                {allUsers.length === 0 ? 'Loading users…' : 'No users match your search'}
-              </p>
-            ) : (
-              users.map((user) => {
-                const color = getColor(user.name);
-                const initials = getInitials(user.name);
-                const isSelected = selectedUser?.id === user.id;
-                return (
-                  <div
-                    key={user.id}
-                    style={isSelected ? userCardSelectedStyles : userCardDefaultStyles}
-                    onClick={() => setSelectedUser(user)}
-                  >
-                    <div style={{
-                      width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                      backgroundColor: color, display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.9rem',
-                    }}>
-                      {initials}
-                    </div>
-                    <div style={userInfoStyles}>
-                      <div style={userNameStyles}>{user.name}</div>
-                      <div style={userRoleStyles}>{user.role}</div>
-                    </div>
-                    <div style={callBtnsStyles}>
-                      <button
-                        style={callBtnPrimaryStyles}
-                        title="Video call"
-                        disabled={callStatus !== 'idle'}
-                        onClick={(e) => { e.stopPropagation(); startCall(user, 'video'); }}
-                      >
-                        📹
-                      </button>
-                      <button
-                        style={callBtnSecondaryStyles}
-                        title="Voice call"
-                        disabled={callStatus !== 'idle'}
-                        onClick={(e) => { e.stopPropagation(); startCall(user, 'voice'); }}
-                      >
-                        📞
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0' }}>
+            <button
+              style={{ flex: 1, padding: '0.75rem', border: 'none', background: activeTab === 'users' ? '#eff6ff' : 'transparent', color: activeTab === 'users' ? '#3b82f6' : '#64748b', fontWeight: activeTab === 'users' ? 600 : 400, cursor: 'pointer' }}
+              onClick={() => setActiveTab('users')}
+            >
+              Users ({users.length})
+            </button>
+            <button
+              style={{ flex: 1, padding: '0.75rem', border: 'none', background: activeTab === 'history' ? '#eff6ff' : 'transparent', color: activeTab === 'history' ? '#3b82f6' : '#64748b', fontWeight: activeTab === 'history' ? 600 : 400, cursor: 'pointer' }}
+              onClick={() => setActiveTab('history')}
+            >
+              History
+            </button>
           </div>
+          
+          {activeTab === 'users' ? (
+            <>
+              <input
+                style={searchBoxStyles}
+                placeholder="Search users…"
+                value={searchQuery}
+                onChange={(e) => {
+                  const q = e.target.value;
+                  setSearchQuery(q);
+                  if (!q.trim()) {
+                    setUsers(allUsers);
+                  } else {
+                    const lower = q.toLowerCase();
+                    setUsers(allUsers.filter(u =>
+                      u.name.toLowerCase().includes(lower) ||
+                      u.email.toLowerCase().includes(lower) ||
+                      u.role.toLowerCase().includes(lower)
+                    ));
+                  }
+                }}
+              />
+              <div style={userListStyles}>
+                {users.length === 0 ? (
+                  <p style={emptyStateStyles}>
+                    {allUsers.length === 0 ? 'Loading users…' : 'No users match your search'}
+                  </p>
+                ) : (
+                  users.map((user) => {
+                    const color = getColor(user.name);
+                    const initials = getInitials(user.name);
+                    const isSelected = selectedUser?.id === user.id;
+                    return (
+                      <div
+                        key={user.id}
+                        style={isSelected ? userCardSelectedStyles : userCardDefaultStyles}
+                        onClick={() => setSelectedUser(user)}
+                      >
+                        <div style={{
+                          width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                          backgroundColor: color, display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+                        }}>
+                          {initials}
+                        </div>
+                        <div style={userInfoStyles}>
+                          <div style={userNameStyles}>{user.name}</div>
+                          <div style={userRoleStyles}>{user.role}</div>
+                        </div>
+                        <div style={callBtnsStyles}>
+                          <button
+                            style={callBtnPrimaryStyles}
+                            title="Video call"
+                            disabled={callStatus !== 'idle'}
+                            onClick={(e) => { e.stopPropagation(); startCall(user, 'video'); }}
+                          >
+                            <i className="ti ti-video"></i>
+                          </button>
+                          <button
+                            style={callBtnSecondaryStyles}
+                            title="Voice call"
+                            disabled={callStatus !== 'idle'}
+                            onClick={(e) => { e.stopPropagation(); startCall(user, 'voice'); }}
+                          >
+                            <i className="ti ti-phone"></i>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={userListStyles}>
+              {callLogs.length === 0 ? (
+                <p style={emptyStateStyles}>No call history found</p>
+              ) : (
+                callLogs.map((log: any) => {
+                  const isIncoming = log.direction === 'inbound';
+                  const otherName = isIncoming ? log.callerName || 'Unknown' : log.receiverName || 'Unknown';
+                  const color = getColor(otherName);
+                  const initials = getInitials(otherName);
+                  const durationStr = formatDuration(log.duration || 0);
+                  
+                  return (
+                    <div key={log._id} style={userCardDefaultStyles}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                        backgroundColor: color, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+                      }}>
+                        {initials}
+                      </div>
+                      <div style={userInfoStyles}>
+                        <div style={userNameStyles}>{otherName}</div>
+                        <div style={{ ...userRoleStyles, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <i className={`ti ${isIncoming ? 'ti-arrow-down-left text-success' : 'ti-arrow-up-right text-primary'}`}></i>
+                          {new Date(log.callDate || log.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {log.status === 'completed' ? durationStr : <span style={{ color: '#ef4444' }}>{log.status}</span>}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </aside>
 
         {/* ── Right: call area ── */}
@@ -851,22 +974,48 @@ const Call: React.FC = () => {
                   </div>
                   <h3 style={idleTitleStyles}>{selectedUser.name}</h3>
                   <p style={{ ...idleSubStyles, marginBottom: '1.5rem' }}>{selectedUser.role} · {selectedUser.email}</p>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button
-                      style={{ ...callBtnPrimaryStyles, width: 56, height: 56, fontSize: '1.4rem' }}
-                      onClick={() => startCall(selectedUser, 'video')}
-                      title="Video call"
-                    >📹</button>
-                    <button
-                      style={{ ...callBtnSecondaryStyles, width: 56, height: 56, fontSize: '1.4rem' }}
-                      onClick={() => startCall(selectedUser, 'voice')}
-                      title="Voice call"
-                    >📞</button>
-                  </div>
+                  {blockedUsersList.includes(selectedUser.id) ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+                      <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, margin: '1rem 0 0 0' }}>
+                        <i className="ti ti-circle-x"></i> This user is blocked. Unblock to place calls.
+                      </p>
+                      <button
+                        className="btn btn-danger btn-sm mt-2"
+                        style={{ borderRadius: '20px', padding: '0.5rem 1.5rem', fontWeight: 600, border: 'none' }}
+                        onClick={() => handleToggleBlockUser(selectedUser.id)}
+                        disabled={blocking}
+                      >
+                        Unblock User
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem' }}>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <button
+                          style={{ ...callBtnPrimaryStyles, width: 56, height: 56, fontSize: '1.4rem' }}
+                          onClick={() => startCall(selectedUser, 'video')}
+                          title="Video call"
+                          ><i className="ti ti-video"></i></button>
+                        <button
+                          style={{ ...callBtnSecondaryStyles, width: 56, height: 56, fontSize: '1.4rem' }}
+                          onClick={() => startCall(selectedUser, 'voice')}
+                          title="Voice call"
+                        ><i className="ti ti-phone"></i></button>
+                      </div>
+                      <button
+                        className="btn btn-outline-danger btn-sm"
+                        style={{ borderRadius: '20px', padding: '0.4rem 1.25rem', fontWeight: 600 }}
+                        onClick={() => handleToggleBlockUser(selectedUser.id)}
+                        disabled={blocking}
+                      >
+                        Block User
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
-                  <div style={idleIconStyles}>📹</div>
+                  <div style={idleIconStyles}><i className="ti ti-video"></i></div>
                   <h3 style={idleTitleStyles}>No active call</h3>
                   <p style={idleSubStyles}>Select a user from the list to start a video or voice call.</p>
                 </>
@@ -882,12 +1031,12 @@ const Call: React.FC = () => {
               </div>
               <p style={callingNameStyles}>{selectedUser.name}</p>
               <p style={callingStatusStyles}>
-                {callType === 'video' ? '📹' : '📞'} Calling…
+                {callType === 'video' ? <i className="ti ti-video"></i> : <i className="ti ti-phone"></i>} Calling…
               </p>
               <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 2rem' }}>
                 Waiting for {selectedUser.name} to answer
               </p>
-              <button style={cancelBtnStyles} onClick={endCall} title="Cancel call">✕</button>
+              <button style={cancelBtnStyles} onClick={endCall} title="Cancel call"><i className="ti ti-x"></i></button>
               <p style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.75rem' }}>Cancel</p>
             </div>
           )}
@@ -913,7 +1062,7 @@ const Call: React.FC = () => {
                     style={{ ...ctrlBtnInactiveStyles, ...(isMuted ? ctrlBtnActiveStyles : {}) }}
                     onClick={toggleMute}
                   >
-                    {isMuted ? '🔇' : '🎙️'}
+                    {isMuted ? <i className="ti ti-volume-off"></i> : <i className="ti ti-microphone"></i>}
                   </button>
                   <p style={{ color: '#94a3b8', fontSize: '0.65rem', margin: '0.3rem 0 0' }}>
                     {isMuted ? 'Unmute' : 'Mute'}
@@ -924,14 +1073,14 @@ const Call: React.FC = () => {
                     style={{ ...ctrlBtnInactiveStyles, ...(isVideoOff ? ctrlBtnActiveStyles : {}) }}
                     onClick={toggleVideo}
                   >
-                    {isVideoOff ? '📵' : '📹'}
+                    {isVideoOff ? <i className="ti ti-device-mobile-off"></i> : <i className="ti ti-video"></i>}
                   </button>
                   <p style={{ color: '#94a3b8', fontSize: '0.65rem', margin: '0.3rem 0 0' }}>
                     {isVideoOff ? 'Start Video' : 'Stop Video'}
                   </p>
                 </div>
                 <div style={{ textAlign: 'center' as const }}>
-                  <button style={endBtnStyles} onClick={endCall}>📵</button>
+                  <button style={endBtnStyles} onClick={endCall}><i className="ti ti-device-mobile-off"></i></button>
                   <p style={{ color: '#ef4444', fontSize: '0.65rem', margin: '0.3rem 0 0' }}>End Call</p>
                 </div>
               </div>
@@ -957,14 +1106,14 @@ const Call: React.FC = () => {
                     style={{ ...ctrlBtnInactiveStyles, ...(isMuted ? ctrlBtnActiveStyles : {}) }}
                     onClick={toggleMute}
                   >
-                    {isMuted ? '🔇' : '🎙️'}
+                    {isMuted ? <i className="ti ti-volume-off"></i> : <i className="ti ti-microphone"></i>}
                   </button>
                   <p style={{ color: '#94a3b8', fontSize: '0.65rem', margin: '0.3rem 0 0' }}>
                     {isMuted ? 'Unmute' : 'Mute'}
                   </p>
                 </div>
                 <div style={{ textAlign: 'center' as const }}>
-                  <button style={endBtnStyles} onClick={endCall}>📵</button>
+                  <button style={endBtnStyles} onClick={endCall}><i className="ti ti-device-mobile-off"></i></button>
                   <p style={{ color: '#ef4444', fontSize: '0.65rem', margin: '0.3rem 0 0' }}>End Call</p>
                 </div>
               </div>
@@ -986,7 +1135,7 @@ const Call: React.FC = () => {
             </div>
             <p style={incomingNameStyles}>{incomingCall.fromName}</p>
             <p style={incomingTypeStyles}>
-              {incomingCall.callType === 'video' ? '📹 Video call' : '📞 Voice call'}
+              {incomingCall.callType === 'video' ? <><i className="ti ti-video"></i> Video call</> : <><i className="ti ti-phone"></i> Voice call</>}
             </p>
             {/* Who is calling whom */}
             <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0 0 1.5rem' }}>
@@ -994,11 +1143,11 @@ const Call: React.FC = () => {
             </p>
             <div style={incomingBtnsStyles}>
               <div style={{ textAlign: 'center' as const }}>
-                <button style={rejectBtnStyles} onClick={rejectIncomingCall}>✕</button>
+                <button style={rejectBtnStyles} onClick={rejectIncomingCall}><i className="ti ti-x"></i></button>
                 <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>Decline</p>
               </div>
               <div style={{ textAlign: 'center' as const }}>
-                <button style={acceptBtnStyles} onClick={acceptIncomingCall}>✔</button>
+                <button style={acceptBtnStyles} onClick={acceptIncomingCall}><i className="ti ti-check"></i></button>
                 <p style={{ color: '#10b981', fontSize: '0.7rem', marginTop: '0.4rem' }}>Accept</p>
               </div>
             </div>

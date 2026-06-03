@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { apiClient } from '../api/client';
 
 const API_URL = '/notes';
@@ -90,17 +89,17 @@ const noteService = {
   },
 
   permanentDelete: async (id: string) => {
-    const response = await axios.delete(`${API_URL}/${id}/permanent`);
+    const response = await apiClient.delete(`${API_URL}/${id}/permanent`);
     return response.data;
   },
 
   getStatistics: async (userId?: string, institutionId?: string) => {
-    const response = await axios.get(`${API_URL}/statistics`, { params: { userId, institutionId } });
+    const response = await apiClient.get(`${API_URL}/statistics`, { params: { userId, institutionId } });
     return response.data;
   },
 
   getNotesByTag: async (userId?: string, institutionId?: string) => {
-    const response = await axios.get(`${API_URL}/by-tag`, { params: { userId, institutionId } });
+    const response = await apiClient.get(`${API_URL}/by-tag`, { params: { userId, institutionId } });
     return response.data;
   }
 };

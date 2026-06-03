@@ -4,15 +4,15 @@ import plagiarismService from './plagiarismService.js';
 
 class OnlineExamService {
   // Exam Management
-  async createExam(examData, teacherId, schoolId) {
+  async createExam(examData, teacherId, institutionId) {
     try {
       const totalMarks = examData.questions.reduce((sum, q) => sum + q.points, 0);
       
       const exam = new OnlineExam({
         ...examData,
         teacher: teacherId,
-        schoolId,
-        tenant: schoolId,
+        institutionId,
+        tenant: institutionId,
         totalMarks,
       });
 
@@ -25,12 +25,12 @@ class OnlineExamService {
     }
   }
 
-  async getExams(schoolId, filters = {}, pagination = {}) {
+  async getExams(institutionId, filters = {}, pagination = {}) {
     try {
       const { page = 1, limit = 20, classId, subjectId, status, teacherId } = { ...filters, ...pagination };
       const skip = (page - 1) * limit;
 
-      const query = { schoolId };
+      const query = { institutionId };
 
       if (classId) query.class = classId;
       if (subjectId) query.subject = subjectId;
@@ -64,9 +64,9 @@ class OnlineExamService {
     }
   }
 
-  async getExamById(examId, schoolId) {
+  async getExamById(examId, institutionId) {
     try {
-      const exam = await OnlineExam.findOne({ _id: examId, schoolId })
+      const exam = await OnlineExam.findOne({ _id: examId, institutionId })
         .populate('subject', 'name')
         .populate('class', 'name grade')
         .populate('section', 'name')
@@ -83,7 +83,7 @@ class OnlineExamService {
     }
   }
 
-  async updateExam(examId, schoolId, updateData) {
+  async updateExam(examId, institutionId, updateData) {
     try {
       // Recalculate total marks if questions are updated
       if (updateData.questions) {
@@ -91,7 +91,7 @@ class OnlineExamService {
       }
 
       const exam = await OnlineExam.findOneAndUpdate(
-        { _id: examId, schoolId },
+        { _id: examId, institutionId },
         updateData,
         { new: true, runValidators: true }
       );
@@ -108,7 +108,7 @@ class OnlineExamService {
     }
   }
 
-  async deleteExam(examId, schoolId) {
+  async deleteExam(examId, institutionId) {
     try {
       // Check if there are submissions
       const submissionsCount = await ExamSubmission.countDocuments({ exam: examId });
@@ -117,7 +117,7 @@ class OnlineExamService {
         throw new Error('Cannot delete exam with existing submissions');
       }
 
-      const exam = await OnlineExam.findOneAndDelete({ _id: examId, schoolId });
+      const exam = await OnlineExam.findOneAndDelete({ _id: examId, institutionId });
 
       if (!exam) {
         throw new Error('Exam not found');
@@ -131,10 +131,10 @@ class OnlineExamService {
     }
   }
 
-  async publishExam(examId, schoolId) {
+  async publishExam(examId, institutionId) {
     try {
       const exam = await OnlineExam.findOneAndUpdate(
-        { _id: examId, schoolId },
+        { _id: examId, institutionId },
         { status: 'published' },
         { new: true }
       );
@@ -152,9 +152,9 @@ class OnlineExamService {
   }
 
   // Student Exam Taking
-  async startExam(examId, studentId, schoolId) {
+  async startExam(examId, studentId, institutionId) {
     try {
-      const exam = await OnlineExam.findOne({ _id: examId, schoolId });
+      const exam = await OnlineExam.findOne({ _id: examId, institutionId });
 
       if (!exam) {
         throw new Error('Exam not found');
@@ -182,8 +182,8 @@ class OnlineExamService {
           exam: examId,
           student: studentId,
           startedAt: new Date(),
-          schoolId,
-          tenant: schoolId,
+          institutionId,
+          tenant: institutionId,
           answers: [],
         });
 
@@ -473,10 +473,10 @@ class OnlineExamService {
   }
 
   // Statistics
-  async getExamStatistics(examId, schoolId) {
+  async getExamStatistics(examId, institutionId) {
     try {
       const [exam, submissions] = await Promise.all([
-        OnlineExam.findOne({ _id: examId, schoolId }),
+        OnlineExam.findOne({ _id: examId, institutionId }),
         ExamSubmission.find({ exam: examId, status: { $in: ['submitted', 'graded'] } }),
       ]);
 

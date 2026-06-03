@@ -1,15 +1,64 @@
 import Driver from '../models/Driver.js';
 
 class DriverService {
-  async getAllDrivers(institutionId, filters = {}) {
-    const query = { institutionId, isActive: true };
+  async getAllDrivers(institutionId, filters = {}, options = {}) {
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = options;
+    const skip = (page - 1) * limit;
     
-    if (filters.status) query.status = filters.status;
-    if (filters.name) query.name = { $regex: filters.name, $options: 'i' };
+    let query = { isActive: true };
     
-    const drivers = await Driver.find(query).sort({ createdAt: -1 });
+    // If institutionId is provided, filter by it
+    if (institutionId) {
+      query.$or = [
+        { institutionId: institutionId },
+        { tenant: institutionId }
+      ];
+    }
     
-    return drivers;
+    if (filters.status) {
+      if (filters.status === 'active') {
+        query.status = { $in: ['Active', 'active'] };
+      } else if (filters.status === 'inactive') {
+        query.status = { $in: ['Inactive', 'inactive'] };
+      } else {
+        query.status = filters.status;
+      }
+    }
+    
+    if (filters.name) {
+      query.name = { $regex: filters.name, $options: 'i' };
+    }
+    
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    
+    const drivers = await Driver.find(query)
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+    
+    const total = await Driver.countDocuments(query);
+    
+    return {
+      drivers: drivers.map(driver => ({
+        _id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        licenseNumber: driver.licenseNumber,
+        licenseExpiry: driver.licenseExpiry,
+        address: driver.address,
+        status: driver.status || 'Active',
+        experience: driver.experience,
+        createdAt: driver.createdAt
+      })),
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      }
+    };
   }
 
   async getDriverById(id, institutionId) {

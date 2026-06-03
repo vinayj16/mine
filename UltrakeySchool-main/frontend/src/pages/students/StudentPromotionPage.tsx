@@ -1,41 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { getInstitutionId } from '../../utils/auth';
 import apiClient from '../../api/client';
-
-interface Student {
-  _id: string;
-  admissionNumber: string;
-  rollNumber?: string;
-  firstName: string;
-  lastName: string;
-  classId?: {
-    _id: string;
-    name: string;
-  };
-  sectionId?: {
-    _id: string;
-    name: string;
-  };
-  status: string;
-}
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 const StudentPromotionPage: React.FC = () => {
-  const [loading, setLoading] = useState(false);
-  const [promoting, setPromoting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [showFilter, setShowFilter] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<any[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
-  
-  // Promotion form states
-  const [currentSession, setCurrentSession] = useState('2024-2025');
-  const [targetSession, setTargetSession] = useState('2025-2026');
   const [currentClass, setCurrentClass] = useState('');
   const [currentSection, setCurrentSection] = useState('');
+  const [currentSession, setCurrentSession] = useState('');
   const [targetClass, setTargetClass] = useState('');
   const [targetSection, setTargetSection] = useState('');
+  const [targetSession, setTargetSession] = useState('');
+  const [promoting, setPromoting] = useState(false);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 0 });
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = getInstitutionId();
 
   const fetchStudents = async () => {
     if (!currentClass) {
@@ -48,7 +36,7 @@ const StudentPromotionPage: React.FC = () => {
       setError(null);
 
       const params: any = { 
-        schoolId,
+        institutionId,
         classId: currentClass,
         status: 'active'
       };
@@ -117,7 +105,7 @@ const StudentPromotionPage: React.FC = () => {
         targetClassId: targetClass,
         targetSectionId: targetSection,
         targetSession,
-        schoolId
+        institutionId
       });
 
       if (response.data.success) {
@@ -136,10 +124,35 @@ const StudentPromotionPage: React.FC = () => {
   const handleReset = () => {
     setCurrentClass('');
     setCurrentSection('');
+    setCurrentSession('');
     setTargetClass('');
     setTargetSection('');
+    setTargetSession('');
     setSelectedStudents(new Set());
     setStudents([]);
+  };
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = students.map(student => ({
+      'Admission No': student.admissionNumber,
+      'Roll No': student.rollNumber || 'N/A',
+      Name: `${student.firstName} ${student.lastName}`,
+      Class: student.classId?.name || 'N/A',
+      Section: student.sectionId?.name || 'N/A',
+      Status: capitalize(student.status)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'student-promotion', [
+        { key: 'Admission No', label: 'Admission No' },
+        { key: 'Roll No', label: 'Roll No' },
+        { key: 'Name', label: 'Name' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Status', label: 'Status' }
+      ], 'Student Promotion');
+    } else {
+      exportToExcel(exportData, 'student-promotion');
+    }
   };
 
   const capitalize = (str?: string) => {
@@ -185,13 +198,13 @@ const StudentPromotionPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1" />
                   Export as Excel
                 </button>
@@ -515,3 +528,4 @@ const StudentPromotionPage: React.FC = () => {
 };
 
 export default StudentPromotionPage;
+

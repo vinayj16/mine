@@ -21,6 +21,20 @@ export interface CallSignal {
   sdp: string;
 }
 
+export interface AppNotification {
+  id: string;
+  _id: string;
+  title: string;
+  message: string;
+  type: string;
+  priority: string;
+  isRead: boolean;
+  read: boolean;
+  timestamp: string;
+  createdAt: string;
+  recipientId: string;
+}
+
 export interface IncomingCall {
   signal: CallSignal;
   from: string;
@@ -34,6 +48,7 @@ class SocketService {
   private socket: Socket | null = null;
   private messageCallbacks: ((message: Message) => void)[] = [];
   private messageSentCallbacks: ((message: Message) => void)[] = [];
+  private notificationCallbacks: ((notification: AppNotification) => void)[] = [];
   private incomingCallCallbacks: ((call: IncomingCall) => void)[] = [];
   private callAcceptedCallbacks: ((data: { signal: any; from: string }) => void)[] = [];
   private callRejectedCallbacks: ((data: { from: string }) => void)[] = [];
@@ -54,18 +69,18 @@ class SocketService {
 
   connect(userId: string) {
     if (this.socket?.connected) {
-      console.log('✅ Socket already connected');
+      console.log('[Socket] Already connected');
       return;
     }
     
     if (this.isConnecting) {
-      console.log('⏳ Socket connection already in progress');
+      console.log('[Socket] Connection already in progress');
       return;
     }
     
     // Disconnect existing socket if any
     if (this.socket) {
-      console.log('🔌 Disconnecting existing socket before reconnect');
+      console.log('[Socket] Disconnecting existing socket before reconnect');
       this.socket.disconnect();
       this.socket = null;
     }
@@ -129,6 +144,14 @@ class SocketService {
     });
     this.socket.on('message_sent', (message) => {
       this.messageSentCallbacks.forEach(cb => cb(message));
+    });
+
+    // ── Notification listeners ────────────────────────────────────────────
+    this.socket.on('notification:new', (notification: AppNotification) => {
+      this.notificationCallbacks.forEach(cb => cb(notification));
+    });
+    this.socket.on('notification', (notification: AppNotification) => {
+      this.notificationCallbacks.forEach(cb => cb(notification));
     });
 
     // ── Call listeners (match backend event names) ──────────────────────────
@@ -276,6 +299,17 @@ class SocketService {
         type: data.callType,
       });
     }
+  }
+
+  onNotification(callback: (notification: AppNotification) => void) {
+    this.notificationCallbacks.push(callback);
+    if (this.socket?.connected && !this.listenersSetup) {
+      this.setupListeners();
+    }
+  }
+
+  offNotification(callback: (notification: AppNotification) => void) {
+    this.notificationCallbacks = this.notificationCallbacks.filter(cb => cb !== callback);
   }
 
   onIncomingCall(callback: (call: IncomingCall) => void) {

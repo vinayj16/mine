@@ -13,9 +13,9 @@ const participantSchema = new mongoose.Schema({
 }, { _id: false });
 
 const scheduleSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -114,8 +114,8 @@ const scheduleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-scheduleSchema.index({ schoolId: 1, date: 1, status: 1 });
-scheduleSchema.index({ schoolId: 1, type: 1, date: 1 });
+scheduleSchema.index({ institutionId: 1, date: 1, status: 1 });
+scheduleSchema.index({ institutionId: 1, type: 1, date: 1 });
 scheduleSchema.index({ 'participants.userId': 1, date: 1 });
 scheduleSchema.index({ tags: 1 });
 

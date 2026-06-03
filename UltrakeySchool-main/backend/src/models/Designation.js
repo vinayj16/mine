@@ -12,7 +12,7 @@ const designationSchema = new mongoose.Schema({
   salaryRange: {
     min: Number,
     max: Number,
-    currency: { type: String, default: 'USD' }
+    currency: { type: String, default: 'INR' }
   },
   status: {
     type: String,

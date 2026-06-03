@@ -9,7 +9,7 @@ export interface Participant {
 
 export interface Conversation {
   _id: string;
-  schoolId?: string;
+  institutionId?: string;
   participants: Participant[];
   title?: string;
   isGroup: boolean;
@@ -54,7 +54,7 @@ export interface Message {
 }
 
 export interface CreateConversationData {
-  schoolId: string;
+  institutionId: string;
   participants: {
     userId: string;
     role?: string;
@@ -79,29 +79,23 @@ export interface SendMessageData {
 
 const chatService = {
   // Conversations
-  createConversation: async (_schoolId: string, data: Omit<CreateConversationData, 'schoolId'>) => {
+  createConversation: async (_institutionId: string, data: Omit<CreateConversationData, 'institutionId'>) => {
     const response = await api.post(`/chat/conversations`, data);
     return response.data;
   },
 
-  createGlobalConversation: async (data: Omit<CreateConversationData, 'schoolId'>) => {
-    // For global users (agents and superadmin), create conversation without schoolId
+  createGlobalConversation: async (data: Omit<CreateConversationData, 'institutionId'>) => {
+    // For global users (agents and superadmin), create conversation without institutionId
     const response = await api.post(`/chat/global-conversations`, data);
     return response.data;
   },
 
-  getConversations: async (_schoolId: string, _userId: string) => {
+  getConversations: async (_institutionId: string, _userId: string) => {
     const response = await api.get(`/chat/conversations`);
     return response.data;
   },
 
-  getAgentConversations: async (_userId: string) => {
-    // For agents, use a platform-wide endpoint without schoolId
-    const response = await api.get(`/chat/agent-conversations`);
-    return response.data;
-  },
-
-  getConversationById: async (_schoolId: string, conversationId: string) => {
+  getConversationById: async (_institutionId: string, conversationId: string) => {
     const response = await api.get(`/chat/conversations/${conversationId}`);
     return response.data;
   },

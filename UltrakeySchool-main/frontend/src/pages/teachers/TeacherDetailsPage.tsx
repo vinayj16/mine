@@ -102,7 +102,7 @@ const TeacherDetailsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const schoolId = '507f1f77bcf86cd799439011'; // This should come from auth context
+  const institutionId = localStorage.getItem('institutionId') || ''; // This should come from auth context
 
   useEffect(() => {
     if (teacherId) {
@@ -115,7 +115,7 @@ const TeacherDetailsPage = () => {
       setLoading(true);
       setError(null);
       const response = await apiClient.get(`/teachers/${teacherId}`, {
-        params: { schoolId }
+        params: { institutionId }
       });
 
       if (response.data.success) {
@@ -132,7 +132,7 @@ const TeacherDetailsPage = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'

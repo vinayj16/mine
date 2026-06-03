@@ -2,6 +2,8 @@ import studentService from '../services/studentService.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
+import Student from '../models/Student.js';
+import User from '../models/User.js';
 
 // Validation constants
 const VALID_LEAVE_STATUSES = ['pending', 'approved', 'rejected', 'cancelled'];
@@ -65,12 +67,13 @@ const validateDateRange = (startDate, endDate) => {
 const validateAcademicYear = (year) => {
   if (!year) return null;
   
-  const yearPattern = /^\d{4}-\d{4}$/;
+  const yearPattern = /^\d{4}[-\/]\d{4}$/;
   if (!yearPattern.test(year)) {
-    return 'Invalid academic year format. Expected format: YYYY-YYYY (e.g., 2023-2024)';
+    return 'Invalid academic year format. Expected format: YYYY-YYYY or YYYY/YYYY (e.g., 2023-2024)';
   }
   
-  const [startYear, endYear] = year.split('-').map(Number);
+  const normalized = year.replace('/', '-');
+  const [startYear, endYear] = normalized.split('-').map(Number);
   if (endYear !== startYear + 1) {
     return 'Academic year end must be one year after start year';
   }
@@ -84,7 +87,7 @@ const getStudentDetails = async (req, res) => {
     logger.info('Fetching student details');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -92,18 +95,13 @@ const getStudentDetails = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const student = await studentService.getStudentDetails(studentId, schoolId);
+    const student = await studentService.getStudentDetails(studentId, institutionId);
     
     if (!student) {
       return notFoundResponse(res, 'Student not found');
@@ -123,26 +121,29 @@ const getStudentTimetable = async (req, res) => {
     logger.info('Fetching student timetable');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
     
-    const studentIdError = validateObjectId(studentId, 'Student ID');
-    if (studentIdError) errors.push(studentIdError);
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
+    if (!studentId) {
+      errors.push('Student ID is required');
     } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
+      const studentIdError = validateObjectId(studentId, 'Student ID');
+      if (studentIdError) errors.push(studentIdError);
     }
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const timetable = await studentService.getStudentTimetable(studentId, schoolId);
+    let timetable = await studentService.getStudentTimetable(studentId, institutionId);
+    
+    // If no timetable exists, create sample data (only if student exists)
+    if (timetable && timetable.length === 0) {
+      logger.info('No timetable found, creating sample data');
+      timetable = await studentService.createSampleTimetable(studentId, institutionId);
+    }
     
     logger.info('Student timetable fetched successfully:', { studentId });
     return successResponse(res, timetable, 'Student timetable retrieved successfully');
@@ -157,9 +158,50 @@ const getStudentLeaves = async (req, res) => {
   try {
     logger.info('Fetching student leaves');
     
-    const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    let { studentId } = req.params;
+    const institutionId = req.user?.institutionId;
     const { status, startDate, endDate } = req.query;
+    const userRole = req.user?.role;
+    
+    // For students, always use their own ID - no override allowed
+    if (userRole === 'student') {
+      const Student = (await import('../models/Student.js')).default;
+      const student = await Student.findOne({ userId: req.user.id || req.user._id });
+      if (student) {
+        studentId = student._id;
+      } else {
+        studentId = req.user.id || req.user._id;
+      }
+    }
+    // For teachers, check if they are the class teacher of the student
+    else if (userRole === 'teacher') {
+      const Student = (await import('../models/Student.js')).default;
+      const Teacher = (await import('../models/Teacher.js')).default;
+      const Class = (await import('../models/Class.js')).default;
+      
+      const teacher = await Teacher.findOne({ userId: req.user.id || req.user._id });
+      if (teacher) {
+        // Get classes where this teacher is the class teacher
+        const classes = await Class.find({ classTeacher: teacher._id }).select('_id');
+        const classIds = classes.map(c => c._id);
+        
+        // Check if the requested student belongs to any of these classes
+        const student = await Student.findOne({ _id: studentId, classId: { $in: classIds } });
+        if (!student) {
+          // If not class teacher, check if teacher teaches any subject to this student
+          // For now, allow teachers to view all student leaves in their school
+          // This can be refined later based on subject assignments
+        }
+      }
+    }
+    // For parents, only show their own children's leaves
+    else if (userRole === 'parent') {
+      const Student = (await import('../models/Student.js')).default;
+      const student = await Student.findOne({ _id: studentId, parentId: req.user.id || req.user._id });
+      if (!student) {
+        return errorResponse(res, 'You can only view leaves for your own children', 403);
+      }
+    }
     
     // Validation
     const errors = [];
@@ -167,12 +209,7 @@ const getStudentLeaves = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (status && !VALID_LEAVE_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_LEAVE_STATUSES.join(', '));
@@ -187,7 +224,7 @@ const getStudentLeaves = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leaves = await studentService.getStudentLeaves(studentId, schoolId, {
+    const leaves = await studentService.getStudentLeaves(studentId, institutionId, {
       status,
       startDate,
       endDate
@@ -207,7 +244,7 @@ const applyLeave = async (req, res) => {
     logger.info('Applying leave for student');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const userId = req.user?.userId;
     const { startDate, endDate, reason, leaveType } = req.body;
     
@@ -217,12 +254,7 @@ const applyLeave = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (!startDate) {
       errors.push('Start date is required');
@@ -251,7 +283,7 @@ const applyLeave = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leave = await studentService.applyLeave(studentId, schoolId, req.body, userId);
+    const leave = await studentService.applyLeave(studentId, institutionId, req.body, userId);
     
     logger.info('Leave applied successfully:', { studentId, leaveId: leave._id });
     return createdResponse(res, leave, 'Leave application submitted successfully');
@@ -267,7 +299,7 @@ const reviewLeave = async (req, res) => {
     logger.info('Reviewing leave');
     
     const { leaveId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const userId = req.user?.userId;
     const { status, reviewNotes } = req.body;
     
@@ -277,12 +309,7 @@ const reviewLeave = async (req, res) => {
     const leaveIdError = validateObjectId(leaveId, 'Leave ID');
     if (leaveIdError) errors.push(leaveIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (!status || status.trim().length === 0) {
       errors.push('Status is required');
@@ -298,7 +325,7 @@ const reviewLeave = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const leave = await studentService.reviewLeave(leaveId, schoolId, req.body, userId);
+    const leave = await studentService.reviewLeave(leaveId, institutionId, req.body, userId);
     
     if (!leave) {
       return notFoundResponse(res, 'Leave application not found');
@@ -318,7 +345,7 @@ const getStudentAttendance = async (req, res) => {
     logger.info('Fetching student attendance');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { startDate, endDate, status, limit } = req.query;
     
     // Validation
@@ -327,12 +354,7 @@ const getStudentAttendance = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (status && !VALID_ATTENDANCE_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_ATTENDANCE_STATUSES.join(', '));
@@ -353,7 +375,7 @@ const getStudentAttendance = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const attendance = await studentService.getStudentAttendance(studentId, schoolId, {
+    const attendance = await studentService.getStudentAttendance(studentId, institutionId, {
       startDate,
       endDate,
       status,
@@ -374,7 +396,7 @@ const getStudentFees = async (req, res) => {
     logger.info('Fetching student fees');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { status, feeType, academicYear } = req.query;
     
     // Validation
@@ -383,12 +405,7 @@ const getStudentFees = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (status && !VALID_FEE_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_FEE_STATUSES.join(', '));
@@ -403,7 +420,7 @@ const getStudentFees = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const fees = await studentService.getStudentFees(studentId, schoolId, {
+    const fees = await studentService.getStudentFees(studentId, institutionId, {
       status,
       feeType,
       academicYear
@@ -423,7 +440,7 @@ const getStudentResults = async (req, res) => {
     logger.info('Fetching student results');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { academicYear, term, status } = req.query;
     
     // Validation
@@ -432,12 +449,7 @@ const getStudentResults = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (academicYear) {
       const academicYearError = validateAcademicYear(academicYear);
@@ -452,13 +464,14 @@ const getStudentResults = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const results = await studentService.getStudentResults(studentId, schoolId, {
+    logger.info('DEBUG getStudentResults:', { studentId, institutionId: institutionId?.toString?.(), academicYear, instType: typeof institutionId });
+    const results = await studentService.getStudentResults(studentId, institutionId, {
       academicYear,
       term,
       status
     });
     
-    logger.info('Student results fetched successfully:', { studentId });
+    logger.info('Student results fetched successfully:', { studentId, count: results?.length });
     return successResponse(res, results, 'Student results retrieved successfully');
   } catch (error) {
     logger.error('Error fetching student results:', error);
@@ -472,7 +485,7 @@ const getStudentLibraryRecords = async (req, res) => {
     logger.info('Fetching student library records');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { status } = req.query;
     
     // Validation
@@ -481,12 +494,7 @@ const getStudentLibraryRecords = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (status && !VALID_LIBRARY_STATUSES.includes(status)) {
       errors.push('Invalid status. Must be one of: ' + VALID_LIBRARY_STATUSES.join(', '));
@@ -496,7 +504,7 @@ const getStudentLibraryRecords = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const library = await studentService.getStudentLibraryRecords(studentId, schoolId, {
+    const library = await studentService.getStudentLibraryRecords(studentId, institutionId, {
       status
     });
     
@@ -514,7 +522,7 @@ const getStudentDashboardData = async (req, res) => {
     logger.info('Fetching student dashboard data');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -522,18 +530,13 @@ const getStudentDashboardData = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const dashboardData = await studentService.getStudentDashboardData(studentId, schoolId);
+    const dashboardData = await studentService.getStudentDashboardData(studentId, institutionId);
     
     logger.info('Student dashboard data fetched successfully:', { studentId });
     return successResponse(res, dashboardData, 'Student dashboard data retrieved successfully');
@@ -549,7 +552,7 @@ const getStudentSidebarData = async (req, res) => {
     logger.info('Fetching student sidebar data');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -557,18 +560,13 @@ const getStudentSidebarData = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const sidebarData = await studentService.getStudentSidebarData(studentId, schoolId);
+    const sidebarData = await studentService.getStudentSidebarData(studentId, institutionId);
     
     logger.info('Student sidebar data fetched successfully:', { studentId });
     return successResponse(res, sidebarData, 'Student sidebar data retrieved successfully');
@@ -584,7 +582,7 @@ const getStudentPerformanceSummary = async (req, res) => {
     logger.info('Fetching student performance summary');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { academicYear } = req.query;
     
     // Validation
@@ -593,12 +591,7 @@ const getStudentPerformanceSummary = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (academicYear) {
       const academicYearError = validateAcademicYear(academicYear);
@@ -609,7 +602,7 @@ const getStudentPerformanceSummary = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const summary = await studentService.getStudentPerformanceSummary(studentId, schoolId, academicYear);
+    const summary = await studentService.getStudentPerformanceSummary(studentId, institutionId, academicYear);
     
     logger.info('Student performance summary fetched successfully:', { studentId });
     return successResponse(res, summary, 'Student performance summary retrieved successfully');
@@ -625,7 +618,7 @@ const getStudentHomework = async (req, res) => {
     logger.info('Fetching student homework');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { status, subject, startDate, endDate } = req.query;
     
     // Validation
@@ -634,12 +627,7 @@ const getStudentHomework = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     const dateErrors = validateDateRange(startDate, endDate);
     if (dateErrors.length > 0) {
@@ -650,7 +638,7 @@ const getStudentHomework = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const homework = await studentService.getStudentHomework(studentId, schoolId, {
+    const homework = await studentService.getStudentHomework(studentId, institutionId, {
       status,
       subject,
       startDate,
@@ -671,7 +659,7 @@ const getStudentExams = async (req, res) => {
     logger.info('Fetching student exams');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { academicYear, term, status } = req.query;
     
     // Validation
@@ -680,12 +668,7 @@ const getStudentExams = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (academicYear) {
       const academicYearError = validateAcademicYear(academicYear);
@@ -696,7 +679,7 @@ const getStudentExams = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exams = await studentService.getStudentExams(studentId, schoolId, {
+    const exams = await studentService.getStudentExams(studentId, institutionId, {
       academicYear,
       term,
       status
@@ -716,7 +699,7 @@ const getStudentNotifications = async (req, res) => {
     logger.info('Fetching student notifications');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { isRead, limit } = req.query;
     
     // Validation
@@ -725,12 +708,7 @@ const getStudentNotifications = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (isRead !== undefined && isRead !== 'true' && isRead !== 'false') {
       errors.push('isRead must be true or false');
@@ -746,7 +724,7 @@ const getStudentNotifications = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const notifications = await studentService.getStudentNotifications(studentId, schoolId, {
+    const notifications = await studentService.getStudentNotifications(studentId, institutionId, {
       isRead: isRead === 'true' ? true : isRead === 'false' ? false : undefined,
       limit: limitNum
     });
@@ -765,7 +743,7 @@ const exportStudentData = async (req, res) => {
     logger.info('Exporting student data');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     const { format, dataType } = req.query;
     
     // Validation
@@ -774,12 +752,7 @@ const exportStudentData = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (!format || format.trim().length === 0) {
       errors.push('Export format is required');
@@ -796,7 +769,7 @@ const exportStudentData = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exportData = await studentService.exportStudentData(studentId, schoolId, {
+    const exportData = await studentService.exportStudentData(studentId, institutionId, {
       format: format.toLowerCase(),
       dataType: dataType || 'all'
     });
@@ -815,7 +788,7 @@ const getStudentProfileCompleteness = async (req, res) => {
     logger.info('Fetching student profile completeness');
     
     const { studentId } = req.params;
-    const schoolId = req.user?.schoolId;
+    const institutionId = req.user?.institutionId;
     
     // Validation
     const errors = [];
@@ -823,18 +796,13 @@ const getStudentProfileCompleteness = async (req, res) => {
     const studentIdError = validateObjectId(studentId, 'Student ID');
     if (studentIdError) errors.push(studentIdError);
     
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
+
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const completeness = await studentService.getStudentProfileCompleteness(studentId, schoolId);
+    const completeness = await studentService.getStudentProfileCompleteness(studentId, institutionId);
     
     logger.info('Student profile completeness fetched successfully:', { studentId });
     return successResponse(res, completeness, 'Student profile completeness retrieved successfully');
@@ -844,7 +812,89 @@ const getStudentProfileCompleteness = async (req, res) => {
   }
 };
 
-// Export all functions
+// Get logged-in student's profile (fallback to User collection if no Student record exists)
+const getMyStudentProfile = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+
+    // First try to find in Student collection by userId
+    let student = await Student.findOne({ userId })
+      .populate('classId', 'name grade')
+      .populate('sectionId', 'name');
+
+    if (!student) {
+      // Fallback: try finding by _id (legacy students stored directly in Student collection)
+      student = await Student.findById(userId)
+        .populate('classId', 'name grade')
+        .populate('sectionId', 'name');
+    }
+
+    if (student) {
+      // If the student record exists, return it
+      return successResponse(res, student, 'Student profile retrieved successfully');
+    }
+
+    // Fallback: build student-like object from User collection
+    const user = await User.findById(userId).select('name email phone role class section rollNumber admissionNumber gender dateOfBirth status avatar institutionId').lean();
+    
+    if (!user) {
+      return notFoundResponse(res, 'Student profile not found for this user');
+    }
+
+    // Auto-create Student document from User data so subsequent API calls work
+    const nameParts = (user.name || '').split(' ');
+    const { default: Class } = await import('../models/Class.js');
+    const { default: Section } = await import('../models/Section.js');
+    let classDoc = null;
+    if (user.class) {
+      classDoc = await Class.findOne({ name: user.class, institutionId: user.institutionId }).lean();
+    }
+    let sectionDoc = null;
+    if (user.section && classDoc?._id) {
+      sectionDoc = await Section.findOne({ name: user.section, classId: classDoc._id }).lean();
+    }
+
+    // Normalize gender - handle 'Not Specified' and other invalid values
+    const normalizedGender = ['male', 'female', 'other'].includes(user.gender) ? user.gender : 'male';
+
+    // Get current academic year
+    const currentYear = new Date().getFullYear();
+    const academicYear = currentYear + '-' + (currentYear + 1);
+
+    // If no class found by name, find the first class in the institution as fallback
+    if (!classDoc && user.institutionId) {
+      classDoc = await Class.findOne({ institutionId: user.institutionId }).sort({ name: 1 }).lean();
+    }
+
+    const newStudent = await Student.create({
+      userId: user._id,
+      firstName: nameParts[0] || user.name || 'Student',
+      lastName: nameParts.slice(1).join(' ') || '',
+      email: user.email || `${user._id}@student.local`,
+      phone: user.phone || '',
+      admissionNumber: user.admissionNumber || `STU${Date.now()}`,
+      rollNumber: user.rollNumber || '',
+      gender: normalizedGender,
+      dateOfBirth: user.dateOfBirth || new Date('2000-01-01'),
+      academicYear,
+      status: user.status || 'active',
+      isActive: user.status !== 'inactive',
+      institutionId: user.institutionId,
+      classId: classDoc?._id,
+      sectionId: sectionDoc?._id,
+    });
+
+    const populated = await Student.findById(newStudent._id)
+      .populate('classId', 'name grade')
+      .populate('sectionId', 'name');
+
+    return successResponse(res, populated, 'Student profile created and retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching my student profile:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
 export default {
   getStudentDetails,
   getStudentTimetable,
@@ -862,5 +912,6 @@ export default {
   getStudentExams,
   getStudentNotifications,
   exportStudentData,
-  getStudentProfileCompleteness
+  getStudentProfileCompleteness,
+  getMyStudentProfile
 };

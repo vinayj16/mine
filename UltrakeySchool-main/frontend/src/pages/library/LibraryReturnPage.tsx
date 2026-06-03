@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
@@ -32,6 +33,8 @@ const LibraryReturnPage: React.FC = () => {
   const [showBookDetails, setShowBookDetails] = useState(false);
   const [selectedBook, setSelectedBook] = useState<ReturnBook | null>(null);
   const [returning, setReturning] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     fetchIssuedBooks();
@@ -48,7 +51,9 @@ const LibraryReturnPage: React.FC = () => {
       });
       
       if (response.data.success) {
-        setReturnBooks(response.data.data || []);
+        const payload = response.data.data;
+        const issueList = Array.isArray(payload) ? payload : payload?.issues || [];
+        setReturnBooks(issueList);
       }
     } catch (error: any) {
       console.error('Error fetching issued books:', error);
@@ -62,7 +67,7 @@ const LibraryReturnPage: React.FC = () => {
 
   const formatDate = (dateString: string): string => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -86,13 +91,15 @@ const LibraryReturnPage: React.FC = () => {
   };
 
   const handleReturnBook = async (bookId: string) => {
-    if (!window.confirm('Are you sure you want to mark this book as returned?')) {
-      return;
-    }
+    setShowDeleteModal(true);
+    setDeleteTarget(bookId);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
       setReturning(true);
-      const response = await apiClient.put(`/library/issues/${bookId}/return`);
+      const response = await apiClient.post(`/library/issues/${deleteTarget}/return`);
       
       if (response.data.success) {
         toast.success('Book returned successfully');
@@ -105,6 +112,8 @@ const LibraryReturnPage: React.FC = () => {
       toast.error(error.response?.data?.message || 'Failed to return book');
     } finally {
       setReturning(false);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -351,20 +360,20 @@ const LibraryReturnPage: React.FC = () => {
                         <td>
                           <div className="d-flex align-items-center">
                             <div className="avatar avatar-md me-2">
-                              {book.user.avatar ? (
+                              {book.user?.avatar ? (
                                 <img 
                                   src={book.user.avatar} 
                                   className="img-fluid rounded-circle" 
-                                  alt={book.user.name} 
+                                  alt={book.user?.name || 'User'} 
                                 />
                               ) : (
                                 <div className="avatar-title bg-primary rounded-circle">
-                                  {book.user.name.charAt(0).toUpperCase()}
+                                  {(book.user?.name || 'U').charAt(0).toUpperCase()}
                                 </div>
                               )}
                             </div>
                             <div>
-                              <p className="text-dark mb-0">{book.user.name}</p>
+                              <p className="text-dark mb-0">{book.user?.name || 'Unknown'}</p>
                               <span className="fs-12">{book.userType}</span>
                             </div>
                           </div>
@@ -459,21 +468,21 @@ const LibraryReturnPage: React.FC = () => {
                       <label className="form-label">Issued To</label>
                       <div className="d-flex align-items-center">
                         <div className="avatar me-3">
-                          {selectedBook.user.avatar ? (
+                          {selectedBook.user?.avatar ? (
                             <img 
                               src={selectedBook.user.avatar} 
                               className="img-fluid rounded-circle" 
-                              alt={selectedBook.user.name} 
+                              alt={selectedBook.user?.name || 'User'} 
                               style={{ width: '50px', height: '50px' }}
                             />
                           ) : (
                             <div className="avatar-title bg-primary rounded-circle" style={{ width: '50px', height: '50px' }}>
-                              {selectedBook.user.name.charAt(0).toUpperCase()}
+                              {(selectedBook.user?.name || 'U').charAt(0).toUpperCase()}
                             </div>
                           )}
                         </div>
                         <div>
-                          <h5 className="mb-0">{selectedBook.user.name}</h5>
+                          <h5 className="mb-0">{selectedBook.user?.name || 'Unknown'}</h5>
                           <p className="mb-0">
                             {selectedBook.userType} - {selectedBook.user.email}
                           </p>
@@ -498,7 +507,7 @@ const LibraryReturnPage: React.FC = () => {
                       <div className="mb-3">
                         <label className="form-label">Fine Amount</label>
                         <p className="form-control-static text-danger fw-medium">
-                          ${selectedBook.fine.toFixed(2)} ({selectedBook.fineStatus})
+                          ₹{selectedBook.fine.toFixed(2)} ({selectedBook.fineStatus})
                         </p>
                       </div>
                     </div>
@@ -536,6 +545,8 @@ const LibraryReturnPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to mark this book as returned?" />
     </>
   );
 };

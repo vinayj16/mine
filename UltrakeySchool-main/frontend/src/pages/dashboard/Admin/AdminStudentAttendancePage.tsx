@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import apiClient from '../../../api/client';
+import { exportToPDF, exportToExcel } from '../../../utils/exportUtils';
 
 interface StudentAttendanceData {
   overview: {
@@ -44,6 +47,8 @@ interface StudentAttendanceData {
   }[];
 }
 
+const COLORS = { present: '#10b981', absent: '#ef4444', late: '#f59e0b', leave: '#6b7280' };
+
 const AdminStudentAttendancePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [attendanceData, setAttendanceData] = useState<StudentAttendanceData | null>(null);
@@ -52,8 +57,7 @@ const AdminStudentAttendancePage: React.FC = () => {
   const [selectedSection, setSelectedSection] = useState<string>('overview');
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
-  const [selectedClass, setSelectedClass] = useState<string>('');
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('all');
   const [attendanceRecords, setAttendanceRecords] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -64,95 +68,114 @@ const AdminStudentAttendancePage: React.FC = () => {
   const fetchAttendanceData = async () => {
     try {
       setLoading(true);
-      
-      // Get schoolId from localStorage or use default
-      const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
-      
-      // Fetch students for this school
-      const studentsResponse = await apiClient.get('/students', { params: { schoolId } });
+
+      // Fetch all data in parallel from real backend APIs
+      const [studentsResponse, attendanceResponse] = await Promise.all([
+        apiClient.get('/students', { params: { limit: 1000 } }),
+        apiClient.get('/attendance/bulk', { params: { userType: 'student', date: selectedDate, grade: selectedGrade, section: selectedSectionId } }).catch(() => null),
+        apiClient.get('/attendance/stats', { params: { dateRange: 'today', userType: 'student' } }).catch(() => null)
+      ]);
+
       const studentsArray = studentsResponse.data?.data || [];
-      const students = Array.isArray(studentsArray) ? studentsArray : [];
-      setStudents(students);
+      const allStudents = Array.isArray(studentsArray) ? studentsArray : [];
+      setStudents(allStudents);
+      const totalStudents = allStudents.length;
+
+      // Get attendance records from bulk endpoint
+      const attendanceRecordsData = attendanceResponse?.data?.data || [];
+      const attendanceStats = attendanceResponse?.[1]?.data?.data || null;
+
+      // Calculate real stats from attendance data
+      const records = Array.isArray(attendanceRecordsData) ? attendanceRecordsData : [];
       
-      // Calculate real stats from student data
-      const totalStudents = students.length;
-      const activeStudents = students.filter((s: any) => s.status === 'active');
+      // Calculate status counts from actual attendance records
+      const presentToday = records.filter((r: any) => r.status === 'present').length;
+      const absentToday = records.filter((r: any) => r.status === 'absent').length;
+      const lateToday = records.filter((r: any) => r.status === 'late').length;
+      const leaveToday = records.filter((r: any) => r.status === 'leave' || r.status === 'emergency').length;
       
-      // Simulate attendance (in real app, this would come from attendance records)
-      const presentToday = Math.floor(totalStudents * 0.85);
-      const absentToday = Math.floor(totalStudents * 0.10);
-      const lateToday = Math.floor(totalStudents * 0.03);
-      const leaveToday = Math.floor(totalStudents * 0.02);
-      const attendanceRate = totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0;
-      
-      // Build class-wise attendance from student data
+      // If no attendance records exist yet, defaults to 0
+      const presentCount = attendanceStats?.present ?? presentToday;
+      const absentCount = attendanceStats?.absent ?? absentToday;
+      const lateCount = attendanceStats?.late ?? lateToday;
+      const attendanceRate = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+      // Build class-wise from student data with real attendance if available
       const classMap = new Map();
-      activeStudents.forEach((student: any) => {
-        const className = student.classId?.className || 'Grade 1';
+      allStudents.forEach((student: any) => {
+        const className = student.classId?.className || student.class || 'Grade 1';
         const section = student.section || 'A';
         const key = `${className}-${section}`;
-        
         if (!classMap.has(key)) {
-          classMap.set(key, { className, section, totalStudents: 0, present: 0, absent: 0 });
+          classMap.set(key, { className, section, totalStudents: 0, present: 0, absent: 0, late: 0, leave: 0 });
         }
         const data = classMap.get(key);
         data.totalStudents++;
-        // Simulate 85% present
-        if (Math.random() > 0.15) data.present++;
-        else data.absent++;
       });
-      
+
+      // Apply attendance data to class groups
+      records.forEach((rec: any) => {
+        const student = allStudents.find((s: any) => s._id === rec.userId?._id || s._id === rec.userId);
+        if (student) {
+          const className = student.classId?.className || student.class || 'Grade 1';
+          const section = student.section || 'A';
+          const key = `${className}-${section}`;
+          const data = classMap.get(key);
+          if (data) {
+            if (rec.status === 'present') data.present++;
+            else if (rec.status === 'absent') data.absent++;
+            else if (rec.status === 'late') data.late++;
+            else if (rec.status === 'leave' || rec.status === 'emergency') data.leave++;
+          }
+        }
+      });
+
       const classWiseAttendance = Array.from(classMap.values()).map((c: any) => ({
         className: c.className,
         section: c.section,
         totalStudents: c.totalStudents,
         present: c.present,
         absent: c.absent,
-        late: 0,
-        leave: 0,
+        late: c.late,
+        leave: c.leave,
         attendanceRate: c.totalStudents > 0 ? Math.round((c.present / c.totalStudents) * 100) : 0
       }));
-      
-      // If no class data, use default
-      const finalClassWise = classWiseAttendance.length > 0 ? classWiseAttendance : [
-        { className: 'Grade 1', section: 'A', totalStudents, present: presentToday, absent: absentToday, late: lateToday, leave: leaveToday, attendanceRate },
-        { className: 'Grade 2', section: 'A', totalStudents: 0, present: 0, absent: 0, late: 0, leave: 0, attendanceRate: 0 },
-        { className: 'Grade 3', section: 'A', totalStudents: 0, present: 0, absent: 0, late: 0, leave: 0, attendanceRate: 0 }
+
+      const statusCounts = [
+        { status: 'Present', count: presentCount, percentage: 0, color: COLORS.present },
+        { status: 'Absent', count: absentCount, percentage: 0, color: COLORS.absent },
+        { status: 'Late', count: lateCount, percentage: 0, color: COLORS.late },
+        { status: 'Leave', count: leaveToday, percentage: 0, color: COLORS.leave }
       ];
-      
+      const totalStatus = statusCounts.reduce((sum, s) => sum + s.count, 0);
+      statusCounts.forEach(s => { s.percentage = totalStatus > 0 ? (s.count / totalStatus) * 100 : 0; });
+
       setAttendanceData({
         overview: {
           totalStudents,
-          presentToday,
-          absentToday,
-          lateToday,
+          presentToday: presentCount,
+          absentToday: absentCount,
+          lateToday: lateCount,
           leaveToday,
           attendanceRate,
-          weeklyAverage: attendanceRate,
+          weeklyAverage: Math.round((presentCount / Math.max(totalStudents, 1)) * 100),
           monthlyAverage: attendanceRate
         },
-        classWiseAttendance: finalClassWise,
+        classWiseAttendance,
         weeklyTrend: [
-          { day: 'Mon', present: presentToday, absent: absentToday, late: lateToday, attendanceRate },
-          { day: 'Tue', present: Math.floor(totalStudents * 0.88), absent: Math.floor(totalStudents * 0.08), late: Math.floor(totalStudents * 0.02), attendanceRate: 88 },
-          { day: 'Wed', present: Math.floor(totalStudents * 0.82), absent: Math.floor(totalStudents * 0.12), late: Math.floor(totalStudents * 0.04), attendanceRate: 82 },
-          { day: 'Thu', present: Math.floor(totalStudents * 0.90), absent: Math.floor(totalStudents * 0.07), late: Math.floor(totalStudents * 0.02), attendanceRate: 90 },
-          { day: 'Fri', present: Math.floor(totalStudents * 0.85), absent: Math.floor(totalStudents * 0.10), late: Math.floor(totalStudents * 0.03), attendanceRate: 85 }
+          { day: 'Mon', present: presentCount, absent: absentCount, late: lateCount, attendanceRate },
+          { day: 'Tue', present: 0, absent: 0, late: 0, attendanceRate: 0 },
+          { day: 'Wed', present: 0, absent: 0, late: 0, attendanceRate: 0 },
+          { day: 'Thu', present: 0, absent: 0, late: 0, attendanceRate: 0 },
+          { day: 'Fri', present: 0, absent: 0, late: 0, attendanceRate: 0 }
         ],
-        gradeDistribution: [
-          { grade: 'Grade 1', totalStudents: Math.floor(totalStudents / 3), present: Math.floor((totalStudents / 3) * 0.85), attendanceRate: 85 },
-          { grade: 'Grade 2', totalStudents: Math.floor(totalStudents / 3), present: Math.floor((totalStudents / 3) * 0.88), attendanceRate: 88 },
-          { grade: 'Grade 3', totalStudents: Math.floor(totalStudents / 3), present: Math.floor((totalStudents / 3) * 0.82), attendanceRate: 82 },
-          { grade: 'Grade 4', totalStudents: 0, present: 0, attendanceRate: 0 },
-          { grade: 'Grade 5', totalStudents: 0, present: 0, attendanceRate: 0 }
-        ],
-        attendanceStatus: [
-          { status: 'Present', count: 0, percentage: 0, color: '#10b981' },
-          { status: 'Absent', count: 0, percentage: 0, color: '#ef4444' },
-          { status: 'Late', count: 0, percentage: 0, color: '#f59e0b' },
-          { status: 'Leave', count: 0, percentage: 0, color: '#6b7280' }
-        ]
+        gradeDistribution: Array.from(classMap.entries()).slice(0, 5).map(([key, c]: any) => ({
+          grade: c.className,
+          totalStudents: c.totalStudents,
+          present: c.present,
+          attendanceRate: c.totalStudents > 0 ? Math.round((c.present / c.totalStudents) * 100) : 0
+        })),
+        attendanceStatus: statusCounts
       });
     } catch (error) {
       console.error('Error fetching student attendance data:', error);
@@ -168,10 +191,8 @@ const AdminStudentAttendancePage: React.FC = () => {
     setSelectedSectionId('all');
     setAttendanceRecords({});
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/v1/students`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
-      const data = await response.json();
+      const response = await apiClient.get('/students', { params: { limit: 50 } });
+      const data = response.data;
       if (data.success && data.data) {
         setStudents(data.data.slice(0, 50));
       }
@@ -183,27 +204,29 @@ const AdminStudentAttendancePage: React.FC = () => {
   const handleSaveAttendance = async () => {
     setSaving(true);
     try {
-      const records = Object.entries(attendanceRecords).map(([studentId, status]) => ({
-        studentId,
+      const entries = Object.entries(attendanceRecords);
+      if (entries.length === 0) {
+        toast.warn('Please mark attendance for at least one student');
+        setSaving(false);
+        return;
+      }
+      const records = entries.map(([studentId, status]) => ({
+        userId: studentId,
+        userType: 'student',
         date: selectedDate,
-        status,
-        session: 'morning'
+        status
       }));
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/v1/student-attendance`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ records, date: selectedDate })
+      const response = await apiClient.post('/attendance/bulk-mark', {
+        attendanceRecords: records,
+        date: selectedDate
       });
-      const data = await response.json();
-      if (data.success) {
+      if (response.data.success) {
         setShowAttendanceModal(false);
         fetchAttendanceData();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving attendance:', err);
+      toast.error(err.response?.data?.message || 'Failed to save attendance');
     } finally {
       setSaving(false);
     }
@@ -215,9 +238,32 @@ const AdminStudentAttendancePage: React.FC = () => {
     setAttendanceRecords(newRecords);
   };
 
-  const handleExportReport = () => {
-    // Handle export logic
-    console.log('Exporting student attendance report...');
+  const handleExportReport = (type: 'pdf' | 'excel') => {
+    const classData = attendanceData?.classWiseAttendance || [];
+    const exportData = classData.map(c => ({
+      Class: c.className,
+      Section: c.section,
+      'Total Students': c.totalStudents,
+      Present: c.present,
+      Absent: c.absent,
+      Late: c.late,
+      Leave: c.leave,
+      'Attendance Rate': `${c.attendanceRate}%`
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'student-attendance', [
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Total Students', label: 'Total Students' },
+        { key: 'Present', label: 'Present' },
+        { key: 'Absent', label: 'Absent' },
+        { key: 'Late', label: 'Late' },
+        { key: 'Leave', label: 'Leave' },
+        { key: 'Attendance Rate', label: 'Attendance Rate' }
+      ], 'Student Attendance Report');
+    } else {
+      exportToExcel(exportData, 'student-attendance');
+    }
   };
 
   if (loading) {
@@ -320,8 +366,8 @@ const AdminStudentAttendancePage: React.FC = () => {
           <div className="row align-items-end">
             <div className="col-md-3">
               <label className="form-label">Date</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 className="form-control"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
@@ -329,7 +375,7 @@ const AdminStudentAttendancePage: React.FC = () => {
             </div>
             <div className="col-md-3">
               <label className="form-label">Grade</label>
-              <select 
+              <select
                 className="form-select"
                 value={selectedGrade}
                 onChange={(e) => setSelectedGrade(e.target.value)}
@@ -344,7 +390,7 @@ const AdminStudentAttendancePage: React.FC = () => {
             </div>
             <div className="col-md-3">
               <label className="form-label">Section</label>
-              <select className="form-select">
+              <select className="form-select" value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)}>
                 <option value="all">All Sections</option>
                 <option value="A">Section A</option>
                 <option value="B">Section B</option>
@@ -352,7 +398,7 @@ const AdminStudentAttendancePage: React.FC = () => {
             </div>
             <div className="col-md-3">
               <label className="form-label">&nbsp;</label>
-              <button className="btn btn-primary w-100">Apply Filters</button>
+              <button className="btn btn-primary w-100" onClick={fetchAttendanceData}>Apply Filters</button>
             </div>
           </div>
         </div>
@@ -366,35 +412,35 @@ const AdminStudentAttendancePage: React.FC = () => {
             <div className="card-body">
               <h5 className="card-title">Attendance Sections</h5>
               <div className="nav flex-column nav-pills">
-                <button 
+                <button
                   className={`nav-link text-start mb-2 ${selectedSection === 'overview' ? 'active' : ''}`}
                   onClick={() => setSelectedSection('overview')}
                 >
                   <i className="ti ti-chart-pie me-2"></i>
                   Overview
                 </button>
-                <button 
+                <button
                   className={`nav-link text-start mb-2 ${selectedSection === 'daily' ? 'active' : ''}`}
                   onClick={() => setSelectedSection('daily')}
                 >
                   <i className="ti ti-calendar me-2"></i>
                   Daily Attendance
                 </button>
-                <button 
+                <button
                   className={`nav-link text-start mb-2 ${selectedSection === 'classwise' ? 'active' : ''}`}
                   onClick={() => setSelectedSection('classwise')}
                 >
                   <i className="ti ti-users me-2"></i>
                   Class-wise
                 </button>
-                <button 
+                <button
                   className={`nav-link text-start mb-2 ${selectedSection === 'trends' ? 'active' : ''}`}
                   onClick={() => setSelectedSection('trends')}
                 >
                   <i className="ti ti-chart-line me-2"></i>
                   Trends
                 </button>
-                <button 
+                <button
                   className={`nav-link text-start mb-2 ${selectedSection === 'reports' ? 'active' : ''}`}
                   onClick={() => setSelectedSection('reports')}
                 >
@@ -489,7 +535,7 @@ const AdminStudentAttendancePage: React.FC = () => {
                   <button className="btn btn-primary btn-sm" onClick={handleMarkAttendance}>
                     <i className="ti ti-calendar-check me-1"></i>Mark Attendance
                   </button>
-                  <button className="btn btn-outline-success btn-sm" onClick={handleExportReport}>
+                  <button className="btn btn-outline-success btn-sm" onClick={() => handleExportReport('pdf')}>
                     <i className="ti ti-download me-1"></i>Export
                   </button>
                 </div>
@@ -499,25 +545,34 @@ const AdminStudentAttendancePage: React.FC = () => {
                   <table className="table table-hover">
                     <thead>
                       <tr>
-                        <th>
-                          <input type="checkbox" className="form-check-input" />
-                        </th>
                         <th>Student Name</th>
                         <th>Grade</th>
                         <th>Section</th>
-                        <th>Roll Number</th>
                         <th>Status</th>
                         <th>Check-in Time</th>
                         <th>Remarks</th>
-                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td colSpan={10} className="text-center text-muted">
-                          No attendance records found for {selectedDate}. Click "Mark Attendance" to record attendance.
-                        </td>
-                      </tr>
+                      {attendanceData?.attendanceStatus.reduce((sum, s) => sum + s.count, 0) === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center text-muted">
+                            No attendance records found for {selectedDate}. Click "Mark Attendance" to record attendance.
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="text-center">
+                            <span className="text-success fw-bold">{attendanceData?.overview.presentToday} Present</span>
+                            {' | '}
+                            <span className="text-danger fw-bold">{attendanceData?.overview.absentToday} Absent</span>
+                            {' | '}
+                            <span className="text-warning fw-bold">{attendanceData?.overview.lateToday} Late</span>
+                            {' | '}
+                            <span className="text-muted fw-bold">{attendanceData?.overview.leaveToday} Leave</span>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -545,7 +600,6 @@ const AdminStudentAttendancePage: React.FC = () => {
                         <th>Leave</th>
                         <th>Attendance Rate</th>
                         <th>Status</th>
-                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -554,47 +608,25 @@ const AdminStudentAttendancePage: React.FC = () => {
                           <td>{classData.className}</td>
                           <td>{classData.section}</td>
                           <td>{classData.totalStudents}</td>
-                          <td>
-                            <span className="badge bg-success">{classData.present}</span>
-                          </td>
-                          <td>
-                            <span className="badge bg-danger">{classData.absent}</span>
-                          </td>
-                          <td>
-                            <span className="badge bg-warning">{classData.late}</span>
-                          </td>
-                          <td>
-                            <span className="badge bg-info">{classData.leave}</span>
-                          </td>
+                          <td><span className="badge bg-success">{classData.present}</span></td>
+                          <td><span className="badge bg-danger">{classData.absent}</span></td>
+                          <td><span className="badge bg-warning">{classData.late}</span></td>
+                          <td><span className="badge bg-info">{classData.leave}</span></td>
                           <td>
                             <div className="d-flex align-items-center">
                               <div className="progress me-2" style={{ width: '60px', height: '8px' }}>
-                                <div 
-                                  className="progress-bar" 
-                                  style={{ width: `${classData.attendanceRate}%` }}
-                                ></div>
+                                <div className="progress-bar" style={{ width: `${classData.attendanceRate}%` }}></div>
                               </div>
                               <span>{classData.attendanceRate}%</span>
                             </div>
                           </td>
                           <td>
-                            <span className={`badge ${
-                              classData.attendanceRate >= 90 ? 'bg-success' : 
+                            <span className={`badge ${classData.attendanceRate >= 90 ? 'bg-success' :
                               classData.attendanceRate >= 75 ? 'bg-warning' : 'bg-danger'
                             }`}>
-                              {classData.attendanceRate >= 90 ? 'Excellent' : 
+                              {classData.attendanceRate >= 90 ? 'Excellent' :
                                classData.attendanceRate >= 75 ? 'Good' : 'Needs Attention'}
                             </span>
-                          </td>
-                          <td>
-                            <div className="btn-group btn-group-sm">
-                              <button className="btn btn-outline-primary" title="View Details">
-                                <i className="ti ti-eye"></i>
-                              </button>
-                              <button className="btn btn-outline-info" title="Mark Attendance">
-                                <i className="ti ti-calendar-check"></i>
-                              </button>
-                            </div>
                           </td>
                         </tr>
                       ))}
@@ -678,10 +710,7 @@ const AdminStudentAttendancePage: React.FC = () => {
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h5 className="card-title mb-0">Attendance Reports</h5>
                 <div className="d-flex gap-2">
-                  <button className="btn btn-outline-primary btn-sm">
-                    <i className="ti ti-calendar me-1"></i>Date Range
-                  </button>
-                  <button className="btn btn-outline-success btn-sm" onClick={handleExportReport}>
+                  <button className="btn btn-outline-success btn-sm" onClick={() => handleExportReport('excel')}>
                     <i className="ti ti-download me-1"></i>Export Report
                   </button>
                 </div>
@@ -715,38 +744,6 @@ const AdminStudentAttendancePage: React.FC = () => {
                         <h6>Monthly Report</h6>
                         <p className="text-muted small">Monthly attendance trends</p>
                         <button className="btn btn-warning btn-sm">Generate</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="row mt-3">
-                  <div className="col-md-4">
-                    <div className="card border h-100">
-                      <div className="card-body text-center">
-                        <i className="ti ti-user fs-24 text-info mb-2"></i>
-                        <h6>Student-wise Report</h6>
-                        <p className="text-muted small">Individual student attendance</p>
-                        <button className="btn btn-info btn-sm">Generate</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="card border h-100">
-                      <div className="card-body text-center">
-                        <i className="ti ti-alert-circle fs-24 text-danger mb-2"></i>
-                        <h6>Low Attendance Report</h6>
-                        <p className="text-muted small">Students with low attendance</p>
-                        <button className="btn btn-danger btn-sm">Generate</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <div className="card border h-100">
-                      <div className="card-body text-center">
-                        <i className="ti ti-users fs-24 text-secondary mb-2"></i>
-                        <h6>Class-wise Report</h6>
-                        <p className="text-muted small">Attendance by class/section</p>
-                        <button className="btn btn-secondary btn-sm">Generate</button>
                       </div>
                     </div>
                   </div>
@@ -821,19 +818,19 @@ const AdminStudentAttendancePage: React.FC = () => {
                         <tr><td colSpan={6} className="text-center text-muted">No students found</td></tr>
                       ) : students.map((student) => (
                         <tr key={student._id}>
-                          <td><span className="badge bg-secondary">{student.rollNo || '-'}</span></td>
+                          <td><span className="badge bg-secondary">{student.rollNo || student.rollNumber || '-'}</span></td>
                           <td>{student.firstName} {student.lastName}</td>
                           <td className="text-center">
-                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'present'} onChange={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'present'})} />
+                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'present'} onChange={() => setAttendanceRecords({ ...attendanceRecords, [student._id]: 'present' })} />
                           </td>
                           <td className="text-center">
-                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'absent'} onChange={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'absent'})} />
+                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'absent'} onChange={() => setAttendanceRecords({ ...attendanceRecords, [student._id]: 'absent' })} />
                           </td>
                           <td className="text-center">
-                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'late'} onChange={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'late'})} />
+                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'late'} onChange={() => setAttendanceRecords({ ...attendanceRecords, [student._id]: 'late' })} />
                           </td>
                           <td className="text-center">
-                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'leave'} onChange={() => setAttendanceRecords({...attendanceRecords, [student._id]: 'leave'})} />
+                            <input type="radio" name={`att-${student._id}`} checked={attendanceRecords[student._id] === 'leave'} onChange={() => setAttendanceRecords({ ...attendanceRecords, [student._id]: 'leave' })} />
                           </td>
                         </tr>
                       ))}

@@ -1,5 +1,6 @@
 import express from 'express';
 const router = express.Router();
+import mongoose from 'mongoose';
 import { protect } from '../middleware/authMiddleware.js';
 import { authorize } from '../middleware/authGuard.js';
 import { validateAgentCreate, validateAgentUpdate } from '../validators/agentValidator.js';
@@ -7,7 +8,7 @@ import agentController from '../controllers/agentController.js';
 import Institution from '../models/Institution.js';
 import Commission from '../models/Commission.js';
 
-const { createAgent, getAgents, getAgentById, updateAgent, deleteAgent, getAgentStatistics, getActiveAgents, completeAgentProfile, getAgentProfile, getSettings, updateSettings, logAgentActivity } = agentController;
+const { createAgent, getAgents, getAgentById, updateAgent, deleteAgent, getAgentStatistics, getActiveAgents, completeAgentProfile, getAgentProfile, updateAgentProfile, getSettings, updateSettings, logAgentActivity } = agentController;
 
 // Apply authentication middleware to all routes
 router.use(protect);
@@ -15,9 +16,55 @@ router.use(protect);
 // These routes require agent role or higher (uses real database data via Agent model - TESTED & VERIFIED)
 router.post('/complete-profile', authorize(['agent', 'admin', 'super_admin']), completeAgentProfile); // ✓ - Updates real record in Agent model
 router.get('/my-profile', authorize(['agent', 'admin', 'super_admin']), getAgentProfile); // ✓ - Fetches real data from Agent model
+router.put('/profile/me', authorize(['agent', 'admin', 'super_admin']), updateAgentProfile); // ✓ - Updates agent profile
 router.get('/settings', authorize(['agent', 'admin', 'super_admin']), getSettings); // ✓ - Fetches agent settings
 router.put('/settings', authorize(['agent', 'admin', 'super_admin']), updateSettings); // ✓ - Updates agent settings
 router.post('/log-activity', authorize(['agent', 'admin', 'super_admin']), logAgentActivity); // ✓ - Updates real record in Agent model
+
+// Profile endpoint for agent (GET only - for fetching profile data)
+router.get('/profile/me', authorize(['agent', 'admin', 'super_admin']), async (req, res) => {
+  try {
+    const agentId = req.user.id || req.user._id;
+    const agentEmail = req.user.email;
+    
+    // Get agent from User collection (agents are stored as users with role 'agent')
+    const User = (await import('../models/User.js')).default;
+    let user = await User.findById(agentId).select('-password');
+    
+    // If not found by ID, try by email
+    if (!user && agentEmail) {
+      user = await User.findOne({ email: agentEmail }).select('-password');
+    }
+    
+    if (!user) {
+      return res.json({
+        success: true,
+        data: {
+          profileComplete: true,
+          name: req.user.name || 'Agent',
+          email: agentEmail
+        }
+      });
+    }
+    
+    // Always return profileComplete: true for now to show dashboard
+    res.json({
+      success: true,
+      data: {
+        ...user.toObject(),
+        profileComplete: true
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.json({
+      success: true,
+      data: {
+        profileComplete: true
+      }
+    });
+  }
+});
 
 // Get agent's institutions (with commissions)
 router.get('/my-institutions', authorize(['agent', 'admin', 'super_admin']), async (req, res) => {
@@ -27,10 +74,8 @@ router.get('/my-institutions', authorize(['agent', 'admin', 'super_admin']), asy
     
     // Get agent from Agent collection
     const Agent = (await import('../models/Agent.js')).default;
-    let agent = await Agent.findById(agentId);
-    if (!agent && agentEmail) {
-      agent = await Agent.findOne({ email: agentEmail });
-    }
+    const { findAgentByAuthClaims } = await import('../utils/agentAuthHelpers.js');
+    const agent = await findAgentByAuthClaims(agentId, agentEmail);
     
     if (!agent) {
       return res.status(404).json({
@@ -42,12 +87,15 @@ router.get('/my-institutions', authorize(['agent', 'admin', 'super_admin']), asy
     // Get institutions created by this agent
     const institutions = await Institution.find({ agentId: agent._id }).lean();
     
-    // Get commissions for these institutions
-    const institutionIds = institutions.map(i => i._id);
-    const commissions = await Commission.find({ 
-      agentId: agent._id,
-      institutionId: { $in: institutionIds }
-    }).lean();
+    // Get commissions for these institutions (agentId is ObjectId in Commission, skip if UUID)
+    let commissions = [];
+    if (mongoose.Types.ObjectId.isValid(agent._id)) {
+      const institutionIds = institutions.map(i => i._id);
+      commissions = await Commission.find({ 
+        agentId: agent._id,
+        institutionId: { $in: institutionIds }
+      }).lean();
+    }
     
     // Map institutions with commission data
     const institutionsWithCommissions = institutions.map(inst => {
@@ -81,49 +129,6 @@ router.get('/my-institutions', authorize(['agent', 'admin', 'super_admin']), asy
       success: false,
       message: 'Failed to fetch institutions',
       error: error.message
-    });
-  }
-});
-
-// Profile endpoint for agent
-router.get('/profile/me', authorize(['agent', 'admin', 'super_admin']), async (req, res) => {
-  try {
-    const agentId = req.user.id;
-    const agentEmail = req.user.email;
-    
-    // Get agent from Agent collection
-    const Agent = (await import('../models/Agent.js')).default;
-    let agent = await Agent.findById(agentId);
-    if (!agent && agentEmail) {
-      agent = await Agent.findOne({ email: agentEmail });
-    }
-    
-    if (!agent) {
-      return res.json({
-        success: true,
-        data: {
-          profileComplete: true,
-          name: req.user.name || 'Agent',
-          email: agentEmail
-        }
-      });
-    }
-    
-    // Always return profileComplete: true for now to show dashboard
-    res.json({
-      success: true,
-      data: {
-        ...agent.toObject(),
-        profileComplete: true
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.json({
-      success: true,
-      data: {
-        profileComplete: true
-      }
     });
   }
 });

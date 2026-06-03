@@ -18,6 +18,7 @@ const PlatformSettingsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>('branding')
   const [settings, setSettings] = useState<Record<string, any>>({})
+  const [showRazorpaySecret, setShowRazorpaySecret] = useState(false)
 
 
   const tabs = [
@@ -73,7 +74,21 @@ const PlatformSettingsPage = () => {
   const handleSaveSettings = async () => {
     try {
       setSaving(true)
-      await apiService.put('/super-admin/platform-settings', settings)
+      
+      // For payment settings, save Razorpay keys to PlatformConfig
+      if (activeTab === 'payment') {
+        if (settings.razorpay_key_id || settings.razorpay_key_secret) {
+          await apiService.post('/platform/config/razorpay', {
+            key_id: settings.razorpay_key_id || '',
+            key_secret: settings.razorpay_key_secret || '',
+          })
+        }
+        // Also save other payment settings to platform settings
+        await apiService.put('/super-admin/platform-settings', settings)
+      } else {
+        await apiService.put('/super-admin/platform-settings', settings)
+      }
+      
       toast.success('Settings saved successfully')
       fetchSettings()
     } catch (err: any) {
@@ -351,23 +366,44 @@ const PlatformSettingsPage = () => {
               {/* Payment Settings */}
               {activeTab === 'payment' && (
                 <>
+                  <div className="alert alert-info d-flex align-items-center mb-4">
+                    <i className="ti ti-info-circle me-2 fs-5"></i>
+                    <span>These platform keys are used for subscription payments (institutions paying for plans). Institutions can configure their own keys for fee collection in their settings.</span>
+                  </div>
                   <div className="mb-4">
-                    <label className="form-label">Razorpay Key ID</label>
+                    <label className="form-label">
+                      Razorpay Key ID <span className="text-danger">*</span>
+                    </label>
                     <input
                       type="text"
                       className="form-control"
+                      placeholder="rzp_live_xxxxxxxx"
                       value={settings.razorpay_key_id || ''}
                       onChange={(e) => handleSettingChange('razorpay_key_id', e.target.value)}
                     />
+                    <small className="text-muted">From Razorpay Dashboard → Settings → API Keys</small>
                   </div>
                   <div className="mb-4">
-                    <label className="form-label">Razorpay Key Secret</label>
-                    <input
-                      type="password"
-                      className="form-control"
-                      value={settings.razorpay_key_secret || ''}
-                      onChange={(e) => handleSettingChange('razorpay_key_secret', e.target.value)}
-                    />
+                    <label className="form-label">
+                      Razorpay Key Secret <span className="text-danger">*</span>
+                    </label>
+                    <div className="input-group">
+                      <input
+                        type={showRazorpaySecret ? 'text' : 'password'}
+                        className="form-control"
+                        placeholder="Enter key secret"
+                        value={settings.razorpay_key_secret || ''}
+                        onChange={(e) => handleSettingChange('razorpay_key_secret', e.target.value)}
+                      />
+                      <button
+                        className="btn btn-outline-secondary"
+                        type="button"
+                        onClick={() => setShowRazorpaySecret(!showRazorpaySecret)}
+                      >
+                        <i className={`ti ${showRazorpaySecret ? 'ti-eye-off' : 'ti-eye'}`}></i>
+                      </button>
+                    </div>
+                    <small className="text-muted">Keep this secret — never share it publicly</small>
                   </div>
                   <div className="mb-4">
                     <label className="form-label">Stripe Publishable Key</label>
@@ -394,10 +430,10 @@ const PlatformSettingsPage = () => {
                       value={settings.default_currency || 'INR'}
                       onChange={(e) => handleSettingChange('default_currency', e.target.value)}
                     >
-                      <option value="INR">INR</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
+                      <option value="INR">INR - Indian Rupee</option>
+                      <option value="EUR">EUR - Euro</option>
+                      <option value="GBP">GBP - British Pound</option>
+                      <option value="USD">USD - US Dollar</option>
                     </select>
                   </div>
                 </>

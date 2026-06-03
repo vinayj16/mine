@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { toast } from 'react-toastify';
+import apiClient from '../../../api/client';
 
 interface AttendanceData {
   overview: {
@@ -41,7 +43,7 @@ const AdminAttendancePage: React.FC = () => {
   const generateReport = async (type: string) => {
     try {
       setGenerating(true);
-      const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011';
+      const institutionId = localStorage.getItem('institutionId') || '';
       const date = new Date().toISOString().split('T')[0];
       
       let endpoint = '';
@@ -50,16 +52,16 @@ const AdminAttendancePage: React.FC = () => {
           endpoint = `/api/v1/attendance/date/${date}`;
           break;
         case 'monthly':
-          endpoint = `/api/v1/attendance/monthly-report?schoolId=${schoolId}`;
+          endpoint = `/api/v1/attendance/monthly-report?institutionId=${institutionId}`;
           break;
         case 'student':
-          endpoint = `/api/v1/attendance?schoolId=${schoolId}`;
+          endpoint = `/api/v1/attendance?institutionId=${institutionId}`;
           break;
         case 'class':
-          endpoint = `/api/v1/attendance/stats?schoolId=${schoolId}`;
+          endpoint = `/api/v1/attendance/stats?institutionId=${institutionId}`;
           break;
         case 'low':
-          endpoint = `/api/v1/attendance/low-attendance?schoolId=${schoolId}`;
+          endpoint = `/api/v1/attendance/low-attendance?institutionId=${institutionId}`;
           break;
       }
       
@@ -81,11 +83,11 @@ const AdminAttendancePage: React.FC = () => {
         a.click();
         URL.revokeObjectURL(url);
       } else {
-        alert('Report generated: No data available for the selected period.');
+        toast.info('Report generated: No data available for the selected period.');
       }
     } catch (error) {
       console.error('Report generation error:', error);
-      alert('Failed to generate report');
+      toast.error('Failed to generate report');
     } finally {
       setGenerating(false);
     }
@@ -98,24 +100,83 @@ const AdminAttendancePage: React.FC = () => {
   const fetchAttendanceData = async () => {
     try {
       setLoading(true);
-      // Set empty data for now
+
+      // Fetch real data from backend APIs in parallel
+      const [studentsResponse, statsResponse, teacherAttendanceResponse] = await Promise.all([
+        apiClient.get('/students', { params: { limit: 1000 } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/attendance/stats', { params: { dateRange: 'today' } }).catch(() => ({ data: { success: false, data: null } })),
+        apiClient.get('/attendance/bulk', { params: { userType: 'teacher', date: new Date().toISOString().split('T')[0] } }).catch(() => ({ data: { success: false, data: [] } }))
+      ]);
+
+      const students = studentsResponse.data?.data || [];
+      const attendanceStats = statsResponse.data?.data || null;
+      const teacherRecords = teacherAttendanceResponse.data?.data || [];
+      const teachersArray = Array.isArray(teacherRecords) ? teacherRecords : [];
+
+      const totalStudents = students.length;
+
+      // Get real attendance counts from stats endpoint
+      const studentStats = attendanceStats?.students || {};
+      const teacherStats = attendanceStats?.teachers || {};
+
+      const presentToday = studentStats.present || 0;
+      const absentToday = studentStats.absent || 0;
+      const lateToday = studentStats.late || 0;
+      const halfDayToday = studentStats.emergency || 0;
+      const totalWithAttendance = presentToday + absentToday + lateToday;
+      const attendanceRate = totalWithAttendance > 0 ? Math.round((presentToday / totalWithAttendance) * 100) : 0;
+
+      // Build class-wise attendance from student data
+      const classMap = new Map();
+      students.forEach((student: any) => {
+        const grade = student.classId?.className || student.class || 'Grade 1';
+        const section = student.section || 'A';
+        const key = `${grade}-${section}`;
+        if (!classMap.has(key)) {
+          classMap.set(key, { grade, section, totalStudents: 0, present: 0, absent: 0, percentage: 0 });
+        }
+        classMap.get(key).totalStudents++;
+      });
+
+      // Try to get real attendance per class
+      try {
+        const bulkResponse = await apiClient.get('/attendance/bulk', {
+          params: { userType: 'student', date: new Date().toISOString().split('T')[0] }
+        }).catch(() => null);
+        if (bulkResponse?.data?.data) {
+          const records = Array.isArray(bulkResponse.data.data) ? bulkResponse.data.data : [];
+          records.forEach((rec: any) => {
+            const student = students.find((s: any) => s._id === rec.userId?._id || s._id === rec.userId);
+            if (student) {
+              const grade = student.classId?.className || student.class || 'Grade 1';
+              const section = student.section || 'A';
+              const key = `${grade}-${section}`;
+              const data = classMap.get(key);
+              if (data && rec.status === 'present') data.present++;
+            }
+          });
+        }
+      } catch (_) { /* empty - calculation continues */ }
+
+      const studentAttendance = Array.from(classMap.values()).map((c: any) => ({
+        ...c,
+        percentage: c.totalStudents > 0 ? Math.round((c.present / c.totalStudents) * 100) : 0
+      }));
+
+      // Build teacher attendance list
+      const teacherAttendance = teachersArray.map((t: any) => ({
+        teacherName: t.staffName || t.userId?.name || 'Unknown',
+        subject: t.designation || t.department || '',
+        status: t.status || 'absent',
+        checkInTime: t.checkInTime ? new Date(t.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-'
+      }));
+
       setAttendanceData({
-        overview: {
-          totalStudents: 0,
-          presentToday: 0,
-          absentToday: 0,
-          lateToday: 0,
-          halfDayToday: 0,
-          attendanceRate: 0
-        },
-        studentAttendance: [
-          { grade: 'Grade 1', section: 'A', totalStudents: 0, present: 0, absent: 0, percentage: 0 },
-          { grade: 'Grade 2', section: 'A', totalStudents: 0, present: 0, absent: 0, percentage: 0 },
-          { grade: 'Grade 3', section: 'A', totalStudents: 0, present: 0, absent: 0, percentage: 0 }
-        ],
-        teacherAttendance: [],
+        overview: { totalStudents, presentToday, absentToday, lateToday, halfDayToday, attendanceRate },
+        studentAttendance,
+        teacherAttendance,
         weeklyTrend: [
-          { day: 'Mon', studentAttendance: 0, teacherAttendance: 0 },
+          { day: 'Mon', studentAttendance: presentToday, teacherAttendance: teacherStats.present || 0 },
           { day: 'Tue', studentAttendance: 0, teacherAttendance: 0 },
           { day: 'Wed', studentAttendance: 0, teacherAttendance: 0 },
           { day: 'Thu', studentAttendance: 0, teacherAttendance: 0 },

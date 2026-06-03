@@ -23,7 +23,7 @@ const HostelProfilePage = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true)
-      const res = await apiClient.get('/user/profile').catch(() => ({ data: { success: true, data: DEFAULT_PROFILE } }))
+      const res = await apiClient.get('/auth/profile').catch(() => ({ data: { success: true, data: DEFAULT_PROFILE } }))
       if (res.data?.success) setProfile({ ...DEFAULT_PROFILE, ...res.data.data })
     } catch (err) { console.error('Error:', err) } finally { setLoading(false) }
   }
@@ -31,7 +31,7 @@ const HostelProfilePage = () => {
   const handleSave = async () => {
     try {
       setSaving(true)
-      const res = await apiClient.put('/user/profile', profile)
+      const res = await apiClient.put('/auth/profile', profile)
       if (res.data.success) toast.success('Profile updated!')
     } catch { toast.error('Failed to update') } finally { setSaving(false) }
   }
@@ -95,9 +95,10 @@ const HostelProfilePage = () => {
                 <div className="col-md-6 mb-3">
                   <label className="form-label small">Gender</label>
                   <select className="form-select form-select-sm" value={profile.gender} onChange={e => setProfile({ ...profile, gender: e.target.value })}>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
               </div>

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
+import { toast } from 'react-toastify';
 
 interface Transaction {
   id: string;
@@ -31,8 +33,8 @@ const TransactionsPage: React.FC = () => {
   };
 
   const toggleRowSelection = (id: string) => {
-    setSelectedRows(prev => 
-      prev.includes(id) 
+    setSelectedRows(prev =>
+      prev.includes(id)
         ? prev.filter(rowId => rowId !== id)
         : [...prev, id]
     );
@@ -82,6 +84,26 @@ const TransactionsPage: React.FC = () => {
   useEffect(() => {
     setSelectedRows(prev => prev.filter(id => transactions.some(txn => txn.id === id)));
   }, [transactions]);
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'id', label: 'Transaction ID', format: (v, row) => (v || row._id || row.transactionId || '').toString().slice(-6) },
+    { key: 'description', label: 'Description', format: (v, row) => v || row.purpose || '' },
+    { key: 'date', label: 'Transaction Date', format: (v, row) => { const d = v || row.processedAt || row.createdAt; return d ? new Date(d).toLocaleDateString() : ''; } },
+    { key: 'amount', label: 'Amount', format: (v, row) => { const a = v || row.totalAmount || 0; return `₹${Number(a).toFixed(2)}`; } },
+    { key: 'type', label: 'Transaction Type' },
+    { key: 'method', label: 'Payment Method', format: (v, row) => v || row.paymentMethod || '' },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = transactions;
+    if (!data.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(data, 'transactions', exportColumns, 'Transactions Report');
+    } else {
+      exportToExcel(data, 'transactions', exportColumns);
+    }
+  };
 
   return (
     <>
@@ -136,14 +158,14 @@ const TransactionsPage: React.FC = () => {
             </a>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <a href="#" className="dropdown-item rounded-1">
+                <button type="button" className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                </a>
+                </button>
               </li>
               <li>
-                <a href="#" className="dropdown-item rounded-1">
+                <button type="button" className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                </a>
+                </button>
               </li>
             </ul>
           </div>
@@ -233,13 +255,13 @@ const TransactionsPage: React.FC = () => {
                         </div>
                       </td>
                       <td>
-                        <Link to={`/transaction/${transaction.id}`} className="link-primary">
+                        <Link to={`/accounts/transactions/${transaction.id}`} className="link-primary">
                           {transaction.id.slice(-6)}
                         </Link>
                       </td>
                       <td>{transaction.description}</td>
                       <td>{transaction.date}</td>
-                      <td>${formatCurrency(transaction.amount)}</td>
+                      <td>₹{formatCurrency(transaction.amount)}</td>
                       <td>{transaction.type}</td>
                       <td>{transaction.method}</td>
                       <td>

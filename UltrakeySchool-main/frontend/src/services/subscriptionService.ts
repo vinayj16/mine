@@ -11,7 +11,7 @@ export interface SubscriptionPlan {
 
 export interface Subscription {
   _id: string
-  schoolId: string
+  institutionId: string
   planId: string
   planName: string
   status: string
@@ -81,8 +81,8 @@ export const subscriptionService = {
   },
 
   // Format price with currency
-  formatPrice(price: number, currency: string = 'USD'): string {
-    return new Intl.NumberFormat('en-US', {
+  formatPrice(price: number, currency: string = 'INR'): string {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: currency
     }).format(price)

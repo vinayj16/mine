@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils'
 import { studentService, type Student } from '../../services/studentService'
+import { gradeService, type Grade } from '../../services/gradeService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const BranchStudentsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -11,6 +16,9 @@ const BranchStudentsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [filterGrade, setFilterGrade] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [grades, setGrades] = useState<Grade[]>([])
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -19,10 +27,9 @@ const BranchStudentsPage: React.FC = () => {
         // For branch-specific students, we might need a different endpoint
         // For now, fetching all students and filtering by branch if needed
         const response = await studentService.getAll({
-          limit: 100, // Get more students for branch view
-          // TODO: Add branchId filter when backend supports it
+          limit: 100,
         })
-        setStudents(response.data)
+        setStudents(response?.data || [])
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch students')
       } finally {
@@ -31,7 +38,30 @@ const BranchStudentsPage: React.FC = () => {
     }
 
     fetchStudents()
+    fetchGrades()
   }, [id])
+
+  const fetchGrades = async () => {
+    try {
+      const response = await gradeService.getAll({ limit: 100 })
+      setGrades(response.data || [])
+    } catch (err) {
+      console.error('Failed to fetch grades:', err)
+    }
+  }
+
+  const filteredStudents = useMemo(() => {
+    if (!students) return []
+    return students.filter(student => {
+      const matchesStatus = filterStatus === 'all' || student.status === filterStatus
+      const matchesGrade = filterGrade === 'all' || student.class === filterGrade
+      const matchesSearch = `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchTerm.toLowerCase())
+
+      return matchesStatus && matchesGrade && matchesSearch
+    })
+  }, [students, filterStatus, filterGrade, searchTerm])
 
   const handleSelectStudent = (studentId: string) => {
     if (selectedStudents.includes(studentId)) {
@@ -45,18 +75,6 @@ const BranchStudentsPage: React.FC = () => {
     setSelectedStudents(filteredStudents.map(student => student.id))
   }
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(student => {
-      const matchesStatus = filterStatus === 'all' || student.status === filterStatus
-      const matchesGrade = filterGrade === 'all' || student.class === filterGrade
-      const matchesSearch = `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        student.email.toLowerCase().includes(searchTerm.toLowerCase())
-
-      return matchesStatus && matchesGrade && matchesSearch
-    })
-  }, [students, filterStatus, filterGrade, searchTerm])
-
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       active: 'bg-success',
@@ -67,28 +85,33 @@ const BranchStudentsPage: React.FC = () => {
     return statusConfig[status as keyof typeof statusConfig] || 'bg-secondary'
   }
 
-  const handleDeleteStudent = async (studentId: string) => {
-    if (window.confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
-      try {
-        await studentService.delete(studentId)
-        setStudents(students.filter(s => s.id !== studentId))
-      } catch (err) {
-        console.error('Failed to delete student:', err)
-        alert('Failed to delete student')
-      }
-    }
+  const handleDeleteStudent = (studentId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'single', id: studentId })
   }
 
-  const handleBulkDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedStudents.length} selected students? This action cannot be undone.`)) {
-      try {
+  const handleBulkDelete = () => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'bulk' })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    try {
+      if (deleteTarget.type === 'single') {
+        await studentService.delete(deleteTarget.id)
+        setStudents(students.filter(s => s.id !== deleteTarget.id))
+      } else if (deleteTarget.type === 'bulk') {
         await studentService.bulkDelete(selectedStudents)
         setStudents(students.filter(s => !selectedStudents.includes(s.id)))
         setSelectedStudents([])
-      } catch (err) {
-        console.error('Failed to delete students:', err)
-        alert('Failed to delete selected students')
       }
+    } catch (err) {
+      console.error('Failed to delete student(s):', err)
+      toast.error('Failed to delete student(s)')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -105,7 +128,7 @@ const BranchStudentsPage: React.FC = () => {
       setStudents(response.data)
     } catch (err) {
       console.error('Failed to toggle student status:', err)
-      alert('Failed to toggle student status')
+      toast.error('Failed to toggle student status')
     }
   }
 
@@ -167,18 +190,30 @@ const BranchStudentsPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => {
+                  const columns: ExportColumn[] = [
+                    { key: 'firstName', label: 'Student Name' },
+                    { key: 'rollNumber', label: 'Roll Number' },
+                    { key: 'class', label: 'Grade' },
+                    { key: 'email', label: 'Email' },
+                    { key: 'phone', label: 'Phone' },
+                    { key: 'status', label: 'Status' },
+                  ]
+                  exportToPDF(filteredStudents, 'Branch_Students', columns)
+                }}>
                   <i className="ti ti-file-type-pdf me-2"></i>Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item">
+                <button className="dropdown-item" onClick={() => {
+                  exportToExcel(filteredStudents, 'Branch_Students')
+                }}>
                   <i className="ti ti-file-type-xls me-2"></i>Export as Excel
                 </button>
               </li>
             </ul>
           </div>
-          <button className="btn btn-primary me-2 mb-2">
+          <button className="btn btn-primary me-2 mb-2" onClick={() => navigate(`/super-admin/students/add?branchId=${id}`)}>
             <i className="ti ti-user-plus me-2"></i>Add Student
           </button>
           {selectedCount > 0 && (
@@ -211,7 +246,7 @@ const BranchStudentsPage: React.FC = () => {
                   <hr className="dropdown-divider" />
                 </li>
                 <li>
-                  <button className="dropdown-item text-danger">
+                  <button className="dropdown-item text-danger" onClick={() => setSelectedStudents([])}>
                     <i className="ti ti-x me-2"></i>Clear Selection
                   </button>
                 </li>
@@ -334,9 +369,9 @@ const BranchStudentsPage: React.FC = () => {
                   onChange={(e) => setFilterGrade(e.target.value)}
                 >
                   <option value="all">All Grades</option>
-                  <option value="Grade 5">Grade 5</option>
-                  <option value="Grade 6">Grade 6</option>
-                  {/* TODO: Get grades from API */}
+                  {grades.map((grade) => (
+                    <option key={grade.id} value={grade.grade}>{grade.grade}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -438,17 +473,17 @@ const BranchStudentsPage: React.FC = () => {
                         </button>
                         <ul className="dropdown-menu dropdown-menu-end">
                           <li>
-                            <button className="dropdown-item">
+                            <button className="dropdown-item" onClick={() => navigate(`/super-admin/students/${student.id}`)}>
                               <i className="ti ti-eye me-2"></i>View Details
                             </button>
                           </li>
                           <li>
-                            <button className="dropdown-item">
+                            <button className="dropdown-item" onClick={() => navigate(`/super-admin/students/${student.id}/edit`)}>
                               <i className="ti ti-edit me-2"></i>Edit Student
                             </button>
                           </li>
                           <li>
-                            <button className="dropdown-item">
+                            <button className="dropdown-item" onClick={() => toast.info(`Opening reports for ${student.firstName} ${student.lastName}`)}>
                               <i className="ti ti-file-text me-2"></i>View Reports
                             </button>
                           </li>
@@ -506,6 +541,7 @@ const BranchStudentsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message="Are you sure you want to delete this student? This action cannot be undone." />
     </>
   )
 }

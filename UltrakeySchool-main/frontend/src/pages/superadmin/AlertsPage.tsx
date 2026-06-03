@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { toast } from 'react-toastify'
 import { superAdminService } from '../../services/superAdminService'
 import type { Institution, ExpiryAlert, OverduePayment, RenewalReminder, AutoRenewSetting } from '../../services/superAdminService'
 
@@ -107,17 +108,17 @@ const AlertsPage: React.FC = () => {
         })
         
         if (result.success) {
-          alert('Subscription renewed successfully!')
+          toast.success('Subscription renewed successfully!')
           window.location.reload()
         } else {
-          alert('Subscription renewed (demo mode)!')
+          toast.info('Subscription renewed (demo mode)!')
         }
       } catch {
-        alert('Subscription renewed (demo mode)!')
+        toast.info('Subscription renewed (demo mode)!')
       }
     } catch (error: any) {
       console.error('Error renewing subscription:', error)
-      alert(error.message || 'Failed to renew subscription')
+      toast.error(error.message || 'Failed to renew subscription')
     }
   }
 
@@ -127,23 +128,23 @@ const AlertsPage: React.FC = () => {
         const result = await superAdminService.toggleAutoRenew(setting.institutionId, !setting.autoRenew)
         
         if (result.success) {
-          alert(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} successfully!`)
+          toast.success(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} successfully!`)
           window.location.reload()
         } else {
           setAutoRenewSettings(prev => prev.map(s => 
             s._id === setting._id ? { ...s, autoRenew: !s.autoRenew } : s
           ))
-          alert(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} (demo mode)!`)
+          toast.info(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} (demo mode)!`)
         }
       } catch {
         setAutoRenewSettings(prev => prev.map(s => 
           s._id === setting._id ? { ...s, autoRenew: !s.autoRenew } : s
         ))
-        alert(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} (demo mode)!`)
+        toast.info(`Auto-renew ${!setting.autoRenew ? 'enabled' : 'disabled'} (demo mode)!`)
       }
     } catch (error: any) {
       console.error('Error toggling auto-renew:', error)
-      alert(error.message || 'Failed to toggle auto-renew')
+      toast.error(error.message || 'Failed to toggle auto-renew')
     }
   }
 
@@ -153,16 +154,16 @@ const AlertsPage: React.FC = () => {
         const result = await superAdminService.sendReminder(institutionId)
         
         if (result.success) {
-          alert('Reminder sent successfully!')
+          toast.success('Reminder sent successfully!')
         } else {
-          alert('Reminder sent (demo mode)!')
+          toast.info('Reminder sent (demo mode)!')
         }
       } catch {
-        alert('Reminder sent (demo mode)!')
+        toast.info('Reminder sent (demo mode)!')
       }
     } catch (error: any) {
       console.error('Error sending reminder:', error)
-      alert(error.message || 'Failed to send reminder')
+      toast.error(error.message || 'Failed to send reminder')
     }
   }
 
@@ -172,23 +173,23 @@ const AlertsPage: React.FC = () => {
         const result = await superAdminService.reactivateInstitution(institutionId)
         
         if (result.success) {
-          alert('Institution reactivated successfully!')
+          toast.success('Institution reactivated successfully!')
           window.location.reload()
         } else {
           setInstitutions(prev => prev.map(i => 
             i._id === institutionId ? { ...i, status: 'Active' as const } : i
           ))
-          alert('Institution reactivated (demo mode)!')
+          toast.info('Institution reactivated (demo mode)!')
         }
       } catch {
         setInstitutions(prev => prev.map(i => 
           i._id === institutionId ? { ...i, status: 'Active' as const } : i
         ))
-        alert('Institution reactivated (demo mode)!')
+        toast.info('Institution reactivated (demo mode)!')
       }
     } catch (error: any) {
       console.error('Error reactivating institution:', error)
-      alert(error.message || 'Failed to reactivate institution')
+      toast.error(error.message || 'Failed to reactivate institution')
     }
   }
 

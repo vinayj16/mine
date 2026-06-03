@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import apiClient from '../../api/client'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface Payroll {
   _id: string
@@ -57,6 +58,8 @@ const TeacherSalaryPage: React.FC = () => {
     notes: ''
   })
   const [submitting, setSubmitting] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const fetchPayrolls = async () => {
     try {
@@ -209,12 +212,15 @@ const TeacherSalaryPage: React.FC = () => {
   }
 
   const handleDeletePayroll = async (payrollId: string) => {
-    if (!window.confirm('Are you sure you want to delete this payroll record?')) {
-      return
-    }
+    setDeleteTarget(payrollId)
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
 
     try {
-      const response = await apiClient.delete(`/hrm/payroll/${payrollId}`)
+      const response = await apiClient.delete(`/hrm/payroll/${deleteTarget}`)
       if (response.data.success) {
         toast.success('Payroll deleted successfully')
         fetchPayrolls()
@@ -224,6 +230,8 @@ const TeacherSalaryPage: React.FC = () => {
       const errorMessage = err.response?.data?.message || 'Failed to delete payroll'
       toast.error(errorMessage)
     }
+    setShowDeleteModal(false)
+    setDeleteTarget(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -240,9 +248,9 @@ const TeacherSalaryPage: React.FC = () => {
   }
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'INR'
     }).format(amount)
   }
 
@@ -408,6 +416,8 @@ const TeacherSalaryPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Are you sure you want to delete this payroll record?" />
 
       {/* Add/Edit Payroll Modal */}
       {(showAddModal || showEditModal) && (

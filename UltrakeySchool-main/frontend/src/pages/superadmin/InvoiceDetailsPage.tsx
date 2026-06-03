@@ -5,7 +5,7 @@ import { apiService } from '../../services/api'
 interface Invoice {
   id: string
   invoiceId: string
-  schoolId: string
+  institutionId: string
   schoolName: string
   plan: string
   amount: number
@@ -165,7 +165,7 @@ const InvoiceDetailsPage: React.FC = () => {
                     <label className="form-label">School</label>
                     <div className="form-control-plaintext">
                       <div className="fw-medium">{invoice.schoolName}</div>
-                      <small className="text-muted">ID: {invoice.schoolId}</small>
+                      <small className="text-muted">ID: {invoice.institutionId}</small>
                     </div>
                   </div>
                   <div className="mb-3">
@@ -178,7 +178,7 @@ const InvoiceDetailsPage: React.FC = () => {
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Amount</label>
-                    <div className="form-control-plaintext">${invoice.amount} {invoice.currency}</div>
+                    <div className="form-control-plaintext">₹{invoice.amount} {invoice.currency}</div>
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Date</label>

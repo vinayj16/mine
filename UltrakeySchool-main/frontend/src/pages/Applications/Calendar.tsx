@@ -5,7 +5,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin, { Draggable } from '@fullcalendar/interaction';
-import eventService, { type Event } from '../../services/eventService';
+import calendarService from '../../services/calendarService';
 import crossAppCommunicationService from '../../services/crossApplicationCommunicationService';
 import applicationPersistenceService from '../../services/applicationPersistenceService';
 
@@ -68,7 +68,7 @@ const Calendar: React.FC = () => {
         if (!notifiedEvents.includes(eventId)) {
           // Show notification
           if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(`📅 Upcoming Event: ${event.title}`, {
+            new Notification(`Upcoming Event: ${event.title}`, {
               body: `Starting at ${eventStart.toLocaleTimeString()}`,
               icon: '/favicon.ico',
               tag: eventId
@@ -76,7 +76,7 @@ const Calendar: React.FC = () => {
           }
           
           // Show toast notification
-          toast.info(`📅 ${event.title} starting in ${Math.round((eventStart.getTime() - now.getTime()) / 60000)} minutes`, {
+          toast.info(`${event.title} starting in ${Math.round((eventStart.getTime() - now.getTime()) / 60000)} minutes`, {
             position: 'top-right',
             autoClose: 10000,
             hideProgressBar: false,
@@ -187,36 +187,33 @@ const Calendar: React.FC = () => {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const schoolId = localStorage.getItem('schoolId') || localStorage.getItem('institutionId');
-      
-      let eventsData: Event[] = []
-      
-      try {
-        if (schoolId) {
-          const response = await eventService.getAll({ schoolId });
-          eventsData = ((response as any).data || []) as Event[];
-        } else {
-          // For global users (superadmin, agents), fetch all events without schoolId filter
-          const response = await eventService.getAll({});
-          eventsData = ((response as any).data || []) as Event[];
-        }
-      } catch {
-        // Use demo data when API fails
-        eventsData = [] as Event[]
+      const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId');
+
+      if (!institutionId) {
+        setEvents([]);
+        return;
       }
 
+      // Compute a reasonable date range: 3 months before to 6 months after current date
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString();
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 6, 0).toISOString();
+
+      const result = await calendarService.getEvents(institutionId, { startDate, endDate });
+      const eventsData = (result as any)?.data || [];
+
       // Transform backend events to FullCalendar format
-      const calendarEvents = eventsData.map(event => ({
+      const calendarEvents = eventsData.map((event: any) => ({
         id: event._id,
         title: event.title,
         start: event.startDate,
         end: event.endDate,
-        backgroundColor: event.color || eventTypeColors[event.eventType] || '#1A6FA8',
-        borderColor: event.color || eventTypeColors[event.eventType] || '#1A6FA8',
-        allDay: false,
+        backgroundColor: event.color || '#1A6FA8',
+        borderColor: event.color || '#1A6FA8',
+        allDay: event.isAllDay || false,
         extendedProps: {
           description: event.description,
-          eventType: event.eventType,
+          eventType: event.entityType || 'event',
           location: event.location,
           status: event.status,
           color: event.color,
@@ -256,6 +253,20 @@ const Calendar: React.FC = () => {
     resetEventForm();
   };
 
+  // Map UI eventType to backend calendar entityType
+  const mapEventTypeToEntityType = (type: string): string => {
+    const mapping: Record<string, string> = {
+      academic: 'event',
+      cultural: 'event',
+      sports: 'event',
+      celebration: 'event',
+      meeting: 'meeting',
+      workshop: 'event',
+      other: 'event'
+    };
+    return mapping[type] || 'event';
+  };
+
   const handleCreateEvent = async () => {
     if (!eventTitle.trim()) {
       toast.error('Event title is required');
@@ -269,28 +280,31 @@ const Calendar: React.FC = () => {
 
     try {
       setSaving(true);
-      const schoolId = localStorage.getItem('schoolId') || localStorage.getItem('institutionId');
-      
+      const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId');
+
+      if (!institutionId) {
+        toast.error('School ID not found. Please ensure you are logged in.');
+        return;
+      }
+
       const eventData = {
-        ...(schoolId && { schoolId }),
         title: eventTitle,
         description: eventDescription,
-        eventType: eventType as any,
+        entityType: mapEventTypeToEntityType(eventType),
         startDate: eventStartDate,
         endDate: eventEndDate,
         location: eventLocation,
         status: eventStatus as any,
         color: eventColor,
-        isPublic: true,
-        targetAudience: ['all' as any]
+        isAllDay: eventAllDay
       };
 
-      await eventService.create(eventData);
+      await calendarService.createEvent(institutionId, eventData);
       toast.success('Event created successfully');
       
       // Show browser notification for new event
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('📅 New Event Created', {
+        new Notification('New Event Created', {
           body: `${eventTitle} on ${new Date(eventStartDate).toLocaleDateString()}`,
           icon: '/favicon.ico'
         });
@@ -299,7 +313,7 @@ const Calendar: React.FC = () => {
       closeEventModal();
       fetchEvents();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create event');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to create event');
     } finally {
       setSaving(false);
     }
@@ -332,12 +346,17 @@ const Calendar: React.FC = () => {
 
     try {
       setSaving(true);
+      const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId');
       const eventId = selectedEvent.extendedProps?._id || selectedEvent.id;
+
+      if (!institutionId) {
+        toast.error('School ID not found. Please ensure you are logged in.');
+        return;
+      }
 
       const eventData = {
         title: eventTitle,
         description: eventDescription,
-        eventType: eventType as any,
         startDate: eventStartDate,
         endDate: eventEndDate,
         location: eventLocation,
@@ -345,12 +364,12 @@ const Calendar: React.FC = () => {
         color: eventColor
       };
 
-      await eventService.update(eventId, eventData);
+      await calendarService.updateEvent(institutionId, eventId, eventData);
       toast.success('Event updated successfully');
       closeEventModal();
       fetchEvents();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to update event');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to update event');
     } finally {
       setSaving(false);
     }
@@ -359,13 +378,20 @@ const Calendar: React.FC = () => {
   const handleDeleteEvent = async (eventId: string) => {
     try {
       setSaving(true);
+      const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId');
       const id = selectedEvent?.extendedProps?._id || selectedEvent?.id || eventId;
-      await eventService.delete(id);
+
+      if (!institutionId) {
+        toast.error('School ID not found. Please ensure you are logged in.');
+        return;
+      }
+
+      await calendarService.deleteEvent(institutionId, id);
       toast.success('Event deleted successfully');
       closeEventModal();
       fetchEvents();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to delete event');
+      toast.error(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to delete event');
     } finally {
       setSaving(false);
     }

@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react' 
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import AuthLeft from '../authleft/AuthLeft'
-import AuthFooter from '../authfooter/AuthFooter'
 import { institutionRegistrationService } from '../../../../services/institutionRegistrationService'
 
 const instituteOptions = [
@@ -164,19 +163,14 @@ const Register: React.FC = () => {
     <div className="auth-root">
       <AuthLeft />
       <div className="auth-right">
-        <div className="auth-right-scroll">
+        <div className="auth-right-header">
+        </div>
+        <div className="auth-right-scroll auth-scroll-top">
           <div className="auth-right-inner">
-            <div className="auth-right-header">
-              <div className="auth-right-logo">
-                <img src="/assets/img/Ultrakey_fav.png" alt="Ultrakey" />
-              </div>
-              <h1>Create Account</h1>
-              <p className="auth-subtitle">Fill in your details to get started</p>
-            </div>
-
+            <h1>Create Account</h1>
+            <p className="auth-subtitle">Fill in your details to get started</p>
             <div className="auth-right-form">
               <form onSubmit={handleSubmit} noValidate>
-
               {/* ── Institute Type ── */}
               <div className="auth-field has-label" style={{ animationDelay: '.5s', position: 'relative', zIndex: dropdownOpen ? 999 : 'auto' }}>
                 <label>Institute Type *</label>
@@ -397,7 +391,6 @@ const Register: React.FC = () => {
 
           </div>
         </div>
-        <AuthFooter />
       </div>
     </div>
   )

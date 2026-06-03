@@ -139,5 +139,15 @@ const staffSchema = new mongoose.Schema({
 staffSchema.index({ department: 1 });
 staffSchema.index({ designation: 1 });
 staffSchema.index({ employmentStatus: 1 });
+staffSchema.index({ department: 1, designation: 1 });
+staffSchema.index({ employmentStatus: 1, department: 1 });
+staffSchema.index({ createdAt: -1 });
+
+staffSchema.virtual('name').get(function() {
+  return this.fullName || `${this.firstName} ${this.lastName}`;
+});
+
+staffSchema.set('toJSON', { virtuals: true });
+staffSchema.set('toObject', { virtuals: true });
 
 export default mongoose.model('Staff', staffSchema);

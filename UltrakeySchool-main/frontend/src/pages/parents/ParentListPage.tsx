@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { toast } from 'react-toastify'
 import apiClient from '../../api/client'
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils'
 
 interface Guardian {
   _id: string
@@ -46,6 +47,15 @@ interface Guardian {
   createdAt: string
 }
 
+interface StudentOption {
+  _id: string
+  firstName: string
+  lastName: string
+  admissionNumber: string
+  classId?: { _id: string; name: string }
+  sectionId?: { _id: string; name: string }
+}
+
 interface FormData {
   firstName: string
   lastName: string
@@ -78,16 +88,17 @@ const ParentListPage = () => {
   })
   const [submitting, setSubmitting] = useState(false)
   const [selectedGuardians, setSelectedGuardians] = useState<Set<string>>(new Set())
+  const [students, setStudents] = useState<StudentOption[]>([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011'
+  // Get institutionId from localStorage
+  const institutionId = localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || ''
 
   const fetchGuardians = async () => {
     try {
       setLoading(true)
       setError(null)
-
-      const response = await apiClient.get(`/guardians/schools/${schoolId}`, {
+      const response = await apiClient.get(`/guardians/schools/${institutionId}`, {
         params: { limit: 100 }
       })
 
@@ -114,6 +125,26 @@ const ParentListPage = () => {
 
   const handleAddParent = () => {
     setShowAddParentModal(true)
+    fetchStudents()
+  }
+
+  const fetchStudents = async () => {
+    try {
+      setLoadingStudents(true)
+      const res = await apiClient.get(`/students/institution`, {
+        params: { institutionId }
+      })
+      if (res.data?.success) {
+        setStudents(res.data.data || [])
+      } else if (res.data?.data) {
+        setStudents(res.data.data)
+      }
+    } catch {
+      toast.error('Failed to load student list')
+      setStudents([])
+    } finally {
+      setLoadingStudents(false)
+    }
   }
 
   const handleCloseModal = () => {
@@ -191,7 +222,7 @@ const ParentListPage = () => {
         }] : []
       }
 
-      const response = await apiClient.post(`/guardians/schools/${schoolId}`, guardianData)
+      const response = await apiClient.post(`/guardians/schools/${institutionId}`, guardianData)
 
       if (response.data.success) {
         toast.success('Parent added successfully')
@@ -218,7 +249,7 @@ const ParentListPage = () => {
   const formatDate = (dateString: string) => {
     if (!dateString) return '-'
     const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: '2-digit'
@@ -237,6 +268,29 @@ const ParentListPage = () => {
       setSelectedGuardians(new Set())
     }
   }
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = guardians.map(guardian => ({
+      ID: guardian.guardianId,
+      'Parent Name': `${guardian.firstName} ${guardian.lastName}`,
+      Phone: guardian.phone,
+      Email: guardian.email,
+      Status: guardian.status,
+      'Added On': formatDate(guardian.createdAt)
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'parents', [
+        { key: 'ID', label: 'ID' },
+        { key: 'Parent Name', label: 'Parent Name' },
+        { key: 'Phone', label: 'Phone' },
+        { key: 'Email', label: 'Email' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Added On', label: 'Added On' }
+      ], 'Parents List');
+    } else {
+      exportToExcel(exportData, 'parents');
+    }
+  };
 
   const handleSelectGuardian = (guardianId: string) => {
     const newSelected = new Set(selectedGuardians)
@@ -286,13 +340,13 @@ const ParentListPage = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>
@@ -655,16 +709,22 @@ const ParentListPage = () => {
                   </div>
                   <div className="col-md-6">
                     <div className="mb-3">
-                      <label className="form-label">Student ID (Optional)</label>
-                      <input 
-                        type="text" 
-                        className="form-control" 
-                        placeholder="Enter student ID to link"
+                      <label className="form-label">Link Child (Optional)</label>
+                      <select
+                        className="form-select"
                         name="studentId"
                         value={formData.studentId}
                         onChange={handleInputChange}
-                      />
-                      <small className="text-muted">Leave empty to add student later</small>
+                        disabled={loadingStudents}
+                      >
+                        <option value="">-- Select Child to Link --</option>
+                        {students.map(s => (
+                          <option key={s._id} value={s._id}>
+                            {s.firstName} {s.lastName} ({s.admissionNumber}) {s.classId?.name ? `- ${s.classId.name}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <small className="text-muted">Choose a child to link this parent to, or leave empty to add later</small>
                     </div>
                   </div>
                   <div className="col-12">

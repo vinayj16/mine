@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const studentTransportSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -70,7 +70,7 @@ const studentTransportSchema = new mongoose.Schema({
   timestamps: true
 });
 
-studentTransportSchema.index({ schoolId: 1, studentId: 1 });
+studentTransportSchema.index({ institutionId: 1, studentId: 1 });
 studentTransportSchema.index({ transportId: 1, status: 1 });
 
 const StudentTransport = mongoose.models.StudentTransport || mongoose.model('StudentTransport', studentTransportSchema);

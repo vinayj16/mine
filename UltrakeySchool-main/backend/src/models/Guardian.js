@@ -39,9 +39,9 @@ const childRelationshipSchema = new mongoose.Schema({
 }, { _id: false });
 
 const guardianSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true
   },
   guardianId: {
@@ -161,12 +161,24 @@ const guardianSchema = new mongoose.Schema({
   timestamps: true
 });
 
-guardianSchema.index({ schoolId: 1, guardianId: 1 });
+guardianSchema.index({ institutionId: 1, guardianId: 1 });
 guardianSchema.index({ 'children.studentId': 1 });
 guardianSchema.index({ status: 1 });
 
 guardianSchema.virtual('name').get(function() {
   return `${this.firstName} ${this.lastName}`;
+});
+
+guardianSchema.virtual('age').get(function() {
+  if (!this.dateOfBirth) return null;
+  const today = new Date();
+  const birthDate = new Date(this.dateOfBirth);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
 });
 
 guardianSchema.methods.getPrimaryChildren = function() {

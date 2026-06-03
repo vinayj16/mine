@@ -3,30 +3,27 @@ import mongoose from 'mongoose';
 const transactionSchema = new mongoose.Schema({
   transactionId: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    sparse: true
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
+    ref: 'Institution'
   },
   subscriptionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription'
   },
   invoiceId: {
-    type: String,
-    required: true
+    type: String
   },
   type: {
     type: String,
-    enum: ['subscription', 'upgrade', 'addon', 'refund', 'adjustment'],
+    enum: ['subscription', 'upgrade', 'addon', 'refund', 'adjustment', 'payment', 'module'],
     required: true
   },
   description: {
-    type: String,
-    required: true
+    type: String
   },
   amount: {
     type: Number,
@@ -34,7 +31,7 @@ const transactionSchema = new mongoose.Schema({
   },
   currency: {
     type: String,
-    default: 'USD'
+    default: 'INR'
   },
   status: {
     type: String,
@@ -43,8 +40,11 @@ const transactionSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['card', 'bank_transfer', 'paypal', 'other'],
-    required: true
+    enum: ['card', 'bank_transfer', 'paypal', 'other', 'UPI', 'Bank', 'Cash'],
+    default: 'other'
+  },
+  plan: {
+    type: String
   },
   paymentDetails: {
     cardBrand: String,
@@ -94,7 +94,8 @@ const transactionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-transactionSchema.index({ schoolId: 1, status: 1 });
+transactionSchema.index({ institutionId: 1, status: 1 });
+transactionSchema.index({ institutionId: 1, status: 1 });
 transactionSchema.index({ invoiceId: 1 });
 transactionSchema.index({ createdAt: -1 });
 

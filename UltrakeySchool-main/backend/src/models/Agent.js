@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 
 const agentSchema = new mongoose.Schema({
   _id: {
@@ -21,6 +22,11 @@ const agentSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
     match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email address']
+  },
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: [6, 'Password must be at least 6 characters long']
   },
   phone: {
     type: String,
@@ -65,6 +71,10 @@ const agentSchema = new mongoose.Schema({
     max: [50, 'Commission rate cannot exceed 50%'],
     default: 10
   },
+  role: {
+    type: String,
+    default: 'agent'
+  },
   status: {
     type: String,
     required: [true, 'Status is required'],
@@ -73,6 +83,17 @@ const agentSchema = new mongoose.Schema({
       message: 'Status must be either Active, Suspended, or Inactive'
     },
     default: 'Active'
+  },
+  refreshToken: {
+    type: String,
+    select: false
+  },
+  lastLogin: {
+    type: Date
+  },
+  loginCount: {
+    type: Number,
+    default: 0
   },
   notes: {
     type: String,
@@ -132,7 +153,7 @@ const agentSchema = new mongoose.Schema({
   },
   gender: {
     type: String,
-    enum: ['Male', 'Female', 'Other', ''],
+    enum: ['male', 'female', 'other', ''],
     default: ''
   },
   emergencyContact: {
@@ -173,13 +194,16 @@ agentSchema.index({ createdAt: -1 });
 // Virtual for full address
 agentSchema.virtual('fullAddress').get(function() {
   return `${this.address}, ${this.city}, ${this.state} ${this.postalCode}, ${this.country}`;
-});
-
-// Pre-save middleware to ensure data integrity
-agentSchema.pre('save', function(next) {
+});  // Pre-save middleware to ensure data integrity, normalize fields, and hash passwords
+agentSchema.pre('save', async function(next) {
   // Ensure email is lowercase
   if (this.email) {
     this.email = this.email.toLowerCase();
+  }
+  
+  // Normalize gender to lowercase for consistency
+  if (this.gender && typeof this.gender === 'string') {
+    this.gender = this.gender.toLowerCase();
   }
   
   // Trim all string fields
@@ -190,8 +214,19 @@ agentSchema.pre('save', function(next) {
     }
   });
   
+  // Hash password if modified
+  if (this.isModified('password')) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
+  
   next();
 });
+
+// Compare password method
+agentSchema.methods.comparePassword = async function(candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 // Static method to find active agents
 agentSchema.statics.findActive = function(tenantId) {

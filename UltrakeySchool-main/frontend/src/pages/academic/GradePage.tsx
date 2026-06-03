@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { gradeService } from '../../services/gradeService';
 import type { Grade } from '../../services/gradeService';
+import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+ 
+interface ClassOption { _id: string; name: string; }
+interface SubjectOption { _id: string; name: string; }
 
 const GradePage: React.FC = () => {
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -12,6 +17,20 @@ const GradePage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [filterClass, setFilterClass] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [subjects, setSubjects] = useState<SubjectOption[]>([]);
+
+  const getInstitutionId = () => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) { const u = JSON.parse(userStr); return u.institutionId || u.institutionId || u.school || ''; }
+    } catch { /* */ }
+    return localStorage.getItem('institutionId') || localStorage.getItem('institutionId') || '';
+  };
+  const institutionId = getInstitutionId();
 
   const [newGrade, setNewGrade] = useState({
     grade: '',
@@ -24,16 +43,35 @@ const GradePage: React.FC = () => {
 
   const [editGrade, setEditGrade] = useState<Grade | null>(null);
 
-  useEffect(() => {
-    fetchGrades();
-  }, []);
+  const fetchClasses = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/classes', { params: { institutionId, limit: 100 } });
+      const data = res.data?.data || res.data?.classes || [];
+      setClasses(Array.isArray(data) ? data : []);
+    } catch { /* class filter not critical */ }
+  }, [institutionId]);
 
-  const fetchGrades = async () => {
+  const fetchSubjects = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/subjects', { params: { institutionId, limit: 100 } });
+      const data = res.data?.data || res.data?.subjects || [];
+      setSubjects(Array.isArray(data) ? data : []);
+    } catch { /* subject filter not critical */ }
+  }, [institutionId]);
+
+  const fetchGrades = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await gradeService.getAll({ page: 1, limit: 100 });
-      // Handle both direct array and paginated response
-      const gradesArray = Array.isArray(response) ? response : (response.data || []);
+      const params: any = { page: 1, limit: 100, institutionId };
+      if (filterStatus) params.status = filterStatus;
+      const response = await gradeService.getAll(params);
+      let gradesArray = Array.isArray(response) ? response : (response.data || []);
+      if (filterClass) {
+        gradesArray = gradesArray.filter((g: any) => String(g.classId || g.class || '').includes(filterClass));
+      }
+      if (filterSubject) {
+        gradesArray = gradesArray.filter((g: any) => String(g.subjectId || g.subject || '').includes(filterSubject));
+      }
       setGrades(gradesArray);
     } catch (error) {
       console.error('Error fetching grades:', error);
@@ -42,7 +80,13 @@ const GradePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus, filterClass, filterSubject]);
+
+  useEffect(() => {
+    fetchGrades();
+    fetchClasses();
+    fetchSubjects();
+  }, [fetchGrades, fetchClasses, fetchSubjects]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -131,8 +175,27 @@ const GradePage: React.FC = () => {
     });
   };
 
+  const handleApplyFilters = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchGrades();
+  };
+
+  const handleResetFilters = () => {
+    setFilterClass('');
+    setFilterSubject('');
+    setFilterStatus('');
+  };
+
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export as ${type.toUpperCase()} - Feature coming soon`);
+    if (!grades.length) { toast.error('No data to export'); return; }
+    const exportData = grades.map(g => ({ ID: g.id, Grade: g.grade, Percentage: g.percentage, Points: g.points, Status: g.status }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'grades', [
+        { key: 'ID', label: 'ID' }, { key: 'Grade', label: 'Grade' }, { key: 'Percentage', label: 'Percentage' }, { key: 'Points', label: 'Grade Points' }, { key: 'Status', label: 'Status' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'grades');
+    }
   };
 
   const pointsOptions = Array.from({ length: 11 }, (_, i) => i);
@@ -234,7 +297,7 @@ const GradePage: React.FC = () => {
                 <i className="ti ti-filter me-2"></i>Filter
               </button>
               <div className="dropdown-menu drop-width">
-                <form onSubmit={(e) => e.preventDefault()}>
+                <form onSubmit={handleApplyFilters}>
                   <div className="d-flex align-items-center border-bottom p-3">
                     <h4>Filter</h4>
                   </div>
@@ -242,18 +305,40 @@ const GradePage: React.FC = () => {
                     <div className="row">
                       <div className="col-md-12">
                         <div className="mb-3">
+                          <label className="form-label">Class</label>
+                          <select className="form-select" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
+                            <option value="">All Classes</option>
+                            {classes.map(c => (
+                              <option key={c._id} value={c._id}>{c.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
+                          <label className="form-label">Subject</label>
+                          <select className="form-select" value={filterSubject} onChange={e => setFilterSubject(e.target.value)}>
+                            <option value="">All Subjects</option>
+                            {subjects.map(s => (
+                              <option key={s._id} value={s._id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="col-md-12">
+                        <div className="mb-3">
                           <label className="form-label">Status</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                            <option>Active</option>
-                            <option>Inactive</option>
+                          <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+                            <option value="">All</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
                           </select>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="p-3 d-flex align-items-center justify-content-end">
-                    <button type="button" className="btn btn-light me-3">
+                    <button type="button" className="btn btn-light me-3" onClick={handleResetFilters}>
                       Reset
                     </button>
                     <button type="submit" className="btn btn-primary">

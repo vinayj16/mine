@@ -15,7 +15,10 @@ router.get('/', async (req, res) => {
     const { academicYear, status, page = 1, limit = 20 } = req.query;
     
     // Build query
-    const query = { isDeleted: false };
+    const query = { isDeleted: { $ne: true } };
+    if (req.user?.institutionId) {
+      query.institutionId = req.user.institutionId;
+    }
     
     if (academicYear) {
       query.academicYear = academicYear;
@@ -61,7 +64,7 @@ router.get('/by-percentage', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Percentage is required' });
     }
 
-    let applicableGrades = await Grade.find({ isDeleted: false });
+    let applicableGrades = await Grade.find({ isDeleted: { $ne: true } });
 
     if (academicYear) {
       applicableGrades = applicableGrades.filter(grade => grade.academicYear === academicYear);
@@ -90,7 +93,7 @@ router.get('/statistics', async (req, res) => {
   try {
     const { academicYear } = req.query;
     
-    const query = { isDeleted: false };
+    const query = { isDeleted: { $ne: true } };
     if (academicYear) query.academicYear = academicYear;
     
     const [
@@ -134,7 +137,7 @@ router.get('/statistics', async (req, res) => {
 // Get single grade
 router.get('/:id', async (req, res) => {
   try {
-    const grade = await Grade.findOne({ gradeId: req.params.id, isDeleted: false });
+    const grade = await Grade.findById(req.params.id).where('isDeleted').ne(true);
     
     if (!grade) {
       return res.status(404).json({ success: false, message: 'Grade not found' });
@@ -152,18 +155,27 @@ router.get('/:id', async (req, res) => {
 // Create new grade
 router.post('/', authorize(['admin', 'principal', 'institution_admin']), async (req, res) => {
   try {
-    const { grade, marksFrom, marksTo, percentage, points, status, description, academicYear, institutionId, displayOrder } = req.body;
+    const { gradeId, grade, marksFrom, marksTo, percentage, points, status, description, academicYear, institutionId, displayOrder } = req.body;
+    
+    // Auto-set institutionId from authenticated user if not provided
+    const resolvedInstitutionId = institutionId || req.user?.institutionId || req.user?.institution || req.user?.institutionId;
+    
+    // Auto-derive academic year if not provided (April onwards = new academic year)
+    const now = new Date();
+    const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    const resolvedAcademicYear = academicYear || `${year}-${year + 1}`;
     
     const gradeData = {
+      gradeId,
       grade,
       marksFrom,
       marksTo,
       percentage,
       points: points || 0,
-      status: status || 'active',
+      status: status ? status.toLowerCase() : 'active',
       description,
-      academicYear,
-      institutionId,
+      academicYear: resolvedAcademicYear,
+      institutionId: resolvedInstitutionId,
       displayOrder: displayOrder || 0,
       metadata: {
         createdBy: req.user.id,
@@ -180,6 +192,9 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin']), async (
       message: 'Grade created successfully'
     });
   } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to create grade', error: error.message });
   }
 });
@@ -188,7 +203,7 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin']), async (
 router.put('/:id', authorize(['admin', 'principal', 'institution_admin']), async (req, res) => {
   try {
     const grade = await Grade.findOneAndUpdate(
-      { gradeId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: { $ne: true } },
       { 
         ...req.body, 
         'metadata.updatedBy': req.user.id 
@@ -214,7 +229,7 @@ router.put('/:id', authorize(['admin', 'principal', 'institution_admin']), async
 router.delete('/:id', authorize(['admin', 'principal', 'institution_admin']), async (req, res) => {
   try {
     const grade = await Grade.findOneAndUpdate(
-      { gradeId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: { $ne: true } },
       { isDeleted: true, 'metadata.updatedBy': req.user.id },
       { new: true }
     );
@@ -238,7 +253,7 @@ router.patch('/:id/status', authorize(['admin', 'principal', 'institution_admin'
     const { status } = req.body;
     
     const grade = await Grade.findOneAndUpdate(
-      { gradeId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: { $ne: true } },
       { 
         status, 
         'metadata.updatedBy': req.user.id 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
 
 interface Student {
   _id: string;
@@ -39,14 +40,14 @@ const StudentGridPage: React.FC = () => {
   const [genderFilter, setGenderFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
-  const schoolId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchStudents = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const params: any = { schoolId };
+      const params: any = { institutionId };
       
       if (searchTerm) params.search = searchTerm;
       if (classFilter) params.classId = classFilter;
@@ -91,10 +92,39 @@ const StudentGridPage: React.FC = () => {
     setStatusFilter('');
   };
 
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const exportData = students.map(student => ({
+      'Admission No': student.admissionNumber,
+      'Roll No': student.rollNumber || 'N/A',
+      Name: `${student.firstName} ${student.lastName}`,
+      Class: student.classId?.name || 'N/A',
+      Section: student.sectionId?.name || 'N/A',
+      Gender: capitalize(student.gender),
+      Status: capitalize(student.status),
+      Email: student.email || 'N/A',
+      Phone: student.phone || 'N/A'
+    }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'students', [
+        { key: 'Admission No', label: 'Admission No' },
+        { key: 'Roll No', label: 'Roll No' },
+        { key: 'Name', label: 'Name' },
+        { key: 'Class', label: 'Class' },
+        { key: 'Section', label: 'Section' },
+        { key: 'Gender', label: 'Gender' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Email', label: 'Email' },
+        { key: 'Phone', label: 'Phone' }
+      ], 'Students Grid');
+    } else {
+      exportToExcel(exportData, 'students');
+    }
+  };
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const capitalize = (str?: string) => {
@@ -142,13 +172,13 @@ const StudentGridPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
                   <i className="ti ti-file-type-pdf me-2" />
                   Export as PDF
                 </button>
               </li>
               <li>
-                <button className="dropdown-item rounded-1">
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
                   <i className="ti ti-file-type-xls me-2" />
                   Export as Excel
                 </button>

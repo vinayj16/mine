@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 interface ClassReport {
   _id: string;
@@ -55,8 +56,8 @@ const ClassReportPage: React.FC = () => {
     studentCount: ''
   });
 
-  // Get schoolId from localStorage
-  const schoolId = localStorage.getItem('schoolId') || '507f1f77bcf86cd799439011';
+  // Get institutionId from localStorage
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const fetchClassReports = async () => {
     try {
@@ -64,12 +65,12 @@ const ClassReportPage: React.FC = () => {
       setError(null);
 
       const response = await apiClient.get('/classes', {
-        params: { schoolId, limit: 100 }
+        params: { institutionId, limit: 100 }
       });
 
       if (response.data.success) {
         const classes = response.data.data.classes || [];
-        
+
         // Transform to class reports with student counts
         const reports: ClassReport[] = classes.map((cls: any) => ({
           _id: cls._id,
@@ -80,7 +81,7 @@ const ClassReportPage: React.FC = () => {
           studentCount: cls.studentCount || 0,
           capacity: cls.capacity
         }));
-        
+
         setClassReports(reports);
       }
     } catch (err: any) {
@@ -98,8 +99,8 @@ const ClassReportPage: React.FC = () => {
       setLoadingStudents(true);
 
       const response = await apiClient.get('/students', {
-        params: { 
-          schoolId,
+        params: {
+          institutionId,
           classId,
           limit: 100
         }
@@ -156,14 +157,26 @@ const ClassReportPage: React.FC = () => {
     // Implement sorting logic here
   };
 
+  const exportColumns: ExportColumn[] = [
+    { key: 'classId', label: 'ID' },
+    { key: 'name', label: 'Class' },
+    { key: 'section', label: 'Section', format: (v) => v || '-' },
+    { key: 'studentCount', label: 'No of Students', format: (v, row) => String(v || row.students || 0) },
+  ];
+
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export to ${type} feature coming soon`);
+    if (!classReports.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(classReports, 'class-report', exportColumns, 'Class Report');
+    } else {
+      exportToExcel(classReports, 'class-report', exportColumns);
+    }
   };
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: '2-digit'
@@ -174,9 +187,8 @@ const ClassReportPage: React.FC = () => {
     const isActive = status === 'active';
     return (
       <span
-        className={`badge ${
-          isActive ? 'badge-soft-success' : 'badge-soft-danger'
-        } d-inline-flex align-items-center`}
+        className={`badge ${isActive ? 'badge-soft-success' : 'badge-soft-danger'
+          } d-inline-flex align-items-center`}
       >
         <i className="ti ti-circle-filled fs-5 me-1"></i>
         {isActive ? 'Active' : 'Inactive'}
@@ -231,7 +243,7 @@ const ClassReportPage: React.FC = () => {
             </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <button 
+                <button
                   className="dropdown-item rounded-1"
                   onClick={() => handleExport('pdf')}
                 >
@@ -239,7 +251,7 @@ const ClassReportPage: React.FC = () => {
                 </button>
               </li>
               <li>
-                <button 
+                <button
                   className="dropdown-item rounded-1"
                   onClick={() => handleExport('excel')}
                 >
@@ -260,11 +272,11 @@ const ClassReportPage: React.FC = () => {
               <span className="icon-addon">
                 <i className="ti ti-calendar"></i>
               </span>
-              <input 
-                type="text" 
-                className="form-control date-range bookingrange" 
+              <input
+                type="text"
+                className="form-control date-range bookingrange"
                 placeholder="Select"
-                defaultValue="Academic Year : 2024 / 2025" 
+                defaultValue="Academic Year : 2024 / 2025"
               />
             </div>
             <div className="dropdown mb-3 me-2">
@@ -284,7 +296,7 @@ const ClassReportPage: React.FC = () => {
               </button>
               <ul className="dropdown-menu p-3">
                 <li>
-                  <button 
+                  <button
                     className={`dropdown-item rounded-1 ${sortBy === 'ascending' ? 'active' : ''}`}
                     onClick={() => handleSort('ascending')}
                   >
@@ -292,7 +304,7 @@ const ClassReportPage: React.FC = () => {
                   </button>
                 </li>
                 <li>
-                  <button 
+                  <button
                     className={`dropdown-item rounded-1 ${sortBy === 'descending' ? 'active' : ''}`}
                     onClick={() => handleSort('descending')}
                   >
@@ -300,7 +312,7 @@ const ClassReportPage: React.FC = () => {
                   </button>
                 </li>
                 <li>
-                  <button 
+                  <button
                     className="dropdown-item rounded-1"
                     onClick={() => handleSort('recently-viewed')}
                   >
@@ -308,7 +320,7 @@ const ClassReportPage: React.FC = () => {
                   </button>
                 </li>
                 <li>
-                  <button 
+                  <button
                     className="dropdown-item rounded-1"
                     onClick={() => handleSort('recently-added')}
                   >
@@ -328,7 +340,7 @@ const ClassReportPage: React.FC = () => {
                 <div className="col-md-6">
                   <div className="mb-3">
                     <label className="form-label">Class</label>
-                    <select 
+                    <select
                       className="form-select"
                       name="class"
                       value={filters.class}
@@ -344,7 +356,7 @@ const ClassReportPage: React.FC = () => {
                 <div className="col-md-6">
                   <div className="mb-3">
                     <label className="form-label">Section</label>
-                    <select 
+                    <select
                       className="form-select"
                       name="section"
                       value={filters.section}
@@ -360,7 +372,7 @@ const ClassReportPage: React.FC = () => {
                 <div className="col-md-12">
                   <div className="mb-0">
                     <label className="form-label">No Of Students</label>
-                    <select 
+                    <select
                       className="form-select"
                       name="studentCount"
                       value={filters.studentCount}
@@ -375,8 +387,8 @@ const ClassReportPage: React.FC = () => {
                 </div>
               </div>
               <div className="d-flex justify-content-end mt-3">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="btn btn-light me-2"
                   onClick={resetFilters}
                 >
@@ -424,56 +436,56 @@ const ClassReportPage: React.FC = () => {
 
         {/* Class Reports Table */}
         {!loading && !error && classReports.length > 0 && (
-        <div className="card-body p-0 py-3">
-          <div className="table-responsive">
-            <table className="table datatable">
-              <thead className="thead-light">
-                <tr>
-                  <th className="no-sort">
-                    <div className="form-check">
-                      <input 
-                        className="form-check-input" 
-                        type="checkbox" 
-                        id="select-all" 
-                      />
-                    </div>
-                  </th>
-                  <th>ID</th>
-                  <th>Class</th>
-                  <th>Section</th>
-                  <th>No of Students</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classReports.map((report) => (
-                  <tr key={report._id}>
-                    <td>
+          <div className="card-body p-0 py-3">
+            <div className="table-responsive">
+              <table className="table datatable">
+                <thead className="thead-light">
+                  <tr>
+                    <th className="no-sort">
                       <div className="form-check">
-                        <input 
-                          className="form-check-input" 
-                          type="checkbox" 
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="select-all"
                         />
                       </div>
-                    </td>
-                    <td><Link to="#" className="link-primary">{report.classId}</Link></td>
-                    <td>{report.name}</td>
-                    <td>{report.section || '-'}</td>
-                    <td>{report.studentCount}</td>
-                    <td>
-                      <button 
-                        className="btn btn-light me-2"
-                        onClick={() => handleViewDetails(report)}
-                      >
-                        View Details
-                      </button>
-                    </td>
+                    </th>
+                    <th>ID</th>
+                    <th>Class</th>
+                    <th>Section</th>
+                    <th>No of Students</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {classReports.map((report) => (
+                    <tr key={report._id}>
+                      <td>
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                          />
+                        </div>
+                      </td>
+                      <td><Link to="#" className="link-primary">{typeof report.classId === 'object' ? report.classId?.name || '-' : report.classId}</Link></td>
+                      <td>{report.name}</td>
+                      <td>{report.section || '-'}</td>
+                      <td>{report.studentCount}</td>
+                      <td>
+                        <button
+                          className="btn btn-light me-2"
+                          onClick={() => handleViewDetails(report)}
+                        >
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         )}
       </div>
 

@@ -3,8 +3,8 @@ import mongoose from 'mongoose';
 const noticeSchema = new mongoose.Schema({
   noticeId: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    sparse: true
   },
   
   title: {
@@ -33,7 +33,7 @@ const noticeSchema = new mongoose.Schema({
   
   recipients: [{
     type: String,
-    enum: ['student', 'parent', 'teacher', 'admin', 'accountant', 'librarian', 'receptionist', 'superadmin', 'staff'],
+    enum: ['student', 'parent', 'teacher', 'admin', 'accountant', 'librarian', 'receptionist', 'superadmin', 'staff', 'principal', 'institution_admin', 'hr_manager', 'hostel_warden', 'transport_manager'],
     lowercase: true
   }],
   

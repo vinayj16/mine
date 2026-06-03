@@ -65,12 +65,12 @@ router.get('/', async (req, res) => {
 });
 
 // Get leave statistics for a school
-router.get('/schools/:schoolId/statistics', async (req, res) => {
+router.get('/schools/:institutionId/statistics', async (req, res) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { academicYear } = req.query;
     
-    let schoolReports = await Leave.find({ schoolId, academicYear });
+    let schoolReports = await Leave.find({ institutionId, academicYear });
 
     const stats = {
       total: schoolReports.length,

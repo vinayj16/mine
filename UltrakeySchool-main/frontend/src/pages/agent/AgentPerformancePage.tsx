@@ -115,7 +115,7 @@ const AgentPerformancePage = () => {
       for (let i = 5; i >= 0; i--) {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
-        const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+        const monthName = date.toLocaleDateString('en-IN', { month: 'short' });
         
         const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
         const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
@@ -145,7 +145,7 @@ const AgentPerformancePage = () => {
             id: `inst-${inst._id}`,
             type: 'institution_added',
             institutionName: inst.name,
-            date: new Date(inst.createdAt).toLocaleDateString('en-US', { 
+            date: new Date(inst.createdAt).toLocaleDateString('en-IN', { 
               year: 'numeric', 
               month: 'short', 
               day: 'numeric' 
@@ -163,7 +163,7 @@ const AgentPerformancePage = () => {
             id: `comm-${comm._id}`,
             type: 'revenue_generated',
             institutionName: comm.institutionName,
-            date: new Date(comm.createdAt).toLocaleDateString('en-US', { 
+            date: new Date(comm.createdAt).toLocaleDateString('en-IN', { 
               year: 'numeric', 
               month: 'short', 
               day: 'numeric' 

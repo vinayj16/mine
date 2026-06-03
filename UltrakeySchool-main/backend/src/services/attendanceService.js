@@ -1,24 +1,27 @@
 import Attendance from '../models/Attendance.js';
+import User from '../models/User.js';
+import Staff from '../models/Staff.js';
+import notificationService from './notificationService.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, subWeeks } from '../utils/dateHelpers.js';
 
 class AttendanceService {
-  async getAttendanceStats(schoolId, dateRange = 'today') {
+  async getAttendanceStats(institutionId, dateRange = 'today') {
     const { startDate, endDate } = this.getDateRange(dateRange);
 
     const [students, teachers, staff] = await Promise.all([
-      this.getStatsForType(schoolId, 'student', startDate, endDate),
-      this.getStatsForType(schoolId, 'teacher', startDate, endDate),
-      this.getStatsForType(schoolId, 'staff', startDate, endDate)
+      this.getStatsForType(institutionId, 'student', startDate, endDate),
+      this.getStatsForType(institutionId, 'teacher', startDate, endDate),
+      this.getStatsForType(institutionId, 'staff', startDate, endDate)
     ]);
 
     return { students, teachers, staff };
   }
 
-  async getStatsForType(schoolId, userType, startDate, endDate) {
+  async getStatsForType(institutionId, userType, startDate, endDate) {
     const stats = await Attendance.aggregate([
       {
         $match: {
-          schoolId: schoolId,
+          institutionId: institutionId,
           userType: userType,
           date: { $gte: startDate, $lte: endDate }
         }
@@ -78,12 +81,12 @@ class AttendanceService {
     }
   }
 
-  async markAttendance(schoolId, userId, userType, status, markedBy, remarks = '') {
+  async markAttendance(institutionId, userId, userType, status, markedBy, remarks = '') {
     const today = startOfDay(new Date());
 
     const attendance = await Attendance.findOneAndUpdate(
       {
-        schoolId,
+        institutionId,
         userId,
         userType,
         date: today
@@ -103,9 +106,9 @@ class AttendanceService {
     return attendance;
   }
 
-  async getAttendanceHistory(schoolId, userId, userType, startDate, endDate) {
+  async getAttendanceHistory(institutionId, userId, userType, startDate, endDate) {
     const attendance = await Attendance.find({
-      schoolId,
+      institutionId,
       userId,
       userType,
       date: { $gte: startDate, $lte: endDate }
@@ -114,17 +117,97 @@ class AttendanceService {
     return attendance;
   }
 
-  async getBulkAttendance(schoolId, userType, date) {
+  async getBulkAttendance(institutionId, userType, date, options = {}) {
+    const { classId, sectionId } = options;
     const startDate = startOfDay(date);
     const endDate = endOfDay(date);
 
-    const attendance = await Attendance.find({
-      schoolId,
+    // 1. Fetch all relevant users based on type
+    let users = [];
+    if (userType === 'staff') {
+      // Fetch from User model with staff-related roles
+      users = await User.find({
+        institutionId,
+        role: { $in: ['staff_member', 'hr_manager', 'accountant', 'librarian', 'transport_manager', 'hostel_warden'] }
+      }).select('name email avatar role department designation');
+
+      // Auto-seed demo staff if none exist (for demo purposes as requested)
+      if (users.length === 0) {
+        const demoStaff = [
+          {
+            name: 'John Staff',
+            email: `john.staff.${institutionId}@example.com`,
+            role: 'staff_member',
+            institutionId,
+            department: 'Administration',
+            designation: 'Receptionist',
+            status: 'active'
+          },
+          {
+            name: 'Sarah HR',
+            email: `sarah.hr.${institutionId}@example.com`,
+            role: 'hr_manager',
+            institutionId,
+            department: 'HR',
+            designation: 'HR Manager',
+            status: 'active'
+          }
+        ];
+        // Create demo users
+        await User.insertMany(demoStaff);
+        // Fetch again
+        users = await User.find({
+          institutionId,
+          role: { $in: ['staff_member', 'hr_manager', 'accountant', 'librarian', 'transport_manager', 'hostel_warden'] }
+        }).select('name email avatar role department designation');
+      }
+    } else if (userType === 'teacher') {
+      users = await User.find({
+        institutionId,
+        role: 'teacher'
+      }).select('name email avatar department designation');
+    } else if (userType === 'student') {
+      const query = { institutionId, role: 'student' };
+      if (classId) query.class = classId;
+      if (sectionId) query.section = sectionId;
+      users = await User.find(query).select('name email avatar class section rollNumber admissionNumber');
+    }
+
+    // 2. Fetch attendance records for these users on this date
+    const attendanceRecords = await Attendance.find({
+      institutionId,
       userType,
       date: { $gte: startDate, $lte: endDate }
-    }).populate('userId', 'name email');
+    });
 
-    return attendance;
+    // 3. Merge users with their attendance
+    const attendanceMap = {};
+    attendanceRecords.forEach(rec => {
+      attendanceMap[rec.userId.toString()] = rec;
+    });
+
+    const result = users.map(user => {
+      const att = attendanceMap[user._id.toString()];
+      return {
+        _id: att?._id,
+        userId: { _id: user._id, name: user.name, email: user.email, avatar: user.avatar },
+        staffId: user._id, // For frontend compatibility
+        staffName: user.name,
+        staffAvatar: user.avatar,
+        department: user.department || 'General',
+        designation: user.designation || user.role,
+        userType,
+        date: startDate,
+        status: att?.status || 'absent', // Default to absent if no record
+        attendance: att?.status || 'absent', // For frontend compatibility
+        remarks: att?.remarks || '',
+        notes: att?.remarks || '', // For frontend compatibility
+        checkInTime: att?.checkInTime,
+        checkOutTime: att?.checkOutTime
+      };
+    });
+
+    return result;
   }
 }
 
@@ -132,12 +215,12 @@ export default new AttendanceService();
 /**
  * Get attendance with summary statistics
  */
-async function getAttendanceWithSummary(schoolId, classId, sectionId, date) {
+async function getAttendanceWithSummary(institutionId, classId, sectionId, date) {
   const startDate = startOfDay(date);
   const endDate = endOfDay(date);
 
   let query = {
-    schoolId,
+    institutionId,
     date: { $gte: startDate, $lte: endDate }
   };
 
@@ -177,13 +260,13 @@ AttendanceService.prototype.getAttendanceWithSummary = getAttendanceWithSummary;
 /**
  * Bulk mark attendance
  */
-async function bulkMarkAttendance(schoolId, attendanceRecords, markedBy, date) {
+async function bulkMarkAttendance(institutionId, attendanceRecords, markedBy, date) {
   const attendanceDate = date ? startOfDay(new Date(date)) : startOfDay(new Date());
   
   const operations = attendanceRecords.map(record => ({
     updateOne: {
       filter: {
-        schoolId,
+        institutionId,
         userId: record.userId,
         userType: record.userType,
         date: attendanceDate
@@ -201,6 +284,28 @@ async function bulkMarkAttendance(schoolId, attendanceRecords, markedBy, date) {
   }));
 
   const result = await Attendance.bulkWrite(operations);
+  
+  // Create notifications for marked users
+  try {
+    const users = await User.find({ _id: { $in: attendanceRecords.map(r => r.userId) } }).select('name').lean();
+    const userMap = {};
+    users.forEach(u => { userMap[u._id.toString()] = u.name; });
+    
+    const notificationPromises = attendanceRecords.map(record => {
+      const userName = userMap[record.userId.toString()] || 'User';
+      return notificationService.createNotification(institutionId, {
+        recipientId: record.userId,
+        type: 'info',
+        title: 'Attendance Marked',
+        message: `Your attendance has been marked as ${record.status} for ${attendanceDate.toISOString().split('T')[0]}`,
+        metadata: { attendanceDate: attendanceDate.toISOString(), status: record.status, markedBy }
+      }).catch(() => {});
+    });
+    await Promise.all(notificationPromises);
+  } catch (notifErr) {
+    console.error('Error creating attendance notifications:', notifErr);
+  }
+  
   return { successful: result.upsertedCount + result.modifiedCount, total: attendanceRecords.length };
 }
 
@@ -209,9 +314,9 @@ AttendanceService.prototype.bulkMarkAttendance = bulkMarkAttendance;
 /**
  * Update attendance
  */
-async function updateAttendance(id, schoolId, updates, updatedBy) {
+async function updateAttendance(id, institutionId, updates, updatedBy) {
   const attendance = await Attendance.findOneAndUpdate(
-    { _id: id, schoolId },
+    { _id: id, institutionId },
     { ...updates, updatedBy },
     { new: true }
   );
@@ -223,8 +328,8 @@ AttendanceService.prototype.updateAttendance = updateAttendance;
 /**
  * Delete attendance
  */
-async function deleteAttendance(id, schoolId) {
-  const result = await Attendance.findOneAndDelete({ _id: id, schoolId });
+async function deleteAttendance(id, institutionId) {
+  const result = await Attendance.findOneAndDelete({ _id: id, institutionId });
   return result;
 }
 
@@ -233,11 +338,11 @@ AttendanceService.prototype.deleteAttendance = deleteAttendance;
 /**
  * Get attendance report
  */
-async function getAttendanceReport(schoolId, startDate, endDate, options) {
+async function getAttendanceReport(institutionId, startDate, endDate, options) {
   const { classId, sectionId, userType, format } = options;
   
   let query = {
-    schoolId,
+    institutionId,
     date: { $gte: startDate, $lte: endDate }
   };
 
@@ -246,8 +351,26 @@ async function getAttendanceReport(schoolId, startDate, endDate, options) {
   if (userType) query.userType = userType;
 
   const attendance = await Attendance.find(query)
-    .populate('userId', 'name email')
     .sort({ date: -1 });
+
+  // If userType is 'student', attach student names
+  if (userType === 'student') {
+    const studentIds = [...new Set(attendance.map(a => a.studentId).filter(Boolean))];
+    const Student = (await import('../models/Student.js')).default;
+    const students = await Student.find({ _id: { $in: studentIds } }).select('firstName lastName userId').lean();
+    const studentMap = {};
+    for (const s of students) {
+      studentMap[s._id.toString()] = s;
+    }
+    for (const a of attendance) {
+      const student = studentMap[a.studentId?.toString()];
+      if (student) {
+        a.userId = student.userId;
+        a._doc = a._doc || a;
+        a._doc.userId = { _id: student.userId, name: student.firstName + ' ' + student.lastName };
+      }
+    }
+  }
 
   return {
     attendance,
@@ -265,16 +388,16 @@ AttendanceService.prototype.getAttendanceReport = getAttendanceReport;
 /**
  * Get attendance percentage
  */
-async function getAttendancePercentage(schoolId, userId, userType, startDate, endDate) {
+async function getAttendancePercentage(institutionId, userId, userType, startDate, endDate) {
   const total = await Attendance.countDocuments({
-    schoolId,
+    institutionId,
     userId,
     userType,
     date: { $gte: startDate, $lte: endDate }
   });
 
   const present = await Attendance.countDocuments({
-    schoolId,
+    institutionId,
     userId,
     userType,
     date: { $gte: startDate, $lte: endDate },
@@ -297,14 +420,14 @@ AttendanceService.prototype.getAttendancePercentage = getAttendancePercentage;
 /**
  * Get low attendance users
  */
-async function getLowAttendanceUsers(schoolId, threshold, options) {
+async function getLowAttendanceUsers(institutionId, threshold, options) {
   const { userType, classId, startDate, endDate, page, limit } = options;
   
   const skip = (page - 1) * limit;
   
   // Aggregate to get attendance percentages per user
   const pipeline = [
-    { $match: { schoolId } },
+    { $match: { institutionId } },
     { $group: {
       _id: { userId: '$userId', userType: '$userType' },
       total: { $sum: 1 },
@@ -328,7 +451,7 @@ async function getLowAttendanceUsers(schoolId, threshold, options) {
   if (startDate && endDate) pipeline.splice(1, 0, { $match: { date: { $gte: startDate, $lte: endDate } } });
 
   const users = await Attendance.aggregate(pipeline);
-  const total = await Attendance.countDocuments({ schoolId });
+  const total = await Attendance.countDocuments({ institutionId });
 
   return {
     users,

@@ -1,14 +1,13 @@
 import Guardian from '../models/Guardian.js';
 import Student from '../models/Student.js';
+import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 
-export const getAllGuardians = async (schoolId, filters = {}) => {
+export const getAllGuardians = async (institutionId, filters = {}) => {
   const { status, search, page = 1, limit = 20 } = filters;
 
-  const query = { schoolId };
-
-  if (status) {
-    query.status = status;
-  }
+  const query = { institutionId };
+  if (status) query.status = status;
 
   if (search) {
     query.$or = [
@@ -22,15 +21,36 @@ export const getAllGuardians = async (schoolId, filters = {}) => {
   const skip = (page - 1) * limit;
 
   const guardians = await Guardian.find(query)
-    .populate('children.studentId', 'firstName lastName studentId classId')
+    .populate('children.studentId', 'firstName lastName studentId classId section avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit);
 
   const total = await Guardian.countDocuments(query);
 
+  const mapped = guardians.map(g => ({
+    _id: g._id,
+    guardianId: g.guardianId,
+    userId: g.userId,
+    firstName: g.firstName,
+    lastName: g.lastName,
+    email: g.email,
+    phone: g.phone,
+    avatar: g.avatar || '',
+    status: g.status || 'active',
+    createdAt: g.createdAt,
+    children: (g.children || []).map(c => ({
+      studentId: c.studentId?._id,
+      studentName: c.studentId ? `${c.studentId.firstName} ${c.studentId.lastName}` : 'Unknown',
+      relationship: c.relationship?.type || 'guardian',
+      isPrimary: c.relationship?.isPrimary || false,
+      isActive: c.isActive
+    })),
+    institutionId: g.institutionId,
+  }));
+
   return {
-    guardians,
+    guardians: mapped,
     pagination: {
       page,
       limit,
@@ -40,8 +60,8 @@ export const getAllGuardians = async (schoolId, filters = {}) => {
   };
 };
 
-export const getGuardianById = async (guardianId, schoolId) => {
-  const guardian = await Guardian.findOne({ guardianId, schoolId })
+export const getGuardianById = async (guardianId, institutionId) => {
+  const guardian = await Guardian.findOne({ guardianId, institutionId })
     .populate('children.studentId', 'firstName lastName studentId classId section avatar')
     .populate('userId', 'email roleId isActive');
 
@@ -52,9 +72,9 @@ export const getGuardianById = async (guardianId, schoolId) => {
   return guardian;
 };
 
-export const getGuardiansByStudentId = async (studentId, schoolId) => {
+export const getGuardiansByStudentId = async (studentId, institutionId) => {
   const guardians = await Guardian.find({
-    schoolId,
+    institutionId,
     'children.studentId': studentId,
     'children.isActive': true
   }).populate('children.studentId', 'firstName lastName studentId');
@@ -62,9 +82,9 @@ export const getGuardiansByStudentId = async (studentId, schoolId) => {
   return guardians;
 };
 
-export const getPrimaryGuardian = async (studentId, schoolId) => {
+export const getPrimaryGuardian = async (studentId, institutionId) => {
   const guardian = await Guardian.findOne({
-    schoolId,
+    institutionId,
     'children.studentId': studentId,
     'children.relationship.isPrimary': true,
     'children.isActive': true
@@ -73,9 +93,9 @@ export const getPrimaryGuardian = async (studentId, schoolId) => {
   return guardian;
 };
 
-export const getEmergencyContacts = async (studentId, schoolId) => {
+export const getEmergencyContacts = async (studentId, institutionId) => {
   const guardians = await Guardian.find({
-    schoolId,
+    institutionId,
     'children.studentId': studentId,
     'children.relationship.isEmergency': true,
     'children.isActive': true
@@ -85,9 +105,9 @@ export const getEmergencyContacts = async (studentId, schoolId) => {
 };
 
 export const createGuardian = async (guardianData) => {
-  const { schoolId } = guardianData;
+  const { institutionId, firstName, lastName, email, phone } = guardianData;
 
-  const lastGuardian = await Guardian.findOne({ schoolId })
+  const lastGuardian = await Guardian.findOne({ institutionId })
     .sort({ createdAt: -1 })
     .select('guardianId');
 
@@ -99,19 +119,44 @@ export const createGuardian = async (guardianData) => {
     guardianId = 'G100001';
   }
 
+  let user = await User.findOne({ email });
+  if (!user) {
+    const defaultPassword = 'Parent@123';
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    user = await User.create({
+      name: `${firstName} ${lastName}`,
+      email,
+      phone,
+      password: hashedPassword,
+      role: 'parent',
+      institutionId,
+      status: 'active'
+    });
+  }
+
   const guardian = new Guardian({
     ...guardianData,
-    guardianId
+    guardianId,
+    userId: user._id
   });
 
   await guardian.save();
 
-  return guardian;
+  const populated = await Guardian.findById(guardian._id)
+    .populate('children.studentId', 'firstName lastName studentId classId section avatar');
+
+  return {
+    ...populated.toObject(),
+    credentials: {
+      email: user.email,
+      password: 'Parent@123'
+    }
+  };
 };
 
-export const updateGuardian = async (guardianId, schoolId, updateData) => {
+export const updateGuardian = async (guardianId, institutionId, updateData) => {
   const guardian = await Guardian.findOneAndUpdate(
-    { guardianId, schoolId },
+    { guardianId, institutionId },
     { $set: updateData },
     { new: true, runValidators: true }
   ).populate('children.studentId', 'firstName lastName studentId');
@@ -123,8 +168,8 @@ export const updateGuardian = async (guardianId, schoolId, updateData) => {
   return guardian;
 };
 
-export const deleteGuardian = async (guardianId, schoolId) => {
-  const guardian = await Guardian.findOneAndDelete({ guardianId, schoolId });
+export const deleteGuardian = async (guardianId, institutionId) => {
+  const guardian = await Guardian.findOneAndDelete({ guardianId, institutionId });
 
   if (!guardian) {
     throw new Error('Guardian not found');
@@ -133,8 +178,8 @@ export const deleteGuardian = async (guardianId, schoolId) => {
   return guardian;
 };
 
-export const addChildToGuardian = async (guardianId, schoolId, childData) => {
-  const guardian = await Guardian.findOne({ guardianId, schoolId });
+export const addChildToGuardian = async (guardianId, institutionId, childData) => {
+  const guardian = await Guardian.findOne({ guardianId, institutionId });
 
   if (!guardian) {
     throw new Error('Guardian not found');
@@ -163,8 +208,8 @@ export const addChildToGuardian = async (guardianId, schoolId, childData) => {
   return guardian;
 };
 
-export const removeChildFromGuardian = async (guardianId, schoolId, studentId) => {
-  const guardian = await Guardian.findOne({ guardianId, schoolId });
+export const removeChildFromGuardian = async (guardianId, institutionId, studentId) => {
+  const guardian = await Guardian.findOne({ guardianId, institutionId });
 
   if (!guardian) {
     throw new Error('Guardian not found');
@@ -179,8 +224,8 @@ export const removeChildFromGuardian = async (guardianId, schoolId, studentId) =
   return guardian;
 };
 
-export const updateChildRelationship = async (guardianId, schoolId, studentId, relationshipData) => {
-  const guardian = await Guardian.findOne({ guardianId, schoolId });
+export const updateChildRelationship = async (guardianId, institutionId, studentId, relationshipData) => {
+  const guardian = await Guardian.findOne({ guardianId, institutionId });
 
   if (!guardian) {
     throw new Error('Guardian not found');
@@ -201,8 +246,8 @@ export const updateChildRelationship = async (guardianId, schoolId, studentId, r
   return guardian;
 };
 
-export const updateGuardianPermissions = async (guardianId, schoolId, permissions) => {
-  const guardian = await Guardian.findOne({ guardianId, schoolId });
+export const updateGuardianPermissions = async (guardianId, institutionId, permissions) => {
+  const guardian = await Guardian.findOne({ guardianId, institutionId });
 
   if (!guardian) {
     throw new Error('Guardian not found');
@@ -215,22 +260,22 @@ export const updateGuardianPermissions = async (guardianId, schoolId, permission
   return guardian;
 };
 
-export const getGuardianStats = async (schoolId) => {
-  const total = await Guardian.countDocuments({ schoolId });
-  const active = await Guardian.countDocuments({ schoolId, status: 'active' });
-  const inactive = await Guardian.countDocuments({ schoolId, status: 'inactive' });
-  const suspended = await Guardian.countDocuments({ schoolId, status: 'suspended' });
+export const getGuardianStats = async (institutionId) => {
+  const total = await Guardian.countDocuments({ institutionId });
+  const active = await Guardian.countDocuments({ institutionId, status: 'active' });
+  const inactive = await Guardian.countDocuments({ institutionId, status: 'inactive' });
+  const suspended = await Guardian.countDocuments({ institutionId, status: 'suspended' });
 
   const relationshipStats = await Guardian.aggregate([
-    { $match: { schoolId } },
+    { $match: { institutionId } },
     { $unwind: '$children' },
     { $group: { _id: '$children.relationship.type', count: { $sum: 1 } } }
   ]);
 
   const permissionStats = {
-    canCommunicate: await Guardian.countDocuments({ schoolId, 'permissions.canCommunicateWithTeachers': true }),
-    canViewGrades: await Guardian.countDocuments({ schoolId, 'permissions.canViewGrades': true }),
-    canApproveLeaves: await Guardian.countDocuments({ schoolId, 'permissions.canApproveLeaves': true })
+    canCommunicate: await Guardian.countDocuments({ institutionId, 'permissions.canCommunicateWithTeachers': true }),
+    canViewGrades: await Guardian.countDocuments({ institutionId, 'permissions.canViewGrades': true }),
+    canApproveLeaves: await Guardian.countDocuments({ institutionId, 'permissions.canApproveLeaves': true })
   };
 
   return {
@@ -246,9 +291,9 @@ export const getGuardianStats = async (schoolId) => {
   };
 };
 
-export const searchGuardians = async (schoolId, query) => {
+export const searchGuardians = async (institutionId, query) => {
   const guardians = await Guardian.find({
-    schoolId,
+    institutionId,
     $or: [
       { firstName: { $regex: query, $options: 'i' } },
       { lastName: { $regex: query, $options: 'i' } },
@@ -261,12 +306,62 @@ export const searchGuardians = async (schoolId, query) => {
   return guardians;
 };
 
-export const getGuardiansWithPermission = async (schoolId, permission) => {
-  const query = { schoolId };
+export const getGuardiansWithPermission = async (institutionId, permission) => {
+  const query = { institutionId };
   query[`permissions.${permission}`] = true;
 
   const guardians = await Guardian.find(query)
     .populate('children.studentId', 'firstName lastName studentId');
 
   return guardians;
+};
+
+export const bulkUpdateStatus = async (institutionId, guardianIds, status) => {
+  const result = await Guardian.updateMany(
+    { _id: { $in: guardianIds }, institutionId },
+    { $set: { status } }
+  );
+  return result;
+};
+
+export const exportGuardians = async (institutionId, format, filters = {}) => {
+  const query = { institutionId };
+  if (filters.status) query.status = filters.status;
+  if (filters.relationship) {
+    query['children.relationship.type'] = filters.relationship;
+  }
+
+  const guardians = await Guardian.find(query)
+    .populate('children.studentId', 'firstName lastName studentId classId section')
+    .lean();
+
+  return { count: guardians.length, format, data: guardians };
+};
+
+export const getGuardiansByRelationship = async (institutionId, relationship, options = {}) => {
+  const { page = 1, limit = 20 } = options;
+  const query = {
+    institutionId,
+    'children.relationship.type': relationship
+  };
+  const skip = (page - 1) * limit;
+
+  const [guardians, total] = await Promise.all([
+    Guardian.find(query)
+      .populate('children.studentId', 'firstName lastName studentId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Guardian.countDocuments(query)
+  ]);
+
+  return {
+    guardians,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  };
 };

@@ -7,12 +7,6 @@ const attendanceSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  schoolId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true,
-    index: true
-  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
@@ -71,18 +65,6 @@ const attendanceSchema = new mongoose.Schema({
       default: false
     }
   },
-  qrCodeData: {
-    qrCode: String,
-    scannedAt: Date,
-    location: {
-      latitude: Number,
-      longitude: Number
-    },
-    verified: {
-      type: Boolean,
-      default: false
-    }
-  },
   location: {
     latitude: Number,
     longitude: Number,
@@ -98,8 +80,8 @@ const attendanceSchema = new mongoose.Schema({
 });
 
 // Compound index for efficient queries
-attendanceSchema.index({ institutionId: 1, schoolId: 1, userType: 1, date: -1 });
-attendanceSchema.index({ institutionId: 1, schoolId: 1, userId: 1, date: -1 });
+attendanceSchema.index({ institutionId: 1, userType: 1, date: -1 });
+attendanceSchema.index({ institutionId: 1, userId: 1, date: -1 });
 attendanceSchema.index({ institutionId: 1, date: -1 });
 
 export default mongoose.model('Attendance', attendanceSchema);

@@ -38,18 +38,18 @@ class CallSocketService {
 
   connect(userId: string) {
     if (this.socket?.connected) {
-      console.log('✅ Call socket already connected');
+      console.log('[CallSocket] Already connected');
       return;
     }
     
     if (this.isConnecting) {
-      console.log('⏳ Call socket connection already in progress');
+      console.log('[CallSocket] Connection already in progress');
       return;
     }
     
     // Disconnect existing socket if any
     if (this.socket) {
-      console.log('🔌 Disconnecting existing call socket before reconnect');
+      console.log('[CallSocket] Disconnecting existing socket before reconnect');
       this.socket.disconnect();
       this.socket = null;
     }
@@ -78,7 +78,7 @@ class CallSocketService {
 
     this.socket.on('connect', () => {
       this.isConnecting = false;
-      console.log('✅ Call socket connected');
+      console.log('[CallSocket] Connected');
       
       // Join user's personal room
       this.socket?.emit('join_user', userId);
@@ -89,7 +89,7 @@ class CallSocketService {
 
     this.socket.on('disconnect', (reason) => {
       this.isConnecting = false;
-      console.log('🔌 Call socket disconnected:', reason);
+      console.log('[CallSocket] Disconnected:', reason);
       
       // Auto-reconnect for manual disconnections
       if (reason === 'io server disconnect') {
@@ -99,7 +99,7 @@ class CallSocketService {
 
     this.socket.on('connect_error', (error) => {
       this.isConnecting = false;
-      console.error('❌ Call socket connection error:', error);
+      console.error('[CallSocket] Connection error:', error);
     });
   }
 
@@ -142,7 +142,7 @@ class CallSocketService {
       this.socket.disconnect();
       this.socket = null;
       this.listenersSetup = false;
-      console.log('🔌 Call socket disconnected');
+      console.log('[CallSocket] Disconnected');
     }
   }
 

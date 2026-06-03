@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import apiClient from '../../api/client'
 
 interface Subscription {
   _id: string
-  schoolId: {
+  institutionId: {
     _id: string
     name: string
     instituteCode: string
@@ -91,13 +92,13 @@ const SubscriptionApprovalPage: React.FC = () => {
       if (response.data.success) {
         // Remove from pending list
         setSubscriptions(prev => prev.filter(sub => sub._id !== subscriptionId))
-        alert('Subscription approved successfully!')
+        toast.success('Subscription approved successfully!')
       } else {
-        alert('Failed to approve subscription')
+        toast.error('Failed to approve subscription')
       }
     } catch (error) {
       console.error('Approval error:', error)
-      alert('Error approving subscription')
+      toast.error('Error approving subscription')
     } finally {
       setProcessing(null)
     }
@@ -105,7 +106,7 @@ const SubscriptionApprovalPage: React.FC = () => {
 
   const handleReject = async (subscriptionId: string) => {
     if (!notes[subscriptionId]?.trim()) {
-      alert('Please provide rejection notes')
+      toast.warn('Please provide rejection notes')
       return
     }
 
@@ -119,13 +120,13 @@ const SubscriptionApprovalPage: React.FC = () => {
       if (response.data.success) {
         // Remove from pending list
         setSubscriptions(prev => prev.filter(sub => sub._id !== subscriptionId))
-        alert('Subscription rejected successfully!')
+        toast.success('Subscription rejected successfully!')
       } else {
-        alert('Failed to reject subscription')
+        toast.error('Failed to reject subscription')
       }
     } catch (error) {
       console.error('Rejection error:', error)
-      alert('Error rejecting subscription')
+      toast.error('Error rejecting subscription')
     } finally {
       setProcessing(null)
     }
@@ -238,18 +239,18 @@ const SubscriptionApprovalPage: React.FC = () => {
               <div className="card border-0 shadow-sm">
                 <div className="card-header border-bottom">
                   <div className="d-flex justify-content-between align-items-center">
-                    <h5 className="mb-0">{subscription.schoolId.name}</h5>
+                    <h5 className="mb-0">{subscription.institutionId.name}</h5>
                     <span className={`badge ${getStatusBadge(subscription.status)}`}>
                       {subscription.approvalStatus}
                     </span>
                   </div>
-                  <small className="text-muted">Code: {subscription.schoolId.instituteCode}</small>
+                  <small className="text-muted">Code: {subscription.institutionId.instituteCode}</small>
                 </div>
                 <div className="card-body">
                   <div className="row mb-3">
                     <div className="col-md-6">
                       <p className="mb-1"><strong>Plan:</strong> {subscription.planName}</p>
-                      <p className="mb-1"><strong>Price:</strong> ${subscription.price}/{subscription.currency}</p>
+                      <p className="mb-1"><strong>Price:</strong> ₹{subscription.price}/{subscription.currency}</p>
                       <p className="mb-1"><strong>Duration:</strong> {new Date(subscription.startDate).toLocaleDateString()} - {new Date(subscription.endDate).toLocaleDateString()}</p>
                     </div>
                     <div className="col-md-6">

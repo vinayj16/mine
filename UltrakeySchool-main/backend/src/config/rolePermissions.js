@@ -1,8 +1,3 @@
-/**
- * Role-Based Permissions Configuration
- * Defines what each role can access and perform in the system
- */
-
 export const ROLE_PERMISSIONS = {
   // SUPER_ADMIN - Full system access, can manage all institutions
   superadmin: {

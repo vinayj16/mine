@@ -48,50 +48,73 @@ const noticeService = {
     priority?: string;
     recipient?: string;
   }) => {
-    const response = await api.get('/notices', { params });
-    return response.data;
+    return await api.get('/notices', params);
   },
 
   getById: async (id: string) => {
-    const response = await api.get(`/notices/${id}`);
-    return response.data;
+    return await api.get(`/notices/${id}`);
   },
 
   create: async (data: NoticeFormData) => {
-    const response = await api.post('/notices', data);
-    return response.data;
+    const normalizeDate = (d: string) => {
+      const m = d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      return d;
+    };
+    return await api.post('/notices', {
+      title: data.title,
+      description: data.description,
+      content: data.description,
+      noticeDate: normalizeDate(data.noticeDate),
+      publishDate: normalizeDate(data.publishDate),
+      recipients: data.recipients,
+      recipient: data.recipients.join(',') || 'all',
+      priority: data.priority,
+      status: data.status,
+      academicYear: data.academicYear,
+      institutionId: data.institutionId,
+    });
   },
 
   update: async (id: string, data: Partial<NoticeFormData>) => {
-    const response = await api.put(`/notices/${id}`, data);
-    return response.data;
+    const normalizeDate = (d?: string) => {
+      if (!d) return undefined;
+      const m = d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      return d;
+    };
+    return await api.put(`/notices/${id}`, {
+      title: data.title,
+      description: data.description,
+      content: data.description,
+      noticeDate: normalizeDate(data.noticeDate),
+      publishDate: normalizeDate(data.publishDate),
+      recipients: data.recipients,
+      recipient: data.recipients?.join(',') || 'all',
+      priority: data.priority,
+      status: data.status,
+      academicYear: data.academicYear,
+    });
   },
 
   delete: async (id: string) => {
-    const response = await api.delete(`/notices/${id}`);
-    return response.data;
+    return await api.delete(`/notices/${id}`);
   },
 
   bulkDelete: async (noticeIds: string[]) => {
-    const response = await api.post('/notices/bulk-delete', { noticeIds });
-    return response.data;
+    return await api.post('/notices/bulk-delete', { noticeIds });
   },
 
   updateStatus: async (id: string, status: string) => {
-    const response = await api.patch(`/notices/${id}/status`, { status });
-    return response.data;
+    return await api.patch(`/notices/${id}/status`, { status });
   },
 
   incrementViews: async (id: string) => {
-    const response = await api.patch(`/notices/${id}/views`);
-    return response.data;
+    return await api.patch(`/notices/${id}/views`);
   },
 
   getStatistics: async (institutionId: string, academicYear: string) => {
-    const response = await api.get('/notices/statistics', {
-      params: { institutionId, academicYear }
-    });
-    return response.data;
+    return await api.get('/notices/statistics', { institutionId, academicYear });
   }
 };
 

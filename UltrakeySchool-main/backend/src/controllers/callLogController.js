@@ -50,12 +50,12 @@ const validateDateRange = (startDate, endDate) => {
 
 const createCallLog = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { callerPhone, receiverPhone, callType, status, duration, purpose, notes, userId } = req.body;
     const createdBy = req.user?.id;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -91,8 +91,8 @@ const createCallLog = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Creating call log for school ${schoolId}`);
-    const call = await callLogService.createCallLog(schoolId, {
+    logger.info(`Creating call log for school ${institutionId}`);
+    const call = await callLogService.createCallLog(institutionId, {
       ...req.body,
       createdBy
     });
@@ -106,11 +106,11 @@ const createCallLog = async (req, res, next) => {
 
 const getCallLogs = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { callType, status, purpose, startDate, endDate, search, sortBy = 'createdAt', sortOrder = 'desc', page = 1, limit = 20 } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -152,8 +152,8 @@ const getCallLogs = async (req, res, next) => {
     if (endDate) filters.endDate = endDate;
     if (search) filters.search = search;
 
-    logger.info(`Fetching call logs for school ${schoolId}`);
-    const result = await callLogService.getCallLogs(schoolId, {
+    logger.info(`Fetching call logs for school ${institutionId}`);
+    const result = await callLogService.getCallLogs(institutionId, {
       ...filters,
       sortBy,
       sortOrder,
@@ -173,10 +173,10 @@ const getCallLogs = async (req, res, next) => {
 
 const getCallLogById = async (req, res, next) => {
   try {
-    const { schoolId, callId } = req.params;
+    const { institutionId, callId } = req.params;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -186,7 +186,7 @@ const getCallLogById = async (req, res, next) => {
     }
 
     logger.info(`Fetching call log ${callId}`);
-    const call = await callLogService.getCallLogById(callId, schoolId);
+    const call = await callLogService.getCallLogById(callId, institutionId);
 
     if (!call) {
       return notFoundResponse(res, 'Call log not found');
@@ -201,11 +201,11 @@ const getCallLogById = async (req, res, next) => {
 
 const getCallLogsByUser = async (req, res, next) => {
   try {
-    const { schoolId, userId } = req.params;
+    const { institutionId, userId } = req.params;
     const { startDate, endDate, callType, status, page = 1, limit = 20 } = req.query;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -241,7 +241,7 @@ const getCallLogsByUser = async (req, res, next) => {
     }
 
     logger.info(`Fetching call logs for user ${userId}`);
-    const result = await callLogService.getCallLogsByUser(schoolId, userId, {
+    const result = await callLogService.getCallLogsByUser(institutionId, userId, {
       startDate,
       endDate,
       callType,
@@ -261,11 +261,11 @@ const getCallLogsByUser = async (req, res, next) => {
 
 const getCallAnalytics = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, groupBy = 'day' } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -288,8 +288,8 @@ const getCallAnalytics = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Fetching call analytics for school ${schoolId}`);
-    const analytics = await callLogService.getCallAnalytics(schoolId, startDate, endDate, { groupBy });
+    logger.info(`Fetching call analytics for school ${institutionId}`);
+    const analytics = await callLogService.getCallAnalytics(institutionId, startDate, endDate, { groupBy });
 
     return successResponse(res, analytics, 'Call analytics fetched successfully', {
       dateRange: { startDate, endDate },
@@ -307,12 +307,12 @@ const getCallAnalytics = async (req, res, next) => {
  */
 const updateCallLog = async (req, res, next) => {
   try {
-    const { schoolId, callId } = req.params;
+    const { institutionId, callId } = req.params;
     const { status, duration, notes, purpose } = req.body;
     const updatedBy = req.user?.id;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -338,7 +338,7 @@ const updateCallLog = async (req, res, next) => {
     }
 
     logger.info(`Updating call log ${callId}`);
-    const call = await callLogService.updateCallLog(schoolId, callId, {
+    const call = await callLogService.updateCallLog(institutionId, callId, {
       status,
       duration,
       notes,
@@ -362,10 +362,10 @@ const updateCallLog = async (req, res, next) => {
  */
 const deleteCallLog = async (req, res, next) => {
   try {
-    const { schoolId, callId } = req.params;
+    const { institutionId, callId } = req.params;
 
     // Validate IDs
-    const schoolValidation = validateObjectId(schoolId, 'schoolId');
+    const schoolValidation = validateObjectId(institutionId, 'institutionId');
     if (!schoolValidation.valid) {
       return validationErrorResponse(res, [schoolValidation.error]);
     }
@@ -375,7 +375,7 @@ const deleteCallLog = async (req, res, next) => {
     }
 
     logger.info(`Deleting call log ${callId}`);
-    const result = await callLogService.deleteCallLog(schoolId, callId);
+    const result = await callLogService.deleteCallLog(institutionId, callId);
 
     if (!result) {
       return notFoundResponse(res, 'Call log not found');
@@ -393,11 +393,11 @@ const deleteCallLog = async (req, res, next) => {
  */
 const getCallStatistics = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, callType, purpose } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -418,8 +418,8 @@ const getCallStatistics = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Fetching call statistics for school ${schoolId}`);
-    const stats = await callLogService.getCallStatistics(schoolId, {
+    logger.info(`Fetching call statistics for school ${institutionId}`);
+    const stats = await callLogService.getCallStatistics(institutionId, {
       startDate,
       endDate,
       callType,
@@ -438,11 +438,11 @@ const getCallStatistics = async (req, res, next) => {
  */
 const exportCallLogs = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, format = 'json', callType, status } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -465,8 +465,8 @@ const exportCallLogs = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Exporting call logs for school ${schoolId} in ${format} format`);
-    const data = await callLogService.exportCallLogs(schoolId, startDate, endDate, {
+    logger.info(`Exporting call logs for school ${institutionId} in ${format} format`);
+    const data = await callLogService.exportCallLogs(institutionId, startDate, endDate, {
       format,
       callType,
       status
@@ -493,11 +493,11 @@ const exportCallLogs = async (req, res, next) => {
  */
 const getMissedCalls = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, page = 1, limit = 20 } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -517,8 +517,8 @@ const getMissedCalls = async (req, res, next) => {
       return validationErrorResponse(res, [{ field: 'limit', message: 'Limit must be between 1 and 100' }]);
     }
 
-    logger.info(`Fetching missed calls for school ${schoolId}`);
-    const result = await callLogService.getMissedCalls(schoolId, {
+    logger.info(`Fetching missed calls for school ${institutionId}`);
+    const result = await callLogService.getMissedCalls(institutionId, {
       startDate,
       endDate,
       page: pageNum,
@@ -539,11 +539,11 @@ const getMissedCalls = async (req, res, next) => {
  */
 const getCallDurationSummary = async (req, res, next) => {
   try {
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { startDate, endDate, groupBy = 'day' } = req.query;
 
-    // Validate schoolId
-    const validation = validateObjectId(schoolId, 'schoolId');
+    // Validate institutionId
+    const validation = validateObjectId(institutionId, 'institutionId');
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
@@ -566,8 +566,8 @@ const getCallDurationSummary = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    logger.info(`Fetching call duration summary for school ${schoolId}`);
-    const summary = await callLogService.getCallDurationSummary(schoolId, startDate, endDate, { groupBy });
+    logger.info(`Fetching call duration summary for school ${institutionId}`);
+    const summary = await callLogService.getCallDurationSummary(institutionId, startDate, endDate, { groupBy });
 
     return successResponse(res, summary, 'Call duration summary fetched successfully');
   } catch (error) {

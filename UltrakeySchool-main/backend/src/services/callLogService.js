@@ -1,28 +1,28 @@
 import CallLog from '../models/CallLog.js';
 
 class CallLogService {
-  async createCallLog(schoolId, data) {
-    return await CallLog.create({ ...data, schoolId });
+  async createCallLog(institutionId, data) {
+    return await CallLog.create({ ...data, institutionId });
   }
 
-  async getCallLogs(schoolId, filters = {}) {
-    return await CallLog.find({ schoolId, ...filters })
+  async getCallLogs(institutionId, filters = {}) {
+    return await CallLog.find({ institutionId, ...filters })
       .populate('callerId', 'firstName lastName')
       .populate('receiverId', 'firstName lastName')
       .sort({ callDate: -1 });
   }
 
-  async getCallLogById(callId, schoolId) {
-    const call = await CallLog.findOne({ _id: callId, schoolId })
+  async getCallLogById(callId, institutionId) {
+    const call = await CallLog.findOne({ _id: callId, institutionId })
       .populate('callerId', 'firstName lastName')
       .populate('receiverId', 'firstName lastName');
     if (!call) throw new Error('Call log not found');
     return call;
   }
 
-  async updateCallLog(callId, schoolId, updates) {
+  async updateCallLog(callId, institutionId, updates) {
     const call = await CallLog.findOneAndUpdate(
-      { _id: callId, schoolId },
+      { _id: callId, institutionId },
       { $set: updates },
       { new: true }
     );
@@ -30,15 +30,15 @@ class CallLogService {
     return call;
   }
 
-  async getCallLogsByUser(schoolId, userId) {
+  async getCallLogsByUser(institutionId, userId) {
     return await CallLog.find({
-      schoolId,
+      institutionId,
       $or: [{ callerId: userId }, { receiverId: userId }]
     }).sort({ callDate: -1 });
   }
 
-  async getCallAnalytics(schoolId, startDate, endDate) {
-    const query = { schoolId, callDate: { $gte: new Date(startDate), $lte: new Date(endDate) } };
+  async getCallAnalytics(institutionId, startDate, endDate) {
+    const query = { institutionId, callDate: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     const [total, completed, missed] = await Promise.all([
       CallLog.countDocuments(query),
       CallLog.countDocuments({ ...query, status: 'completed' }),

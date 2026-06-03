@@ -109,11 +109,11 @@ const settingsSchema = new mongoose.Schema({
   currency: {
     code: {
       type: String,
-      default: 'USD'
+      default: 'INR'
     },
     symbol: {
       type: String,
-      default: '$'
+      default: '₹'
     },
     position: {
       type: String,

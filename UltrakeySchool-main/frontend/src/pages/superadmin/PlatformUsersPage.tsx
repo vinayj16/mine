@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import apiClient from '../../api/client'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 interface User {
   _id: string
@@ -32,6 +33,8 @@ const PlatformUsersPage = () => {
   const [showEditUserModal, setShowEditUserModal] = useState(false)
   const [editFormData, setEditFormData] = useState<Partial<User>>({})
   const [saving, setSaving] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
   // Fetch users
   const fetchUsers = async () => {
@@ -108,42 +111,43 @@ const PlatformUsersPage = () => {
     }
   }
 
-  const handleToggleStatus = async (user: User) => {
+  const handleToggleStatus = (user: User) => {
     const newStatus = user.status === 'Active' ? 'Suspended' : 'Active'
-    if (!window.confirm(`Are you sure you want to ${newStatus.toLowerCase()} ${user.name}?`)) return
-
-    try {
-      await apiClient.patch(`/super-admin/users/${user._id}/status`, { status: newStatus })
-      toast.success(`User ${newStatus.toLowerCase()} successfully`)
-      fetchUsers()
-    } catch (err: any) {
-      console.error('Error toggling status:', err)
-      toast.error(err.response?.data?.message || 'Failed to update status')
-    }
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'toggleStatus', user, newStatus })
   }
 
-  const handleDeleteUser = async (user: User) => {
-    if (!window.confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) return
-
-    try {
-      await apiClient.delete(`/super-admin/users/${user._id}`)
-      toast.success('User deleted successfully')
-      fetchUsers()
-    } catch (err: any) {
-      console.error('Error deleting user:', err)
-      toast.error(err.response?.data?.message || 'Failed to delete user')
-    }
+  const handleDeleteUser = (user: User) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'delete', user })
   }
 
-  const handleResetPassword = async (user: User) => {
-    if (!window.confirm(`Send password reset link to ${user.email}?`)) return
+  const handleResetPassword = (user: User) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'resetPassword', user })
+  }
 
+  const handleConfirmAction = async () => {
+    if (!deleteTarget) return
     try {
-      await apiClient.post(`/super-admin/users/${user._id}/reset-password`)
-      toast.success(`Password reset link sent to ${user.email}`)
+      if (deleteTarget.type === 'toggleStatus') {
+        await apiClient.patch(`/super-admin/users/${deleteTarget.user._id}/status`, { status: deleteTarget.newStatus })
+        toast.success(`User ${deleteTarget.newStatus.toLowerCase()} successfully`)
+        fetchUsers()
+      } else if (deleteTarget.type === 'delete') {
+        await apiClient.delete(`/super-admin/users/${deleteTarget.user._id}`)
+        toast.success('User deleted successfully')
+        fetchUsers()
+      } else if (deleteTarget.type === 'resetPassword') {
+        await apiClient.post(`/super-admin/users/${deleteTarget.user._id}/reset-password`)
+        toast.success(`Password reset link sent to ${deleteTarget.user.email}`)
+      }
     } catch (err: any) {
-      console.error('Error resetting password:', err)
-      toast.error(err.response?.data?.message || 'Failed to send reset link')
+      console.error('Error:', err)
+      toast.error(err.response?.data?.message || 'Action failed')
+    } finally {
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -669,6 +673,7 @@ const PlatformUsersPage = () => {
           </div>
         </div>
       )}
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmAction} message={deleteTarget?.type === 'resetPassword' ? `Send password reset link to ${deleteTarget?.user?.email}?` : deleteTarget?.type === 'toggleStatus' ? `Are you sure you want to ${deleteTarget?.newStatus?.toLowerCase()} ${deleteTarget?.user?.name}?` : `Are you sure you want to delete ${deleteTarget?.user?.name}? This action cannot be undone.`} />
     </>
   )
 }

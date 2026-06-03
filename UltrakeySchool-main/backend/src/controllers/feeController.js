@@ -1,10 +1,15 @@
 import feeService from '../services/feeService.js';
 import Fee from '../models/Fee.js';
+import Student from '../models/Student.js';
+import Institution from '../models/Institution.js';
 import { successResponse, createdResponse, errorResponse, validationErrorResponse, notFoundResponse } from '../utils/apiResponse.js';
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { validationResult } from 'express-validator';
 import { getCache, setCache, deleteCachePattern } from '../config/redis.js';
+import { resolveTenantContext, normalizeFeeType } from '../utils/tenantContext.js';
+
+const STAFF_FEE_ROLES = ['admin', 'accountant', 'principal', 'institution_admin', 'superadmin'];
 
 // Validation constants
 const VALID_FEE_STATUSES = ['pending', 'paid', 'partial', 'overdue', 'cancelled', 'waived'];
@@ -38,14 +43,14 @@ export const getFeesOverview = async (req, res) => {
     logger.info('Fetching fees overview');
     
     const { period = 'this-month' } = req.query;
-    const schoolId = req.user.schoolId;
-    const institutionId = req.user.institutionId;
+    const { institutionId } = await resolveTenantContext(req);
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    if (!institutionId && !institutionId) {
+      errors.push('Institution context is required');
+    }
     
     if (!VALID_PERIODS.includes(period)) {
       errors.push('Invalid period. Must be one of: ' + VALID_PERIODS.join(', '));
@@ -56,7 +61,7 @@ export const getFeesOverview = async (req, res) => {
     }
 
     // Try to get from cache first
-    const cacheKey = `fees:overview:${schoolId}:${institutionId || 'default'}:${period}`;
+    const cacheKey = `fees:overview:${institutionId}:${institutionId || 'default'}:${period}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -64,7 +69,7 @@ export const getFeesOverview = async (req, res) => {
       return successResponse(res, cachedData, 'Fees overview retrieved successfully (cached)');
     }
 
-    const overview = await feeService.getFeesOverview(schoolId, period);
+    const overview = await feeService.getFeesOverview(institutionId, period);
 
     // Cache the response for 5 minutes
     await setCache(cacheKey, overview, 300);
@@ -88,10 +93,10 @@ export const collectFee = async (req, res) => {
     }
 
     const { feeId, amount, paymentMethod, transactionId, remarks } = req.body;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req, { studentId: req.body.studentId });
     const receivedBy = req.user.id;
 
-    const fee = await feeService.collectFee(schoolId, feeId, {
+    const fee = await feeService.collectFee(institutionId, feeId, {
       amount,
       paymentMethod,
       transactionId,
@@ -124,10 +129,21 @@ export const createFee = async (req, res) => {
       });
     }
 
-    const schoolId = req.user.schoolId;
-    const feeData = req.body;
+    const { institutionId } = await resolveTenantContext(req, { studentId: req.body.studentId });
+    if (!institutionId && !institutionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Unable to resolve school or institution for this fee. Ensure students exist for the institution.'
+      });
+    }
 
-    const fee = await feeService.createFee(schoolId, feeData);
+    const feeData = {
+      ...req.body,
+      feeType: normalizeFeeType(req.body.feeType),
+      description: req.body.description || req.body.remarks
+    };
+
+    const fee = await feeService.createFee(institutionId, feeData);
 
     res.status(201).json({
       success: true,
@@ -154,10 +170,10 @@ export const bulkCreateFees = async (req, res) => {
       });
     }
 
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
     const { fees } = req.body;
 
-    const result = await feeService.bulkCreateFees(schoolId, fees);
+    const result = await feeService.bulkCreateFees(institutionId, fees);
 
     res.status(201).json({
       success: true,
@@ -181,11 +197,10 @@ export const getStudentFees = async (req, res) => {
   try {
     const { studentId } = req.params;
     const { status, period } = req.query;
-    const schoolId = req.user.schoolId;
-    const institutionId = req.user.institutionId;
+    const { institutionId } = await resolveTenantContext(req, { studentId });
 
     // Try to get from cache first
-    const cacheKey = `fees:student:${studentId}:${schoolId}:${institutionId || 'default'}:${status || 'all'}:${period || 'all'}`;
+    const cacheKey = `fees:student:${studentId}:${institutionId}:${institutionId || 'default'}:${status || 'all'}:${period || 'all'}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -197,7 +212,7 @@ export const getStudentFees = async (req, res) => {
       });
     }
 
-    const fees = await feeService.getStudentFees(schoolId, studentId, {
+    const fees = await feeService.getStudentFees(institutionId, studentId, {
       status,
       period
     });
@@ -219,14 +234,117 @@ export const getStudentFees = async (req, res) => {
   }
 };
 
+export const getAllFees = async (req, res) => {
+  try {
+    const { limit, status } = req.query;
+    const { institutionId } = await resolveTenantContext(req);
+
+    const fees = await feeService.getAllFees(institutionId, {
+      limit: parseInt(limit, 10) || 200,
+      status
+    });
+
+    res.json({ success: true, data: fees });
+  } catch (error) {
+    console.error('Error fetching all fees:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch fees'
+    });
+  }
+};
+
+export const getMyFees = async (req, res) => {
+  try {
+    const { status, period } = req.query;
+    let studentId = req.user.id || req.user._id;
+
+    // For students, always use their own ID - no override allowed
+    if (req.user.role === 'student') {
+      // Find the student record associated with this user
+      const Student = (await import('../models/Student.js')).default;
+      const student = await Student.findOne({ userId: req.user.id || req.user._id });
+      if (student) {
+        studentId = student._id;
+      }
+    } else {
+      // For non-students (parents, admins), allow querying specific student if provided
+      studentId = req.query.studentId || req.params.studentId || studentId;
+    }
+
+    if (!studentId) {
+      return res.status(400).json({ success: false, message: 'Student id is required' });
+    }
+
+    const { institutionId } = await resolveTenantContext(req, { studentId });
+    const fees = await feeService.getStudentFees(institutionId, studentId, { status, period });
+
+    res.json({ success: true, data: fees });
+  } catch (error) {
+    console.error('Error fetching my fees:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch fees'
+    });
+  }
+};
+
+export const getAccountantDashboard = async (req, res) => {
+  try {
+    const { institutionId } = await resolveTenantContext(req);
+    const data = await feeService.getAccountantDashboard(institutionId);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error fetching accountant fee dashboard:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to load accountant dashboard'
+    });
+  }
+};
+
+export const getPaymentConfig = async (req, res) => {
+  const institutionId = req.query.institutionId || req.user?.institutionId;
+  let razorpayKey = process.env.RAZORPAY_KEY_ID || 'rzp_test_123456789';
+  
+  if (institutionId) {
+    try {
+      const inst = await Institution.findById(institutionId).select('settings.payment-gateway').lean();
+      const pgSettings = inst?.settings?.['payment-gateway'];
+      if (pgSettings?.enabled && pgSettings?.provider === 'razorpay') {
+        const keyId = pgSettings.razorpay?.keyId || pgSettings.apiKey || pgSettings.merchantId;
+        if (keyId) razorpayKey = keyId;
+      }
+    } catch {}
+  }
+  
+  res.json({
+    success: true,
+    data: {
+      razorpayKey,
+      currency: 'INR'
+    }
+  });
+};
+
+export const listFees = async (req, res) => {
+  const role = (req.user?.role || '').toLowerCase();
+  if (role === 'student' || role === 'parent') {
+    return getMyFees(req, res);
+  }
+  if (STAFF_FEE_ROLES.includes(role)) {
+    return getAllFees(req, res);
+  }
+  return getPendingFees(req, res);
+};
+
 export const getPendingFees = async (req, res) => {
   try {
     const { limit, sortBy } = req.query;
-    const schoolId = req.user.schoolId;
-    const institutionId = req.user.institutionId;
+    const { institutionId } = await resolveTenantContext(req);
 
     // Try to get from cache first
-    const cacheKey = `fees:pending:${schoolId}:${institutionId || 'default'}:${limit || 100}:${sortBy || 'dueDate'}`;
+    const cacheKey = `fees:pending:${institutionId}:${institutionId || 'default'}:${limit || 100}:${sortBy || 'dueDate'}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -238,7 +356,7 @@ export const getPendingFees = async (req, res) => {
       });
     }
 
-    const fees = await feeService.getPendingFees(schoolId, {
+    const fees = await feeService.getPendingFees(institutionId, {
       limit: parseInt(limit) || 100,
       sortBy: sortBy || 'dueDate'
     });
@@ -271,9 +389,9 @@ export const sendReminders = async (req, res) => {
     }
 
     const { feeIds } = req.body;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const result = await feeService.sendReminders(schoolId, feeIds);
+    const result = await feeService.sendReminders(institutionId, feeIds);
 
     res.json({
       success: true,
@@ -295,9 +413,9 @@ export const sendReminders = async (req, res) => {
 export const getFeesReport = async (req, res) => {
   try {
     const { period, format = 'summary' } = req.query;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const report = await feeService.getFeesReport(schoolId, period, format);
+    const report = await feeService.getFeesReport(institutionId, period, format);
 
     res.json({
       success: true,
@@ -324,10 +442,10 @@ export const updateFee = async (req, res) => {
     }
 
     const { id } = req.params;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
     const updateData = req.body;
 
-    const fee = await feeService.updateFee(schoolId, id, updateData);
+    const fee = await feeService.updateFee(institutionId, id, updateData);
 
     res.json({
       success: true,
@@ -347,9 +465,9 @@ export const updateFee = async (req, res) => {
 export const deleteFee = async (req, res) => {
   try {
     const { id } = req.params;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const fee = await feeService.deleteFee(schoolId, id);
+    const fee = await feeService.deleteFee(institutionId, id);
 
     res.json({
       success: true,
@@ -368,9 +486,9 @@ export const deleteFee = async (req, res) => {
 
 export const applyLateFees = async (req, res) => {
   try {
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const fees = await feeService.applyLateFee(schoolId);
+    const fees = await feeService.applyLateFee(institutionId);
 
     res.json({
       success: true,
@@ -397,9 +515,9 @@ import Razorpay from 'razorpay';
 export const createInvoice = async (req, res) => {
   try {
     const { studentId, items, dueDate, notes } = req.body;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req, { studentId });
 
-    const invoice = await feeService.createInvoice(schoolId, {
+    const invoice = await feeService.createInvoice(institutionId, {
       studentId,
       items,
       dueDate,
@@ -427,11 +545,10 @@ export const createInvoice = async (req, res) => {
 export const getInvoices = async (req, res) => {
   try {
     const { studentId, status, page = 1, limit = 20 } = req.query;
-    const schoolId = req.user.schoolId;
-    const institutionId = req.user.institutionId;
+    const { institutionId } = await resolveTenantContext(req, { studentId });
 
     // Try to get from cache first
-    const cacheKey = `fees:invoices:${schoolId}:${institutionId || 'default'}:${studentId || 'all'}:${status || 'all'}:${page}:${limit}`;
+    const cacheKey = `fees:invoices:${institutionId}:${institutionId || 'default'}:${studentId || 'all'}:${status || 'all'}:${page}:${limit}`;
     const cachedData = await getCache(cacheKey);
     
     if (cachedData) {
@@ -443,7 +560,7 @@ export const getInvoices = async (req, res) => {
       });
     }
 
-    const invoices = await feeService.getInvoices(schoolId, {
+    const invoices = await feeService.getInvoices(institutionId, {
       studentId,
       status,
       page,
@@ -474,9 +591,9 @@ export const initiatePayment = async (req, res) => {
   try {
     const { invoiceId } = req.params;
     const { paymentMethod, amount } = req.body;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const payment = await feeService.initiatePayment(schoolId, invoiceId, {
+    const payment = await feeService.initiatePayment(institutionId, invoiceId, {
       paymentMethod,
       amount
     });
@@ -501,11 +618,18 @@ export const initiatePayment = async (req, res) => {
  */
 export const verifyPayment = async (req, res) => {
   try {
-    const { paymentId, razorpayOrderId, razorpaySignature } = req.body;
-    const schoolId = req.user.schoolId;
-
-    const result = await feeService.verifyPayment(schoolId, paymentId, {
+    const {
+      paymentId,
       razorpayOrderId,
+      razorpayPaymentId,
+      razorpay_payment_id,
+      razorpaySignature
+    } = req.body;
+    const { institutionId } = await resolveTenantContext(req);
+
+    const result = await feeService.verifyPayment(institutionId, paymentId, {
+      razorpayOrderId,
+      razorpayPaymentId: razorpayPaymentId || razorpay_payment_id,
       razorpaySignature
     });
 
@@ -530,9 +654,9 @@ export const verifyPayment = async (req, res) => {
 export const getPaymentReceipt = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    const schoolId = req.user.schoolId;
+    const { institutionId } = await resolveTenantContext(req);
 
-    const receipt = await feeService.getPaymentReceipt(schoolId, paymentId);
+    const receipt = await feeService.getPaymentReceipt(institutionId, paymentId);
 
     res.json({
       success: true,
@@ -555,6 +679,11 @@ export default {
   createFee,
   bulkCreateFees,
   getStudentFees,
+  getAllFees,
+  getMyFees,
+  listFees,
+  getAccountantDashboard,
+  getPaymentConfig,
   getPendingFees,
   sendReminders,
   getFeesReport,

@@ -3,11 +3,11 @@ import { successResponse, createdResponse, errorResponse, validationErrorRespons
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 
-// Valid driver statuses
-const VALID_STATUSES = ['active', 'inactive', 'on_leave', 'suspended', 'terminated'];
+// Valid driver statuses (must match Mongoose schema enum)
+const VALID_STATUSES = ['Active', 'Inactive'];
 
-// Phone validation regex (international format)
-const PHONE_REGEX = /^[\d\s\-\+\(\)]+$/;
+// Phone validation regex (allow alphanumeric - existing data has numbers with letters)
+const PHONE_REGEX = /^[a-zA-Z0-9\s\-\+\(\)]+$/;
 
 // License number validation regex
 const LICENSE_REGEX = /^[A-Z0-9\-]+$/i;
@@ -41,19 +41,27 @@ const validateLicense = (license) => {
  */
 const getAllDrivers = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
-    const { status, name, page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc' } = req.query;
-    
-    // Validate institutionId
-    const errors = [];
+    // Get institutionId from token (institution claim) first
+    let institutionId = req.user?.institution;
+
+    // Allow override from user or query params for flexibility (e.g., super admin viewing another institution)
     if (!institutionId) {
-      errors.push({ field: 'institutionId', message: 'Institution ID is required' });
-    } else {
-      const validation = validateObjectId(institutionId, 'institutionId');
-      if (!validation.valid) {
-        errors.push(validation.error);
-      }
+      institutionId = req.user?.institutionId || req.user?.tenant || req.query.institutionId || req.query.tenant;
     }
+
+    const { status, name, page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc' } = req.query;
+
+    // Initialize errors array for validation
+    const errors = [];
+
+    // Skip strict validation - just log and continue
+    if (!institutionId) {
+      logger.info('No institutionId in driver request, will fetch all');
+    } else if (!mongoose.Types.ObjectId.isValid(institutionId)) {
+      logger.warn('Non-ObjectId institutionId in request:', institutionId, '- will still try to use');
+    }
+
+    logger.info('Fetching drivers for institution:', institutionId || 'all');
 
     // Validate status if provided
     if (status && !VALID_STATUSES.includes(status)) {
@@ -78,17 +86,17 @@ const getAllDrivers = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     const filters = { status, name };
-    
+    logger.info('Fetching drivers for institution:', institutionId || 'all');
     logger.info('Fetching all drivers for institution: ' + institutionId);
-    const result = await driverService.getAllDrivers(institutionId, filters, {
+    let result = await driverService.getAllDrivers(institutionId, filters, {
       page: pageNum,
       limit: limitNum,
       sortBy,
       sortOrder
     });
-    
+
     return successResponse(res, result.drivers, 'Drivers fetched successfully', {
       pagination: result.pagination,
       filters
@@ -104,9 +112,9 @@ const getAllDrivers = async (req, res) => {
  */
 const getDriverById = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { id } = req.params;
-    
+
     // Validate IDs
     const errors = [];
     if (!institutionId) {
@@ -125,10 +133,10 @@ const getDriverById = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Fetching driver by ID: ' + id);
     const driver = await driverService.getDriverById(id, institutionId);
-    
+
     if (!driver) {
       return notFoundResponse(res, 'Driver not found');
     }
@@ -145,10 +153,16 @@ const getDriverById = async (req, res) => {
  */
 const createDriver = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    // Support all user roles including transport_manager
+    let institutionId = req.user?.institutionId || req.user?.tenant || req.body.institutionId || req.body.tenant;
+
+    if (!institutionId && req.user?.institution) {
+      institutionId = req.user.institution;
+    }
+
     const { name, phone, email, licenseNumber, licenseExpiry, address, status } = req.body;
-    
-    // Validate required fields
+
+    // Validate required fields - but don't require ObjectId for now
     const errors = [];
     if (!institutionId) {
       errors.push({ field: 'institutionId', message: 'Institution ID is required' });
@@ -190,10 +204,10 @@ const createDriver = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Creating driver: ' + name);
     const driver = await driverService.createDriver(institutionId, req.body);
-    
+
     return createdResponse(res, driver, 'Driver created successfully');
   } catch (error) {
     logger.error('Error creating driver:', error);
@@ -206,10 +220,10 @@ const createDriver = async (req, res) => {
  */
 const updateDriver = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     const { id } = req.params;
     const { name, phone, email, licenseNumber, licenseExpiry, status } = req.body;
-    
+
     // Validate IDs
     const errors = [];
     if (!institutionId) {
@@ -250,10 +264,10 @@ const updateDriver = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Updating driver: ' + id);
     const driver = await driverService.updateDriver(id, institutionId, req.body);
-    
+
     if (!driver) {
       return notFoundResponse(res, 'Driver not found');
     }
@@ -270,9 +284,9 @@ const updateDriver = async (req, res) => {
  */
 const deleteDriver = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { id } = req.params;
-    
+
     // Validate IDs
     const errors = [];
     if (!institutionId) {
@@ -291,10 +305,10 @@ const deleteDriver = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Deleting driver: ' + id);
     const result = await driverService.deleteDriver(id, institutionId);
-    
+
     if (!result) {
       return notFoundResponse(res, 'Driver not found');
     }
@@ -311,9 +325,9 @@ const deleteDriver = async (req, res) => {
  */
 const bulkDeleteDrivers = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     const { ids } = req.body;
-    
+
     // Validate institutionId
     const errors = [];
     if (!institutionId) {
@@ -341,10 +355,10 @@ const bulkDeleteDrivers = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Bulk deleting ' + ids.length + ' drivers');
     const result = await driverService.bulkDeleteDrivers(ids, institutionId);
-    
+
     return successResponse(res, result, result.modifiedCount + ' driver(s) deleted successfully');
   } catch (error) {
     logger.error('Error bulk deleting drivers:', error);
@@ -357,8 +371,8 @@ const bulkDeleteDrivers = async (req, res) => {
  */
 const getActiveDrivers = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
+
     // Validate institutionId
     if (!institutionId) {
       return validationErrorResponse(res, [{ field: 'institutionId', message: 'Institution ID is required' }]);
@@ -368,10 +382,10 @@ const getActiveDrivers = async (req, res) => {
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
-    
+
     logger.info('Fetching active drivers for institution: ' + institutionId);
     const drivers = await driverService.getActiveDrivers(institutionId);
-    
+
     return successResponse(res, drivers, 'Active drivers fetched successfully');
   } catch (error) {
     logger.error('Error fetching active drivers:', error);
@@ -384,9 +398,9 @@ const getActiveDrivers = async (req, res) => {
  */
 const searchDrivers = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { searchTerm } = req.query;
-    
+
     // Validate institutionId and searchTerm
     const errors = [];
     if (!institutionId) {
@@ -404,10 +418,10 @@ const searchDrivers = async (req, res) => {
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
+
     logger.info('Searching drivers with term: ' + searchTerm);
     const drivers = await driverService.searchDrivers(institutionId, searchTerm);
-    
+
     return successResponse(res, drivers, 'Search completed successfully', {
       searchTerm,
       resultCount: drivers.length
@@ -423,8 +437,8 @@ const searchDrivers = async (req, res) => {
  */
 const getDriverStatistics = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
-    
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
+
     // Validate institutionId
     if (!institutionId) {
       return validationErrorResponse(res, [{ field: 'institutionId', message: 'Institution ID is required' }]);
@@ -434,10 +448,10 @@ const getDriverStatistics = async (req, res) => {
     if (!validation.valid) {
       return validationErrorResponse(res, [validation.error]);
     }
-    
+
     logger.info('Fetching driver statistics for institution: ' + institutionId);
     const statistics = await driverService.getDriverStatistics(institutionId);
-    
+
     return successResponse(res, statistics, 'Driver statistics fetched successfully');
   } catch (error) {
     logger.error('Error fetching driver statistics:', error);
@@ -450,7 +464,7 @@ const getDriverStatistics = async (req, res) => {
  */
 const getDriversWithExpiringLicenses = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { days = 30 } = req.query;
 
     // Validate institutionId
@@ -492,7 +506,7 @@ const getDriversWithExpiringLicenses = async (req, res) => {
  */
 const assignDriverToVehicle = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.body.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.body.institutionId;
     const { id } = req.params;
     const { vehicleId } = req.body;
 
@@ -542,7 +556,7 @@ const assignDriverToVehicle = async (req, res) => {
  */
 const exportDrivers = async (req, res) => {
   try {
-    const institutionId = req.user?.institutionId || req.query.institutionId;
+    const institutionId = req.user?.institutionId || req.user?.tenant || req.user?.institution || req.query.institutionId;
     const { format = 'json', status } = req.query;
 
     // Validate format

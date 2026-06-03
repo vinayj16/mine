@@ -58,7 +58,10 @@ interface TeacherProfile {
 }
 
 const TeacherSalaryPage = () => {
-  const { teacherId } = useParams<{ teacherId: string }>();
+  const { teacherId: urlTeacherId } = useParams<{ teacherId: string }>();
+  const [resolvedTeacherId, setResolvedTeacherId] = useState<string | null>(null);
+  const teacherId = resolvedTeacherId;
+  const isSelfView = !urlTeacherId;
   const [salaryHistory, setSalaryHistory] = useState<SalaryRecord[]>([]);
   const [salarySummary, setSalarySummary] = useState<SalarySummary>({
     totalPaid: 0,
@@ -72,7 +75,44 @@ const TeacherSalaryPage = () => {
   const [selectedSalary, setSelectedSalary] = useState<SalaryRecord | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  const schoolId = '507f1f77bcf86cd799439011'; // This should come from auth context
+  // Get institutionId from localStorage user data
+  const getInstitutionId = () => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        return user.institutionId || user.school || user.institutionId || user.institutionId;
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
+    return null;
+  };
+
+  const institutionId = getInstitutionId();
+
+  useEffect(() => {
+    const resolveId = async () => {
+      if (urlTeacherId) {
+        setResolvedTeacherId(urlTeacherId);
+      } else {
+        try {
+          const response = await apiClient.get('/dashboard/teacher');
+          if (response.data.success && response.data.data?.teacher) {
+            const id = response.data.data.teacher.id || response.data.data.teacher._id;
+            setResolvedTeacherId(id);
+          } else {
+            setError('Could not resolve teacher profile');
+            setLoading(false);
+          }
+        } catch (err: any) {
+          setError('Failed to resolve teacher profile');
+          setLoading(false);
+        }
+      }
+    };
+    resolveId();
+  }, [urlTeacherId]);
 
   useEffect(() => {
     if (teacherId) {
@@ -89,6 +129,21 @@ const TeacherSalaryPage = () => {
       }
     } catch (error: any) {
       console.error('Failed to fetch teacher profile:', error);
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          setTeacherProfile({
+            _id: user.id || user._id,
+            firstName: user.name || user.fullName || '',
+            lastName: '',
+            email: user.email || '',
+            phone: '',
+            department: '',
+            designation: 'Teacher',
+          });
+        } catch { /* empty */ }
+      }
     }
   };
 
@@ -97,37 +152,20 @@ const TeacherSalaryPage = () => {
       setLoading(true);
       setError(null);
       const response = await apiClient.get(`/teachers/${teacherId}/salary`, {
-        params: { schoolId, limit: 12 }
+        params: { institutionId, limit: 12 }
       });
 
       if (response.data.success) {
         setSalaryHistory(response.data.data.salaries || []);
         
-        // Calculate summary from the data
-        const summary = response.data.data.summary || [];
+        // Calculate summary from the data (backend returns object, not array)
+        const summary = response.data.data.summary || {};
         const summaryObj: SalarySummary = {
-          totalPaid: 0,
-          totalPending: 0,
-          totalProcessing: 0,
-          totalFailed: 0
+          totalPaid: summary.paid?.amount || 0,
+          totalPending: summary.pending?.amount || 0,
+          totalProcessing: summary.processing?.amount || 0,
+          totalFailed: summary.failed?.amount || 0
         };
-
-        summary.forEach((item: any) => {
-          switch (item._id) {
-            case 'paid':
-              summaryObj.totalPaid = item.totalAmount;
-              break;
-            case 'pending':
-              summaryObj.totalPending = item.totalAmount;
-              break;
-            case 'processing':
-              summaryObj.totalProcessing = item.totalAmount;
-              break;
-            case 'failed':
-              summaryObj.totalFailed = item.totalAmount;
-              break;
-          }
-        });
 
         setSalarySummary(summaryObj);
       }
@@ -155,7 +193,7 @@ const TeacherSalaryPage = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -226,37 +264,20 @@ const TeacherSalaryPage = () => {
     <>
       <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
         <div className="my-auto mb-2">
-          <h3 className="page-title mb-1">Teacher Details</h3>
+          <h3 className="page-title mb-1">{isSelfView ? 'My Salary' : 'Teacher Details'}</h3>
           <nav>
             <ol className="breadcrumb mb-0">
-              <li className="breadcrumb-item">
-                <Link to="/">Dashboard</Link>
-              </li>
-              <li className="breadcrumb-item">
-                <Link to="/teachers">Teachers</Link>
-              </li>
-              <li className="breadcrumb-item active" aria-current="page">
-                Teacher Details
-              </li>
+              <li className="breadcrumb-item"><Link to="/">Dashboard</Link></li>
+              {!isSelfView && <li className="breadcrumb-item"><Link to="/teachers">Teachers</Link></li>}
+              <li className="breadcrumb-item active" aria-current="page">{isSelfView ? 'Salary' : 'Teacher Details'}</li>
             </ol>
           </nav>
-        </div>
-        <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-          <button className="btn btn-light me-2 mb-2" type="button">
-            <i className="ti ti-lock me-2" />
-            Login Details
-          </button>
-          <Link to={`/teachers/${teacherId}/edit`} className="btn btn-primary d-flex align-items-center mb-2">
-            <i className="ti ti-edit-circle me-2" />
-            Edit Teacher
-          </Link>
         </div>
       </div>
 
       <div className="row">
-        <div className="col-xxl-3 col-xl-4">
-          {/* Teacher Profile Sidebar */}
-          {teacherProfile && (
+        {teacherProfile && !isSelfView && (
+          <div className="col-xxl-3 col-xl-4">
             <div className="card border-white">
               <div className="card-header">
                 <div className="d-flex align-items-center flex-wrap row-gap-3">
@@ -302,9 +323,9 @@ const TeacherSalaryPage = () => {
                 </div>
               </div>
             </div>
-          )}
-        </div>
-        <div className="col-xxl-9 col-xl-8">
+          </div>
+        )}
+        <div className={isSelfView ? 'col-12' : 'col-xxl-9 col-xl-8'}>
           <TeacherDetailTabs active="salary" />
 
           {/* Salary Summary Cards */}

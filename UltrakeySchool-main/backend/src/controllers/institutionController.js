@@ -200,7 +200,7 @@ const createInstitution = async (req, res) => {
         startDate: new Date(),
         endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
         monthlyCost: getPlanCost(plan),
-        currency: 'USD'
+        currency: 'INR'
       },
       features: {
         maxUsers: getMaxUsers(plan),
@@ -422,6 +422,46 @@ const getInstitutions = async (req, res) => {
   }
 };
 
+
+/**
+ * Get current user's institution (for staff, teachers, accountants, etc.)
+ */
+const getMyInstitution = async (req, res) => {
+  try {
+    const institutionId =
+      req.user?.institutionId?.toString?.() ||
+      req.user?.institution?.toString?.() ||
+      req.tenantId?.toString?.();
+
+    if (!institutionId) {
+      return validationErrorResponse(res, ['Institution is not assigned to this user']);
+    }
+
+    const institution = await institutionService.getInstitutionById(institutionId);
+    if (!institution) {
+      return notFoundResponse(res, 'Institution not found');
+    }
+
+    const doc = institution.toObject ? institution.toObject() : institution;
+    const payload = {
+      id: doc._id?.toString(),
+      _id: doc._id?.toString(),
+      name: doc.name,
+      instituteCode: doc.instituteCode || doc.code || '',
+      code: doc.code || doc.instituteCode || '',
+      type: doc.type || 'School',
+      status: doc.status || 'active',
+      logo: doc.logo,
+      contact: doc.contact,
+      subscription: doc.subscription
+    };
+
+    return successResponse(res, payload, 'Institution retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching my institution:', error);
+    return errorResponse(res, error.message || 'Failed to retrieve institution');
+  }
+};
 
 /**
  * Get institution by ID
@@ -957,25 +997,25 @@ const migrateFromSchool = async (req, res) => {
   try {
     logger.info('Migrating from legacy school');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     
     // Validation
     const errors = [];
     
-    const idError = validateObjectId(schoolId, 'School ID');
+    const idError = validateObjectId(institutionId, 'School ID');
     if (idError) errors.push(idError);
     
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
     
-    const institution = await institutionService.migrateFromSchool(schoolId);
+    const institution = await institutionService.migrateFromSchool(institutionId);
     
     if (!institution) {
       return notFoundResponse(res, 'School not found');
     }
     
-    logger.info('Institution migrated successfully:', { schoolId, institutionId: institution._id });
+    logger.info('Institution migrated successfully:', { institutionId, institutionId: institution._id });
     return createdResponse(res, institution, 'Institution migrated successfully from school');
   } catch (error) {
     logger.error('Error migrating from school:', error);
@@ -1664,6 +1704,92 @@ const sendRenewalReminders = async (req, res) => {
   }
 };
 
+// ── Institution Settings ─────────────────────────────────────────────────────
+const DEFAULT_SETTINGS = {
+  modules: [
+    { id: '1', name: 'Student Management', key: 'student_management', enabled: true, description: 'Manage student records, admissions, and profiles', icon: 'ti-users', category: 'academic' },
+    { id: '2', name: 'Teacher Management', key: 'teacher_management', enabled: true, description: 'Manage teacher profiles, assignments, and attendance', icon: 'ti-user', category: 'academic' },
+    { id: '3', name: 'Academic Management', key: 'academic_management', enabled: true, description: 'Classes, subjects, timetables, and syllabi', icon: 'ti-book', category: 'academic' },
+    { id: '4', name: 'Examination', key: 'examination', enabled: true, description: 'Exams, schedules, and result management', icon: 'ti-clipboard-list', category: 'academic' },
+    { id: '5', name: 'Attendance', key: 'attendance', enabled: true, description: 'Track student and staff attendance', icon: 'ti-calendar', category: 'academic' },
+    { id: '6', name: 'Library', key: 'library', enabled: true, description: 'Book management and issue tracking', icon: 'ti-bookmark', category: 'academic' },
+    { id: '7', name: 'Fee Management', key: 'fee_management', enabled: true, description: 'Fee collection, invoices, and payment tracking', icon: 'ti-credit-card', category: 'finance' },
+    { id: '8', name: 'Hostel', key: 'hostel', enabled: false, description: 'Hostel room allocation and management', icon: 'ti-home', category: 'infrastructure' },
+    { id: '9', name: 'Transport', key: 'transport', enabled: false, description: 'Vehicle and route management', icon: 'ti-bus', category: 'infrastructure' },
+    { id: '10', name: 'HRM', key: 'hrm', enabled: false, description: 'Staff management, payroll, and leave tracking', icon: 'ti-id-badge', category: 'hr' },
+    { id: '11', name: 'Reports', key: 'reports', enabled: true, description: 'Generate various analytical reports', icon: 'ti-chart-bar', category: 'analytics' },
+    { id: '12', name: 'Announcements', key: 'announcements', enabled: true, description: 'Send notices and notifications', icon: 'ti-bell', category: 'communication' },
+    { id: '13', name: 'Chat & Messaging', key: 'messaging', enabled: true, description: 'Internal messaging system', icon: 'ti-message', category: 'communication' },
+    { id: '14', name: 'Parent Portal', key: 'parent_portal', enabled: true, description: 'Parent access to student information', icon: 'ti-users', category: 'communication' },
+    { id: '15', name: 'Online Admission', key: 'online_admission', enabled: false, description: 'Accept online admission applications', icon: 'ti-world', category: 'admission' }
+  ],
+  security: { sessionTimeout: 30, passwordExpiry: 90, ipWhitelist: [], loginAttempts: 5 },
+  notifications: { emailNotifications: true, smsNotifications: true, pushNotifications: true, studentAdmission: true, feePayment: true, examSchedule: true, attendance: true, homework: true, announcements: true },
+  localization: { currency: 'INR', currencySymbol: '₹', timezone: 'UTC', dateFormat: 'DD/MM/YYYY', timeFormat: '12h', language: 'en' },
+  'email-config': { enabled: false, provider: 'smtp', host: '', port: 587, username: '', password: '', encryption: 'tls', fromEmail: '', fromName: '' },
+  'sms-config': { enabled: false, provider: '', apiKey: '', senderId: '' },
+  'payment-gateway': { enabled: false, provider: 'stripe', merchantId: '', apiKey: '', environment: 'test' },
+  'tax-settings': { enabled: false, name: '', rate: 0, number: '' },
+  storage: { provider: 'local', maxFileSize: 10, allowedTypes: ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'] }
+};
+
+const getSetting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const settingType = req.settingType;
+    const institution = await Institution.findById(id).select('settings').lean();
+    if (!institution) {
+      return notFoundResponse(res, 'Institution not found');
+    }
+    const data = institution?.settings?.[settingType] || DEFAULT_SETTINGS[settingType] || {};
+    return successResponse(res, data);
+  } catch (error) {
+    return errorResponse(res, error.message);
+  }
+};
+
+const updateSetting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const settingType = req.settingType;
+    const institution = await Institution.findByIdAndUpdate(
+      id,
+      { $set: { [`settings.${settingType}`]: req.body } },
+      { new: true, select: 'settings' }
+    );
+    if (!institution) {
+      return notFoundResponse(res, 'Institution not found');
+    }
+    return successResponse(res, institution.settings?.[settingType] || {}, 'Settings saved successfully');
+  } catch (error) {
+    return errorResponse(res, error.message);
+  }
+};
+
+/**
+ * Upload institution logo
+ */
+const uploadLogo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) {
+      return validationErrorResponse(res, ['No file uploaded']);
+    }
+    const fileUrl = `/uploads/institution_${id}/${req.file.filename || req.file.key || req.file.path}`;
+    const institution = await Institution.findByIdAndUpdate(
+      id,
+      { $set: { 'branding.logo': fileUrl } },
+      { new: true, select: 'branding name' }
+    );
+    if (!institution) {
+      return notFoundResponse(res, 'Institution not found');
+    }
+    return successResponse(res, { logo: fileUrl, institution }, 'Logo uploaded successfully');
+  } catch (error) {
+    return errorResponse(res, error.message);
+  }
+};
+
 /**
  * Get institutions by agent ID
  */
@@ -1810,6 +1936,7 @@ const createAgentInstitution = async (req, res) => {
 export default {
   createInstitution,
   getInstitutions,
+  getMyInstitution,
   getInstitutionById,
   updateInstitution,
   deleteInstitution,
@@ -1847,5 +1974,8 @@ export default {
   getInstitutionsByStatus,
   verifyInstitution,
   getGrowthReport,
-  sendRenewalReminders
+  sendRenewalReminders,
+  getSetting,
+  updateSetting,
+  uploadLogo
 };

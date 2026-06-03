@@ -5,13 +5,41 @@ import mongoose from 'mongoose';
 
 // Helper to get institution ID from request
 const getInstitutionId = (req) => {
-  const tenantId = req.headers['x-tenant-id'] || req.headers['x-institution-id'] || req.user?.institutionId;
+  const tenantId =
+    req.user?.institutionId?.toString() ||
+    req.user?.institution?.toString() ||
+    req.user?.tenant?.toString() ||
+    req.headers['x-tenant-id'] ||
+    req.headers['x-institution-id'];
+
+  if (!tenantId) {
+    return null;
+  }
+
+  try {
+    return new mongoose.Types.ObjectId(tenantId);
+  } catch (error) {
+    // Return as string if not a valid ObjectId
+    return tenantId;
+  }
+};
+
+// Get institution ID as string for queries
+const getInstitutionIdStr = (req) => {
+  return (
+    req.user?.institutionId?.toString() ||
+    req.user?.institution?.toString() ||
+    req.user?.tenant?.toString() ||
+    req.headers['x-tenant-id'] ||
+    req.headers['x-institution-id']
+  );
+};
 
 // Validation constants
 const VALID_BOOK_STATUSES = ['available', 'issued', 'reserved', 'maintenance', 'lost', 'damaged'];
 const VALID_ISSUE_STATUSES = ['issued', 'returned', 'overdue'];
 const VALID_RESERVATION_STATUSES = ['active', 'fulfilled', 'cancelled', 'expired'];
-const VALID_BOOK_CATEGORIES = ['fiction', 'non-fiction', 'reference', 'textbook', 'magazine', 'journal', 'other'];
+const VALID_BOOK_CATEGORIES = ['fiction', 'non-fiction', 'reference', 'textbook', 'magazine', 'journal', 'other', 'Fiction', 'Non-Fiction', 'Science', 'Mathematics', 'History', 'Geography', 'Literature', 'Reference', 'Magazine', 'Other'];
 const VALID_EXPORT_FORMATS = ['json', 'csv', 'xlsx', 'pdf'];
 
 // Helper function to validate MongoDB ObjectId
@@ -69,44 +97,40 @@ const createBook = async (req, res) => {
     // Validation
     const errors = [];
     
+    // Title is required
     if (!title || title.trim().length === 0) {
       errors.push('Book title is required');
-    } else if (title.length > 300) {
-      errors.push('Book title must not exceed 300 characters');
     }
     
+    // Author is required
     if (!author || author.trim().length === 0) {
       errors.push('Author is required');
-    } else if (author.length > 200) {
-      errors.push('Author must not exceed 200 characters');
     }
     
+    // Optional validation - just log but don't fail
     if (isbn) {
       const isbnError = validateISBN(isbn);
-      if (isbnError) errors.push(isbnError);
+      if (isbnError) logger.warn('ISBN validation warning:', isbnError);
     }
     
+    // Category is optional - if provided, just log warning for invalid
     if (category && !VALID_BOOK_CATEGORIES.includes(category)) {
-      errors.push('Invalid category. Must be one of: ' + VALID_BOOK_CATEGORIES.join(', '));
+      logger.warn('Invalid category received:', category);
     }
     
-    if (totalCopies !== undefined && totalCopies !== null) {
-      const copiesNum = parseInt(totalCopies);
-      if (isNaN(copiesNum) || copiesNum < 1) {
-        errors.push('Total copies must be at least 1');
-      } else if (copiesNum > 10000) {
-        errors.push('Total copies must not exceed 10000');
-      }
+    // Make totalCopies default to 1 if not provided
+    const copiesNum = totalCopies ? parseInt(totalCopies) : 1;
+    if (isNaN(copiesNum) || copiesNum < 1) {
+      errors.push('Total copies must be at least 1');
     }
     
-    if (publisher && publisher.length > 200) {
-      errors.push('Publisher must not exceed 200 characters');
+    // Use authenticated institution context
+    const institutionId = getInstitutionIdStr(req);
+
+    if (!institutionId) {
+      errors.push('Invalid institution context');
     }
-    
-    // Use institution instead of tenant (auth middleware sets req.user.institution)
-    const tenantId = req.user?.institution || req.user?.tenant || '507f1f77bcf86cd799439011';
-    const institutionId = new mongoose.Types.ObjectId(tenantId);
-    
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
@@ -154,9 +178,13 @@ const getBooks = async (req, res) => {
       errors.push('Search query must not exceed 200 characters');
     }
     
-    const tenantId = req.user?.institution || req.user?.tenant || '507f1f77bcf86cd799439011';
-    const institutionId = new mongoose.Types.ObjectId(tenantId);
+    const institutionId = getInstitutionId(req);
     
+    if (!institutionId) {
+      logger.info('No institution context — returning empty books');
+      return successResponse(res, [], 'No school context — returning empty');
+    }
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
@@ -183,9 +211,12 @@ const getBookById = async (req, res) => {
     const idError = validateObjectId(id, 'Book ID');
     if (idError) errors.push(idError);
     
-    const tenantId = req.user?.institution || req.user?.tenant || '507f1f77bcf86cd799439011';
-    const institutionId = new mongoose.Types.ObjectId(tenantId);
+    const institutionId = getInstitutionId(req);
     
+    if (!institutionId) {
+      errors.push('Invalid institution context');
+    }
+
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
@@ -237,10 +268,11 @@ const updateBook = async (req, res) => {
       errors.push('Invalid status');
     }
     
-    // Get institution ID - fallback to default
-    const institutionId = req.user?.institution 
-      ? new mongoose.Types.ObjectId(req.user.institution) 
-      : new mongoose.Types.ObjectId('507f1f77bcf86cd799439011');
+    const institutionId = getInstitutionId(req) || req.query.institutionId || req.query.institution || req.query.tenant;
+    
+    if (!institutionId) {
+      errors.push('Invalid institution context');
+    }
 
     // Check for existing tenant validation errors
     if (errors.length > 0) {
@@ -375,10 +407,6 @@ const getIssues = async (req, res) => {
     // Validation
     const errors = [];
     
-    if (status && !VALID_ISSUE_STATUSES.includes(status)) {
-      errors.push('Invalid status');
-    }
-    
     if (userId) {
       const userIdError = validateObjectId(userId, 'User ID');
       if (userIdError) errors.push(userIdError);
@@ -394,17 +422,41 @@ const getIssues = async (req, res) => {
     if (limitNum < 1 || limitNum > 100) {
       errors.push('Limit must be between 1 and 100');
     }
-    
+
     const institutionId = getInstitutionId(req);
+
+    const parsedStatus = status
+      ? status
+          .split(',')
+          .map((statusValue) => statusValue.trim().toLowerCase())
+          .filter(Boolean)
+      : null;
+
+    if (parsedStatus && parsedStatus.length > 0) {
+      const invalidStatuses = parsedStatus.filter((statusValue) => !VALID_ISSUE_STATUSES.includes(statusValue));
+      if (invalidStatuses.length > 0) {
+        errors.push(`Invalid status values: ${invalidStatuses.join(', ')}`);
+      }
+    }
+
+    if (!institutionId) {
+      errors.push('Invalid institution context');
+    }
     
-    // Skip the broken validation, continue
     if (errors.length > 0) {
       return validationErrorResponse(res, errors);
     }
-    
-    const tenantId = req.user?.institution || req.user?.tenant || '507f1f77bcf86cd799439011';
-    const instObj = new mongoose.Types.ObjectId(tenantId);
-    const result = await libraryService.getIssues(instObj, req.query);
+
+    const normalizedStatus = parsedStatus
+      ? parsedStatus.map((statusValue) => statusValue.charAt(0).toUpperCase() + statusValue.slice(1))
+      : undefined;
+
+    const result = await libraryService.getIssues(institutionId, {
+      page: pageNum,
+      limit: limitNum,
+      userId,
+      status: normalizedStatus,
+    });
     
     logger.info('Issues fetched successfully');
     return successResponse(res, result, 'Issues retrieved successfully');
@@ -422,9 +474,9 @@ const getOverdueIssues = async (req, res) => {
     const institutionId = getInstitutionId(req);
     
     const result = await libraryService.getOverdueIssues(institutionId);
-    
+
     logger.info('Overdue issues fetched successfully');
-    return successResponse(res, issues, 'Overdue issues retrieved successfully');
+    return successResponse(res, result, 'Overdue issues retrieved successfully');
   } catch (error) {
     logger.error('Error fetching overdue issues:', error);
     return errorResponse(res, error.message);
@@ -531,6 +583,33 @@ const cancelReservation = async (req, res) => {
   } catch (error) {
     logger.error('Error cancelling reservation:', error);
     return errorResponse(res, error.message);
+  }
+};
+
+const getLibraryOverview = async (req, res) => {
+  try {
+    logger.info('Fetching library overview');
+    
+    const institutionId = getInstitutionId(req);
+    
+    if (!institutionId) {
+      return errorResponse(res, 'Invalid institution context');
+    }
+    
+    const overview = await libraryService.getLibraryOverview(institutionId);
+    
+    logger.info('Library overview fetched successfully');
+    return successResponse(res, overview, 'Library overview retrieved successfully');
+  } catch (error) {
+    logger.error('Error fetching library overview:', error);
+    return successResponse(res, {
+      totalBooks: 0,
+      issuedBooks: 0,
+      availableBooks: 0,
+      overdueBooks: 0,
+      members: 0,
+      recentIssues: []
+    }, 'Overview retrieved (empty)');
   }
 };
 
@@ -956,7 +1035,7 @@ const addMember = async (req, res) => {
     }
     
     const User = (await import('../models/User.js')).default;
-    const user = await User.findOne({ _id: userId, tenant: institutionId });
+    const user = await User.findOne({ _id: userId, institutionId: institutionId });
     
     if (!user) {
       return notFoundResponse(res, 'User not found');
@@ -994,71 +1073,133 @@ const getMembers = async (req, res) => {
     const pageNum = parseInt(page) || 1;
     const limitNum = parseInt(limit) || 20;
     
+    // Get institution ID from request
     const institutionId = getInstitutionId(req);
     
-    const User = (await import('../models/User.js')).default;
+    if (!institutionId) {
+      logger.error('No institution ID found in request');
+      return errorResponse(res, 'Institution context not found');
+    }
     
-    // Build query - use institution field instead of tenant for User model
-    const query = { 
-      $and: [
-        {
-          $or: [
-            { institution: institutionId },
-            { institutionId: institutionId }
-          ]
-        },
-        {
-          $or: [
-            { isLibraryMember: true },
-            { role: 'student' },
-            { role: 'teacher' }
-          ]
-        }
-      ]
+    logger.info('Fetching members for institution:', institutionId.toString());
+    
+    const User = (await import('../models/User.js')).default;
+    const Student = (await import('../models/Student.js')).default;
+    
+    // Build a combined members list from both Users and Students
+    const allMembers = [];
+    const memberIds = new Set();
+    
+    // First, fetch regular users (teachers, staff, admins, librarians) from User collection
+    const userQuery = {
+      institutionId: institutionId,
+      role: { $in: ['teacher', 'staff_member', 'admin', 'principal', 'librarian', 'accountant', 'hr_manager'] }
     };
     
-    if (userType) {
-      query.role = userType.toLowerCase();
+    if (userType && userType.toLowerCase() !== 'all' && userType.toLowerCase() !== 'student') {
+      const typeMap = {
+        'teacher': 'teacher',
+        'staff': ['staff_member', 'staff'],
+        'admin': ['admin', 'principal'],
+        'librarian': 'librarian'
+      };
+      const mappedType = typeMap[userType.toLowerCase()];
+      userQuery.role = { $in: Array.isArray(mappedType) ? mappedType : [mappedType] };
     }
     
     if (search) {
-      query.$and.push({
-        $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
-        ]
-      });
+      userQuery.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
     }
     
-    const [members, total] = await Promise.all([
-      User.find(query)
+    const [usersData] = await Promise.all([
+      User.find(userQuery)
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .sort({ createdAt: -1 })
+        .select('-password')
         .lean(),
-      User.countDocuments(query)
+      User.countDocuments(userQuery)
     ]);
     
-    const formattedMembers = members.map(m => ({
-      id: m._id,
-      name: m.name,
-      email: m.email,
-      role: m.role,
-      userType: m.userType || (m.role === 'teacher' ? 'Teacher' : m.role === 'student' ? 'Student' : 'Staff'),
-      membershipDate: m.libraryMemberSince,
-      expiryDate: m.libraryMemberExpiry,
-      status: m.libraryMemberExpiry && new Date(m.libraryMemberExpiry) < new Date() ? 'expired' : 'active'
-    }));
+    // Format and add users
+    usersData.forEach(u => {
+      allMembers.push({
+        _id: u._id,
+        id: u._id,
+        name: u.name || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        role: u.role,
+        userType: u.role === 'teacher' ? 'Teacher' : 'Staff',
+        membershipDate: u.libraryMemberSince || u.createdAt,
+        expiryDate: u.libraryMemberExpiry,
+        status: u.libraryMemberExpiry && new Date(u.libraryMemberExpiry) < new Date() ? 'expired' : 'active',
+        createdAt: u.createdAt
+      });
+      memberIds.add(u._id.toString());
+    });
     
-    return successResponse(res, {
-      members: formattedMembers,
+    // Second, fetch students from Student collection with their user data
+    if (!userType || userType.toLowerCase() === 'all' || userType.toLowerCase() === 'student') {
+      const studentQuery = { institutionId: institutionId };
+      
+      if (search) {
+        studentQuery.$or = [
+          { firstName: { $regex: search, $options: 'i' } },
+          { lastName: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ];
+      }
+      
+      const students = await Student.find(studentQuery)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .populate('userId', '-password')
+        .lean();
+      
+      students.forEach(s => {
+        if (s.userId) {
+          const fullName = `${s.firstName || ''} ${s.lastName || ''}`.trim();
+          const userId = s.userId._id.toString();
+          
+          // Add only if not already added as user
+          if (!memberIds.has(userId)) {
+            allMembers.push({
+              _id: s.userId._id,
+              id: s.userId._id,
+              name: fullName || s.userId.name || '',
+              email: s.email || s.userId.email || '',
+              phone: s.phone || s.userId.phone || '',
+              role: 'student',
+              admissionNumber: s.admissionNumber,
+              rollNumber: s.rollNumber,
+              userType: 'Student',
+              membershipDate: s.userId.libraryMemberSince || s.admissionDate,
+              expiryDate: s.userId.libraryMemberExpiry,
+              status: s.userId.libraryMemberExpiry && new Date(s.userId.libraryMemberExpiry) < new Date() ? 'expired' : 'active',
+              createdAt: s.userId.createdAt
+            });
+            memberIds.add(userId);
+          }
+        }
+      });
+    }
+    
+    const responseData = {
+      members: allMembers,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum)
+        total: memberIds.size,
+        pages: Math.ceil(memberIds.size / limitNum)
       }
-    }, 'Library members retrieved successfully');
+    };
+    
+    logger.info('Returning members:', { count: allMembers.length, total: memberIds.size });
+    return successResponse(res, responseData, 'Library members retrieved successfully');
   } catch (error) {
     logger.error('Error fetching members:', error);
     return successResponse(res, {
@@ -1079,7 +1220,7 @@ const getMemberById = async (req, res) => {
     
     // Continue with the function
     const User = (await import('../models/User.js')).default;
-    const user = await User.findOne({ _id: id, tenant: institutionId, isLibraryMember: true });
+    const user = await User.findOne({ _id: id, institutionId: institutionId, isLibraryMember: true });
     
     if (!user) {
       return notFoundResponse(res, 'Library member not found');
@@ -1118,7 +1259,7 @@ const updateMember = async (req, res) => {
     
     // Continue
     const User = (await import('../models/User.js')).default;
-    const user = await User.findOne({ _id: id, tenant: institutionId, isLibraryMember: true });
+    const user = await User.findOne({ _id: id, institutionId: institutionId, isLibraryMember: true });
     
     if (!user) {
       return notFoundResponse(res, 'Library member not found');
@@ -1165,7 +1306,7 @@ const deleteMember = async (req, res) => {
     
     const User = (await import('../models/User.js')).default;
     const user = await User.findOneAndUpdate(
-      { _id: id, tenant: institutionId },
+      { _id: id, institutionId: institutionId },
       { isLibraryMember: false },
       { new: true }
     );
@@ -1182,7 +1323,6 @@ const deleteMember = async (req, res) => {
   }
 };
 
-// Export all functions
 export default {
   createBook,
   getBooks,
@@ -1197,6 +1337,7 @@ export default {
   reserveBook,
   cancelReservation,
   getLibraryStats,
+  getLibraryOverview,
   getAvailableBooks,
   renewBookIssue,
   getUserIssueHistory,
@@ -1211,5 +1352,4 @@ export default {
   getMemberById,
   updateMember,
   deleteMember
-}
 };

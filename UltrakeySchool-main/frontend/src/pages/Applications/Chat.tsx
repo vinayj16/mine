@@ -15,7 +15,7 @@ const Chat: React.FC = () => {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [blocking, setBlocking] = useState(false);
-  const [, setBlockedUsers] = useState<string[]>([]);
+  const [blockedUsersList, setBlockedUsersList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showInfo, setShowInfo] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -35,17 +35,27 @@ const Chat: React.FC = () => {
   const currentUserName = localStorage.getItem('userName') || 'User';
   const currentUserEmail = localStorage.getItem('userEmail') || '';
 
+  // Refs to avoid stale closures in socket callbacks
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const messagesByConversationRef = useRef<Map<string, Message[]>>(new Map());
+
+  // Keep refs in sync with state
+  useEffect(() => { selectedConversationRef.current = selectedConversation; }, [selectedConversation]);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  useEffect(() => { messagesByConversationRef.current = messagesByConversation; }, [messagesByConversation]);
+
   // Fetch conversations on mount and when dependencies change
   useEffect(() => {
     if (currentUserId) {
       fetchConversations();
     }
-  }, [currentUserId]); // Re-fetch when user changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
 
-  // Fetch all users for global users (agents and superadmin)
+  // Fetch all users for communication
   useEffect(() => {
-    const userRole = localStorage.getItem('userRole');
-    if (userRole === 'agent' || userRole === 'superadmin') {
+    if (currentUserId) {
       userCommunicationService.getAllUsers()
         .then(users => {
           // Remove duplicates based on email
@@ -57,8 +67,21 @@ const Chat: React.FC = () => {
         .catch(err => {
           console.error('Failed to fetch all users:', err);
         });
+
+      // Fetch blocked users list
+      apiClient.get('/chat/blocked-users')
+        .then(response => {
+          if (response.data?.success) {
+            const list = response.data.data || [];
+            const ids = list.map((item: any) => item.blockedUserId?._id || item.blockedUserId || '');
+            setBlockedUsersList(ids.filter(Boolean));
+          }
+        })
+        .catch(err => {
+          console.error('Failed to fetch blocked users list:', err);
+        });
     }
-  }, []);
+  }, [currentUserId]);
 
   // Initialize chat socket when component mounts
   useEffect(() => {
@@ -75,7 +98,7 @@ const Chat: React.FC = () => {
       
       // Set up message listeners
       chatSocketService.onMessage((message) => {
-        console.log('📨 Received message via socket:', message);
+        console.log('[Chat] Received message via socket:', message);
         
         // Ensure message has unique ID
         if (!message._id) {
@@ -91,18 +114,18 @@ const Chat: React.FC = () => {
         });
 
         // Add message to current conversation if it matches by ID or participants
-        console.log('🔎 Message received - selectedConversation:', selectedConversation ? 'exists' : 'null');
-        if (selectedConversation) {
+        console.log('[Chat] Message received - selectedConversation:', selectedConversationRef.current ? 'exists' : 'null');
+        if (selectedConversationRef.current) {
           // Check if conversation ID matches
-          if (message.conversationId === selectedConversation._id) {
-            console.log('✅ Conversation ID match - adding message');
+          if (message.conversationId === selectedConversationRef.current._id) {
+            console.log('[Chat] Conversation ID match - adding message');
             setMessages(prev => [...prev, message]);
           } else {
             // Check if message is from the same participants (handles duplicate backend conversations)
             const messageParticipants = [message.senderId, message.recipientId].sort();
-            const selectedParticipants = selectedConversation.participants?.map((p: any) => p.userId).sort();
+            const selectedParticipants = selectedConversationRef.current.participants?.map((p: any) => p.userId).sort();
             
-            console.log('🔍 Participant check:', {
+            console.log('[Chat] Participant check:', {
               messageParticipants,
               selectedParticipants,
               match: JSON.stringify(messageParticipants) === JSON.stringify(selectedParticipants)
@@ -110,34 +133,34 @@ const Chat: React.FC = () => {
             
             if (JSON.stringify(messageParticipants) === JSON.stringify(selectedParticipants)) {
               // Message is from the same participants, add it to the chat
-              console.log('✅ Participant match - adding message');
+              console.log('[Chat] Participant match - adding message');
               setMessages(prev => [...prev, message]);
             } else {
-              console.log('❌ No match - message not added to current view');
+              console.log('[Chat] No match - message not added to current view');
             }
           }
         } else {
-          console.log('⚠️ No conversation selected - auto-selecting matching conversation');
+          console.log('[Chat] No conversation selected - auto-selecting matching conversation');
           // Auto-select the conversation if it exists in the list
           const messageParticipants = [message.senderId, message.recipientId].sort();
-          const matchingConversation = conversations.find(conv => {
+          const matchingConversation = conversationsRef.current.find(conv => {
             const convParticipants = conv.participants?.map((p: any) => p.userId).sort();
             return JSON.stringify(convParticipants) === JSON.stringify(messageParticipants);
           });
           
           if (matchingConversation) {
-            console.log('🎯 Auto-selecting conversation:', matchingConversation.title);
+            console.log('[Chat] Auto-selecting conversation:', matchingConversation.title);
             setSelectedConversation(matchingConversation);
             
             // Load ALL messages from Map for these participants (full chat history)
-            const messageParticipants = [message.senderId, message.recipientId].sort();
-            let allMessages: Message[] = [];
+            const messageParticipants2 = [message.senderId, message.recipientId].sort();
+            const allMessages: Message[] = [];
             const seenMessageIds = new Set<string>();
             
-            messagesByConversation.forEach((msgs) => {
+            messagesByConversationRef.current.forEach((msgs) => {
               msgs.forEach(msg => {
                 const msgParticipants = [msg.senderId, msg.recipientId].sort();
-                const matchesParticipants = JSON.stringify(msgParticipants) === JSON.stringify(messageParticipants);
+                const matchesParticipants = JSON.stringify(msgParticipants) === JSON.stringify(messageParticipants2);
                 
                 if (matchesParticipants && !seenMessageIds.has(msg._id)) {
                   allMessages.push(msg);
@@ -149,10 +172,10 @@ const Chat: React.FC = () => {
             // Sort by timestamp
             allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             
-            console.log(`🎯 Loaded ${allMessages.length} messages from chat history (auto-select)`);
+            console.log(`[Chat] Loaded ${allMessages.length} messages from chat history (auto-select)`);
             setMessages(allMessages);
           } else {
-            console.log('⚠️ No matching conversation found - creating temporary conversation');
+            console.log('[Chat] No matching conversation found - creating temporary conversation');
             // Create temporary conversation
             const tempConversation: Conversation = {
               _id: message.conversationId,
@@ -170,24 +193,24 @@ const Chat: React.FC = () => {
               isGroup: false,
               isGlobal: true,
               unreadCount: {} as Record<string, number>,
-              isActive: true,
+                isActive: true,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
             
-            console.log('🎯 Creating temporary conversation:', tempConversation.title);
+            console.log('[Chat] Creating temporary conversation:', tempConversation.title);
             setConversations(prev => [tempConversation, ...prev]);
             setSelectedConversation(tempConversation);
             
             // Load ALL messages from Map for these participants (full chat history)
-            const messageParticipants = [message.senderId, message.recipientId].sort();
-            let allMessages: Message[] = [];
+            const messageParticipants3 = [message.senderId, message.recipientId].sort();
+            const allMessages: Message[] = [];
             const seenMessageIds = new Set<string>();
             
-            messagesByConversation.forEach((msgs) => {
+            messagesByConversationRef.current.forEach((msgs) => {
               msgs.forEach(msg => {
                 const msgParticipants = [msg.senderId, msg.recipientId].sort();
-                const matchesParticipants = JSON.stringify(msgParticipants) === JSON.stringify(messageParticipants);
+                const matchesParticipants = JSON.stringify(msgParticipants) === JSON.stringify(messageParticipants3);
                 
                 if (matchesParticipants && !seenMessageIds.has(msg._id)) {
                   allMessages.push(msg);
@@ -199,7 +222,7 @@ const Chat: React.FC = () => {
             // Sort by timestamp
             allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             
-            console.log(`📜 Loaded ${allMessages.length} messages from chat history (temp conversation)`);
+            console.log(`[Chat] Loaded ${allMessages.length} messages from chat history (temp conversation)`);
             setMessages(allMessages);
             
             // Fetch real conversations from server
@@ -209,11 +232,11 @@ const Chat: React.FC = () => {
         
         // Show notification for received message (only if not from current user)
         if (message.senderId !== currentUserId) {
-          console.log('🔔 Showing notification for message from:', message.senderName);
-          console.log('🔔 Notification permission:', Notification.permission);
+          console.log('[Chat] Showing notification for message from:', message.senderName);
+          console.log('[Chat] Notification permission:', Notification.permission);
           
           // Show toast notification with message preview
-          toast.info(`📩 ${message.senderName}: ${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}`, {
+          toast.info(`${message.senderName}: ${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}`, {
             position: 'top-right',
             autoClose: 5000,
             hideProgressBar: false,
@@ -221,7 +244,7 @@ const Chat: React.FC = () => {
             pauseOnHover: true,
             draggable: true
           });
-          console.log('🔔 Toast notification shown');
+          console.log('[Chat] Toast notification shown');
           
           // Request browser notification permission and show it
           if ('Notification' in window && Notification.permission === 'granted') {
@@ -229,15 +252,15 @@ const Chat: React.FC = () => {
               body: message.content,
               icon: '/favicon.ico'
             });
-            console.log('🔔 Browser notification shown');
+            console.log('[Chat] Browser notification shown');
           } else if ('Notification' in window && Notification.permission === 'default') {
-            console.log('🔔 Requesting notification permission...');
+            console.log('[Chat] Requesting notification permission...');
             Notification.requestPermission();
           } else {
-            console.log('🔔 Browser notifications not available or denied');
+            console.log('[Chat] Browser notifications not available or denied');
           }
         } else {
-          console.log('🔔 Message from self - no notification needed');
+          console.log('[Chat] Message from self - no notification needed');
         }
         
         // Update conversation list locally without API call
@@ -307,7 +330,7 @@ const Chat: React.FC = () => {
 
       // Set up message sent listener for our own messages
       chatSocketService.onMessageSent((message) => {
-        console.log('📤 Message sent confirmation via socket:', message);
+        console.log('[Chat] Message sent confirmation via socket:', message);
         
         // Store message in conversation-specific map
         setMessagesByConversation(prev => {
@@ -321,14 +344,14 @@ const Chat: React.FC = () => {
         if (selectedConversation) {
           // Check if conversation ID matches
           if (message.conversationId === selectedConversation._id) {
-            console.log('📤 Conversation ID match - adding own message');
+            console.log('[Chat] Conversation ID match - adding own message');
             setMessages(prev => [...prev, message]);
           } else {
             // Check if message is from the same participants (handles duplicate backend conversations)
             const messageParticipants = [message.senderId, message.recipientId].sort();
             const selectedParticipants = selectedConversation.participants?.map((p: any) => p.userId).sort();
             
-            console.log('📤 Participant check (own message):', {
+            console.log('[Chat] Participant check (own message):', {
               messageParticipants,
               selectedParticipants,
               match: JSON.stringify(messageParticipants) === JSON.stringify(selectedParticipants)
@@ -336,14 +359,14 @@ const Chat: React.FC = () => {
             
             if (JSON.stringify(messageParticipants) === JSON.stringify(selectedParticipants)) {
               // Message is from the same participants, add it to the chat
-              console.log('📤 Participant match - adding own message');
+              console.log('[Chat] Participant match - adding own message');
               setMessages(prev => [...prev, message]);
             } else {
-              console.log('📤 No match - own message not added to current view');
+              console.log('[Chat] No match - own message not added to current view');
             }
           }
         } else {
-          console.log('📤 No conversation selected - auto-selecting matching conversation');
+          console.log('[Chat] No conversation selected - auto-selecting matching conversation');
           // Auto-select the conversation if it exists in the list
           const messageParticipants = [message.senderId, message.recipientId].sort();
           const matchingConversation = conversations.find(conv => {
@@ -352,12 +375,12 @@ const Chat: React.FC = () => {
           });
           
           if (matchingConversation) {
-            console.log('📤 Auto-selecting conversation:', matchingConversation.title);
+            console.log('[Chat] Auto-selecting conversation:', matchingConversation.title);
             setSelectedConversation(matchingConversation);
             
             // Load ALL messages from Map for these participants (full chat history)
             const messageParticipants = [message.senderId, message.recipientId].sort();
-            let allMessages: Message[] = [];
+            const allMessages: Message[] = [];
             const seenMessageIds = new Set<string>();
             
             messagesByConversation.forEach((msgs) => {
@@ -375,10 +398,10 @@ const Chat: React.FC = () => {
             // Sort by timestamp
             allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             
-            console.log(`📤 Loaded ${allMessages.length} messages from chat history (auto-select)`);
+            console.log(`[Chat] Loaded ${allMessages.length} messages from chat history (auto-select)`);
             setMessages(allMessages);
           } else {
-            console.log('📤 No matching conversation found - creating temporary conversation');
+            console.log('[Chat] No matching conversation found - creating temporary conversation');
             // Create temporary conversation
             const tempConversation: Conversation = {
               _id: message.conversationId,
@@ -401,13 +424,13 @@ const Chat: React.FC = () => {
               updatedAt: new Date().toISOString()
             };
             
-            console.log('📤 Creating temporary conversation:', tempConversation.title);
+            console.log('[Chat] Creating temporary conversation:', tempConversation.title);
             setConversations(prev => [tempConversation, ...prev]);
             setSelectedConversation(tempConversation);
             
             // Load ALL messages from Map for these participants (full chat history)
             const messageParticipants = [message.senderId, message.recipientId].sort();
-            let allMessages: Message[] = [];
+            const allMessages: Message[] = [];
             const seenMessageIds = new Set<string>();
             
             messagesByConversation.forEach((msgs) => {
@@ -425,7 +448,7 @@ const Chat: React.FC = () => {
             // Sort by timestamp
             allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             
-            console.log(`📤 Loaded ${allMessages.length} messages from chat history (temp conversation)`);
+            console.log(`[Chat] Loaded ${allMessages.length} messages from chat history (temp conversation)`);
             setMessages(allMessages);
             
             // Fetch real conversations from server
@@ -562,7 +585,7 @@ const Chat: React.FC = () => {
 
       // Set up message error listeners
       chatSocketService.onMessageError((error) => {
-        console.error('❌ Message error:', error);
+        console.error('[Chat] Message error:', error);
         toast.error(error.error || 'Message sending failed');
       });
 
@@ -578,7 +601,7 @@ const Chat: React.FC = () => {
 
       // Set up user disconnected listeners
       chatSocketService.onUserDisconnected((data) => {
-        console.log(`🔌 User ${data.userId} disconnected from conversation ${data.conversationId}`);
+        console.log(`[Chat] User ${data.userId} disconnected from conversation ${data.conversationId}`);
         // Update user status if they're the other participant
         if (selectedConversation) {
           const otherParticipant = getOtherParticipant(selectedConversation);
@@ -605,6 +628,7 @@ const Chat: React.FC = () => {
         }
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 
   // Join conversation when selected
@@ -650,13 +674,13 @@ const Chat: React.FC = () => {
       let response;
       if (userRole === 'agent' || userRole === 'superadmin') {
         // For global users (agents and superadmin), get agent conversations
-        response = await chatService.getAgentConversations(currentUserId);
+        response = await chatService.getConversations('', currentUserId);
       } else {
-        // For institution users, get conversations with schoolId
+        // For institution users, get conversations with institutionId
         response = await chatService.getConversations(institutionCode || '', currentUserId);
       }
       
-      let conversations = (response as any).data || [];
+      const conversations = (response as any).data || [];
       
       // Deduplicate conversations by merging those with the same participants
       const deduplicatedConversations: Conversation[] = [];
@@ -713,9 +737,9 @@ const Chat: React.FC = () => {
       // Display all messages
       setMessages(newMessages);
     } catch (error: any) {
-      console.error('❌ Error fetching messages:', error);
-      console.error('❌ Error response:', error.response?.data);
-      console.error('❌ Error details:', {
+      console.error('[Chat] Error fetching messages:', error);
+      console.error('[Chat] Error response:', error.response?.data);
+      console.error('[Chat] Error details:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText
@@ -755,7 +779,7 @@ const Chat: React.FC = () => {
           // Check if there's a conversation on the server that we don't have locally
           // This can happen if the other user created the conversation
           try {
-            const allConversationsResponse = await chatService.getAgentConversations(currentUserId) as any;
+            const allConversationsResponse = await chatService.getConversations('', currentUserId) as any;
             const allConversations = allConversationsResponse.data || [];
             const serverConversation = findConversationBetweenUsers(allConversations, currentUserId, user.id);
             
@@ -783,10 +807,10 @@ const Chat: React.FC = () => {
           const response = await chatService.createGlobalConversation(conversationData) as any;
           const newConversation = response.data || response;
           
-          console.log('📝 New conversation created:', newConversation);
+          console.log('[Chat] New conversation created:', newConversation);
           
           if (!newConversation || !newConversation._id) {
-            console.error('❌ Invalid conversation response:', newConversation);
+            console.error('[Chat] Invalid conversation response:', newConversation);
             toast.error('Invalid conversation response from server');
             return;
           }
@@ -810,8 +834,8 @@ const Chat: React.FC = () => {
         }
       }
     } catch (error: any) {
-      console.error('❌ Error creating conversation:', error);
-      console.error('❌ Error response:', error.response?.data);
+      console.error('[Chat] Error creating conversation:', error);
+      console.error('[Chat] Error response:', error.response?.data);
       toast.error(error.response?.data?.message || 'Failed to create conversation');
     }
   };
@@ -819,7 +843,7 @@ const Chat: React.FC = () => {
   // Start call with user (placeholder for future implementation)
 
   const handleSelectConversation = async (conversation: Conversation) => {
-    console.log('🎯 Selected conversation:', {
+    console.log('[Chat] Selected conversation:', {
       id: conversation._id,
       title: conversation.title,
       participants: conversation.participants?.map((p: any) => p.userId)
@@ -831,7 +855,7 @@ const Chat: React.FC = () => {
     
     // Load ALL messages from Map for this conversation and any other conversations with same participants
     // This ensures we show the complete chat history even with duplicate backend conversation IDs
-    let allMessages: Message[] = [];
+    const allMessages: Message[] = [];
     const seenMessageIds = new Set<string>();
     
     messagesByConversation.forEach((msgs) => {
@@ -850,7 +874,7 @@ const Chat: React.FC = () => {
     // Sort messages by timestamp to show in chronological order
     allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     
-    console.log(`📜 Loaded ${allMessages.length} messages from chat history`);
+    console.log(`[Chat] Loaded ${allMessages.length} messages from chat history`);
     setMessages(allMessages);
     
     // Fetch all messages from server to ensure we have the latest data
@@ -868,7 +892,7 @@ const Chat: React.FC = () => {
     if (!conversation || !conversation.unreadCount) {
       return 0;
     }
-    return conversation.unreadCount;
+    return conversation.unreadCount[currentUserId] || 0;
   };
 
   const formatTime = (dateString?: string) => {
@@ -884,7 +908,7 @@ const Chat: React.FC = () => {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
   const formatLastSeen = (dateString?: string) => {
@@ -900,7 +924,7 @@ const Chat: React.FC = () => {
     if (diffMins < 60) return `${diffMins} minutes ago`;
     if (diffHours < 24) return `${diffHours} hours ago`;
     if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const filteredConversations = conversations.filter((conversation: Conversation) => {
@@ -982,7 +1006,7 @@ const Chat: React.FC = () => {
         );
         return newMap;
       });
-    } catch (error: any) {
+    } catch {
       // Remove optimistic message if save failed
       setMessages((prev: Message[]) => prev.filter(msg => msg._id !== tempId));
       toast.error('Failed to save message to history');
@@ -1000,19 +1024,22 @@ const Chat: React.FC = () => {
     }
   };
 
-  const handleBlockUser = async (userId: string) => {
-    if (!selectedConversation) return;
-    
+  const handleToggleBlockUser = async (userId: string) => {
     try {
       setBlocking(true);
-      await apiClient.post(`/chat/conversations/${selectedConversation._id}/block`, {
-        userIdToBlock: userId
-      });
-      toast.success('User blocked successfully');
-      setBlockedUsers(prev => [...prev, userId]);
+      const isBlocked = blockedUsersList.includes(userId);
+      if (isBlocked) {
+        await apiClient.post(`/chat/unblock/${userId}`);
+        toast.success('User unblocked successfully');
+        setBlockedUsersList(prev => prev.filter(id => id !== userId));
+      } else {
+        await apiClient.post(`/chat/block/${userId}`);
+        toast.success('User blocked successfully');
+        setBlockedUsersList(prev => [...prev, userId]);
+      }
       fetchConversations();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to block user');
+      toast.error(error.response?.data?.message || 'Failed to block/unblock user');
     } finally {
       setBlocking(false);
     }
@@ -1220,14 +1247,15 @@ const Chat: React.FC = () => {
                     </button>
                     {!selectedConversation.isGroup && (
                       <button
-                        className="btn btn-sm btn-outline-danger"
+                        className={`btn btn-sm ${blockedUsersList.includes(getOtherParticipant(selectedConversation)?.userId || '') ? 'btn-danger text-white' : 'btn-outline-danger'}`}
                         onClick={() => {
                           const otherParticipant = getOtherParticipant(selectedConversation);
                           if (otherParticipant) {
-                            handleBlockUser(otherParticipant.userId);
+                            handleToggleBlockUser(otherParticipant.userId);
                           }
                         }}
                         disabled={blocking}
+                        title={blockedUsersList.includes(getOtherParticipant(selectedConversation)?.userId || '') ? 'Unblock User' : 'Block User'}
                       >
                         <i className="ti ti-ban"></i>
                       </button>
@@ -1331,42 +1359,55 @@ const Chat: React.FC = () => {
 
                 {/* Message Input */}
                 <div className="card-footer">
-                  <form onSubmit={handleSendMessage}>
-                    <div className="input-group">
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Type a message..."
-                        value={newMessage}
-                        onChange={(e) => {
-                          setNewMessage(e.target.value);
-                          handleTyping(true); // Trigger "User is typing..."
-                          
-                          // Stop typing indicator after 2 seconds of no activity
-                          if (conversationUpdateTimeoutRef.current) clearTimeout(conversationUpdateTimeoutRef.current);
-                          conversationUpdateTimeoutRef.current = window.setTimeout(() => {
-                            handleTyping(false);
-                          }, 2000);
-                        }}
-                        onFocus={() => handleTyping(true)}
-                        onBlur={() => handleTyping(false)}
-                        disabled={sending}
-                      />
-                      <button
-                        type="submit"
-                        className="btn btn-primary"
-                        disabled={sending || !newMessage.trim()}
-                      >
-                        {sending ? (
-                          <div className="spinner-border spinner-border-sm text-white" role="status">
-                            <span className="visually-hidden">Sending...</span>
-                          </div>
-                        ) : (
-                          <i className="ti ti-send"></i>
-                        )}
-                      </button>
-                    </div>
-                  </form>
+                  {(() => {
+                    const otherUser = getOtherParticipant(selectedConversation);
+                    const isBlocked = otherUser && blockedUsersList.includes(otherUser.userId);
+                    if (isBlocked) {
+                      return (
+                        <div className="alert alert-danger mb-0 text-center py-2 fs-7" role="alert">
+                          <i className="ti ti-ban me-1"></i> This user is blocked. Unblock to resume messaging.
+                        </div>
+                      );
+                    }
+                    return (
+                      <form onSubmit={handleSendMessage}>
+                        <div className="input-group">
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Type a message..."
+                            value={newMessage}
+                            onChange={(e) => {
+                              setNewMessage(e.target.value);
+                              handleTyping(true); // Trigger "User is typing..."
+                              
+                              // Stop typing indicator after 2 seconds of no activity
+                              if (conversationUpdateTimeoutRef.current) clearTimeout(conversationUpdateTimeoutRef.current);
+                              conversationUpdateTimeoutRef.current = window.setTimeout(() => {
+                                handleTyping(false);
+                              }, 2000);
+                            }}
+                            onFocus={() => handleTyping(true)}
+                            onBlur={() => handleTyping(false)}
+                            disabled={sending}
+                          />
+                          <button
+                            type="submit"
+                            className="btn btn-primary"
+                            disabled={sending || !newMessage.trim()}
+                          >
+                            {sending ? (
+                              <div className="spinner-border spinner-border-sm text-white" role="status">
+                                <span className="visually-hidden">Sending...</span>
+                              </div>
+                            ) : (
+                              <i className="ti ti-send"></i>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    );
+                  })()}
                 </div>
               </div>
             ) : (

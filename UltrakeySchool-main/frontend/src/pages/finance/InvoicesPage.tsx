@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
+import { toast } from 'react-toastify';
 
 interface Invoice {
   id: string;
@@ -13,7 +15,7 @@ interface Invoice {
   status: 'Paid' | 'Pending' | 'Overdue' | string;
 }
 
-const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
+const formatCurrency = (value: number) => `₹${value.toLocaleString()}`;
 
 const formatDate = (value: string | Date) => {
   const date = typeof value === 'string' ? new Date(value) : value;
@@ -26,6 +28,25 @@ const InvoicesPage: React.FC = () => {
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'invoiceNumber', label: 'Invoice #', format: (v, row) => v || row.invoiceNo || row._id?.slice(-6) },
+    { key: 'clientName', label: 'Client', format: (_, row) => row.client?.name || row.clientName || row.studentName || '' },
+    { key: 'amount', label: 'Amount', format: (v, row) => { const a = v || row.totalAmount || 0; return `₹${Number(a).toFixed(2)}`; } },
+    { key: 'dueDate', label: 'Due Date', format: (v) => v ? new Date(v).toLocaleDateString() : '-' },
+    { key: 'status', label: 'Status' },
+    { key: 'issueDate', label: 'Issue Date', format: (v, row) => { const d = v || row.createdAt || row.date; return d ? new Date(d).toLocaleDateString() : '-'; } },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = invoices || [];
+    if (!data.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(data, 'invoices', exportColumns, 'Invoices Report');
+    } else {
+      exportToExcel(data, 'invoices', exportColumns);
+    }
+  };
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -117,7 +138,7 @@ const InvoicesPage: React.FC = () => {
         </div>
         <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
           <div className="pe-1 mb-2">
-            <a href="#" className="btn btn-outline-light bg-white btn-icon me-1" 
+            <a href="#" className="btn btn-outline-light bg-white btn-icon me-1"
               data-bs-toggle="tooltip" data-bs-placement="top" aria-label="Refresh" data-bs-original-title="Refresh">
               <i className="ti ti-refresh"></i>
             </a>
@@ -130,26 +151,27 @@ const InvoicesPage: React.FC = () => {
             </button>
           </div>
           <div className="dropdown me-2 mb-2">
-            <a href="#"
-              className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
-              data-bs-toggle="dropdown">
-              <i className="ti ti-file-export me-2"></i>Export
-            </a>
+            <button className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center" data-bs-toggle="dropdown">
+              <i className="ti ti-file-export me-2" />
+              Export
+            </button>
             <ul className="dropdown-menu dropdown-menu-end p-3">
               <li>
-                <a href="#" className="dropdown-item rounded-1">
-                  <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                </a>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                  <i className="ti ti-file-type-pdf me-2" />
+                  Export as PDF
+                </button>
               </li>
               <li>
-                <a href="#" className="dropdown-item rounded-1">
-                  <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                </a>
+                <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                  <i className="ti ti-file-type-xls me-2" />
+                  Export as Excel
+                </button>
               </li>
             </ul>
           </div>
           <div className="mb-2">
-            <Link to="/add-invoice" className="btn btn-primary d-flex align-items-center">
+            <Link to="/accounts/invoices/add" className="btn btn-primary d-flex align-items-center">
               <i className="ti ti-square-rounded-plus me-2"></i>Add Invoices
             </Link>
           </div>
@@ -166,12 +188,12 @@ const InvoicesPage: React.FC = () => {
               <span className="icon-addon">
                 <i className="ti ti-calendar"></i>
               </span>
-              <input 
-                type="text" 
-                className="form-control date-range bookingrange" 
+              <input
+                type="text"
+                className="form-control date-range bookingrange"
                 placeholder="Select"
                 value="Academic Year : 2024 / 2025"
-                readOnly 
+                readOnly
               />
             </div>
             <div className="dropdown mb-3 me-2">
@@ -271,9 +293,9 @@ const InvoicesPage: React.FC = () => {
                 <tr>
                   <th className="no-sort">
                     <div className="form-check form-check-md">
-                      <input 
-                        className="form-check-input" 
-                        type="checkbox" 
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
                         id="select-all"
                         checked={selectAll}
                         onChange={toggleSelectAll}
@@ -304,8 +326,8 @@ const InvoicesPage: React.FC = () => {
                     <tr key={invoice.id}>
                       <td>
                         <div className="form-check form-check-md">
-                          <input 
-                            className="form-check-input" 
+                          <input
+                            className="form-check-input"
                             type="checkbox"
                             checked={selectedInvoices.includes(invoice.id)}
                             onChange={() => toggleInvoiceSelection(invoice.id)}
@@ -438,17 +460,17 @@ const InvoicesPage: React.FC = () => {
                         <tr>
                           <td>Semester Fees</td>
                           <td>25 Apr 2024</td>
-                          <td>$5,000</td>
+                          <td>₹5,000</td>
                         </tr>
                         <tr>
                           <td>Exam Fees</td>
                           <td>25 Apr 2024</td>
-                          <td>$1,000</td>
+                          <td>₹1,000</td>
                         </tr>
                         <tr>
                           <td>Transport Fees</td>
                           <td>25 Apr 2024</td>
-                          <td>$4,000</td>
+                          <td>₹4,000</td>
                         </tr>
                       </tbody>
                     </table>
@@ -465,7 +487,7 @@ const InvoicesPage: React.FC = () => {
                     </div>
                     <div>
                       <h5 className="mb-1">Total amount (in words):</h5>
-                      <p className="text-dark fw-medium">USD Ten Thousand One Hundred Sixty Five Only</p>
+                      <p className="text-dark fw-medium">₹ Ten Thousand One Hundred Sixty Five Only</p>
                     </div>
                   </div>
                   <div className="col-lg-6">
@@ -476,9 +498,9 @@ const InvoicesPage: React.FC = () => {
                         <li className="fw-medium text-dark">IGST 18.0%</li>
                       </ul>
                       <ul>
-                        <li>$10,000.00</li>
-                        <li>+ $0.00</li>
-                        <li>$10,000.00</li>
+                        <li>₹10,000.00</li>
+                        <li>+ ₹0.00</li>
+                        <li>₹10,000.00</li>
                       </ul>
                     </div>
                     <div className="total-amount-tax mb-3">
@@ -486,7 +508,7 @@ const InvoicesPage: React.FC = () => {
                         <li className="text-dark">Amount Payable</li>
                       </ul>
                       <ul className="total-amount">
-                        <li className="text-dark">$10,165.00</li>
+                        <li className="text-dark">₹10,165.00</li>
                       </ul>
                     </div>
                   </div>
@@ -496,7 +518,7 @@ const InvoicesPage: React.FC = () => {
                     <div className="col-lg-6 mb-4 pt-4">
                       <h5 className="mb-2">Payment Info:</h5>
                       <p className="mb-1">Debit Card : <span className="fw-medium text-dark">465 *************645</span></p>
-                      <p className="mb-0">Amount : <span className="fw-medium text-dark">$10,165</span></p>
+                      <p className="mb-0">Amount : <span className="fw-medium text-dark">₹10,165</span></p>
                     </div>
                     <div className="col-lg-6 text-end mb-4 pt-4">
                       <h6 className="mb-2">For Dreamguys</h6>

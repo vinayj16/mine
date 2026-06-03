@@ -3,6 +3,8 @@ import { successResponse, createdResponse, errorResponse, validationErrorRespons
 import logger from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { validationResult } from 'express-validator';
+import { sendNotificationToUser, sendNotificationToInstitution } from '../services/socketService.js';
+import emailService from '../services/emailService.js';
 
 // Validation constants
 const VALID_NOTIFICATION_TYPES = ['info', 'warning', 'error', 'success', 'announcement', 'reminder', 'alert'];
@@ -24,37 +26,20 @@ const validateObjectId = (id, fieldName = 'ID') => {
   return null;
 };
 
+// Resolve tenant identifier from user context
+const getTenantId = (req) => {
+  return req.user?.institutionId || req.user?.institutionId || req.user?.institution;
+};
+
 export const getNotifications = async (req, res) => {
   try {
     logger.info('Fetching notifications');
     
     const { isRead, type, limit, skip, priority, startDate, endDate } = req.query;
-    // Use schoolId or institutionId for notifications
-    const schoolId = req.user?.schoolId || req.user?.institutionId || req.user?.institution;
-    const userId = req.user?.id;
+    const tenantId = getTenantId(req);
+    const userId = req.user?.id || req.user?._id;
     const userRole = req.user?.role;
-    
-    // Validation
     const errors = [];
-    
-    // Superadmins and institution owners don't have schoolId - return empty notifications for them
-    if (userRole === 'superadmin' || userRole === 'SUPER_ADMIN' || userRole === 'institution_owner' || userRole === 'institution_admin') {
-      logger.info(`${userRole} user - returning empty notifications`);
-      return successResponse(res, {
-        notifications: [],
-        total: 0,
-        unreadCount: 0
-      }, 'Notifications retrieved successfully');
-    }
-    
-    if (!schoolId) {
-      // Return empty for users without schoolId
-      return successResponse(res, {
-        notifications: [],
-        total: 0,
-        unreadCount: 0
-      }, 'Notifications retrieved successfully');
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -100,10 +85,10 @@ export const getNotifications = async (req, res) => {
       skip: skipNum
     };
     
-    const notifications = await notificationService.getNotifications(schoolId, userId, options);
+    const result = await notificationService.getNotifications(tenantId, userId, options);
     
     logger.info('Notifications fetched successfully');
-    return successResponse(res, notifications, 'Notifications retrieved successfully');
+    return successResponse(res, result, 'Notifications retrieved successfully');
   } catch (error) {
     logger.error('Error fetching notifications:', error);
     return errorResponse(res, error.message);
@@ -114,18 +99,9 @@ export const getUnreadCount = async (req, res) => {
   try {
     logger.info('Fetching unread notification count');
     
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -138,7 +114,7 @@ export const getUnreadCount = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const count = await notificationService.getUnreadCount(schoolId, userId);
+    const count = await notificationService.getUnreadCount(tenantId, userId);
     
     logger.info('Unread count fetched successfully:', { count });
     return successResponse(res, { count }, 'Unread count retrieved successfully');
@@ -158,16 +134,13 @@ export const createNotification = async (req, res) => {
     }
     
     const { title, message, type, priority, recipientIds, channels, metadata } = req.body;
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
+    const senderId = req.user?.id;
     
-    // Validation
     const validationErrors = [];
     
-    if (!schoolId) {
-      validationErrors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) validationErrors.push(schoolIdError);
+    if (!tenantId) {
+      validationErrors.push('Institution ID is required');
     }
     
     if (!title || title.trim().length === 0) {
@@ -225,15 +198,28 @@ export const createNotification = async (req, res) => {
       return validationErrorResponse(res, validationErrors);
     }
     
-    const notificationData = req.body;
-    const notification = await notificationService.createNotification(schoolId, notificationData);
+    const notificationData = { ...req.body, senderId };
+    const notification = await notificationService.createNotification(tenantId, notificationData);
     
-    // Send email notification
+    // Send real-time notification to recipient(s) via socket
+    if (notification) {
+      if (recipientIds && Array.isArray(recipientIds)) {
+        recipientIds.forEach(recipientId => {
+          sendNotificationToUser(recipientId, notification);
+        });
+      }
+      // Also broadcast to the institution room for admin/principal visibility
+      if (tenantId) {
+        sendNotificationToInstitution(tenantId, notification);
+      }
+    }
+    
+    // Send email notification if channel is selected
     if (notificationData.channels && notificationData.channels.includes('email')) {
       await sendEmailNotification(notification);
     }
     
-    logger.info('Notification created successfully:', { notificationId: notification._id });
+    logger.info('Notification created successfully:', { notificationId: notification.id });
     return createdResponse(res, notification, 'Notification created successfully');
   } catch (error) {
     logger.error('Error creating notification:', error);
@@ -246,21 +232,12 @@ export const markAsRead = async (req, res) => {
     logger.info('Marking notification as read');
     
     const { id } = req.params;
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
     
     const idError = validateObjectId(id, 'Notification ID');
     if (idError) errors.push(idError);
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -273,7 +250,7 @@ export const markAsRead = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const notification = await notificationService.markAsRead(schoolId, userId, id);
+    const notification = await notificationService.markAsRead(tenantId, userId, id);
     
     if (!notification) {
       return notFoundResponse(res, 'Notification not found');
@@ -294,18 +271,9 @@ export const markAllAsRead = async (req, res) => {
   try {
     logger.info('Marking all notifications as read');
     
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -318,7 +286,7 @@ export const markAllAsRead = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await notificationService.markAllAsRead(schoolId, userId);
+    const result = await notificationService.markAllAsRead(tenantId, userId);
     
     logger.info('All notifications marked as read:', { count: result.modifiedCount });
     return successResponse(res, { count: result.modifiedCount }, result.modifiedCount + ' notifications marked as read');
@@ -333,21 +301,11 @@ export const deleteNotification = async (req, res) => {
     logger.info('Deleting notification');
     
     const { id } = req.params;
-    const schoolId = req.user?.schoolId;
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
     
     const idError = validateObjectId(id, 'Notification ID');
     if (idError) errors.push(idError);
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -360,7 +318,7 @@ export const deleteNotification = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const notification = await notificationService.deleteNotification(schoolId, userId, id);
+    const notification = await notificationService.deleteNotification(userId, id);
     
     if (!notification) {
       return notFoundResponse(res, 'Notification not found');
@@ -387,17 +345,10 @@ export const broadcastNotification = async (req, res) => {
     }
     
     const { notificationData, recipientIds } = req.body;
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
+    const senderId = req.user?.id;
     
-    // Validation
     const validationErrors = [];
-    
-    if (!schoolId) {
-      validationErrors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) validationErrors.push(schoolIdError);
-    }
     
     if (!notificationData || typeof notificationData !== 'object') {
       validationErrors.push('Notification data is required');
@@ -424,10 +375,22 @@ export const broadcastNotification = async (req, res) => {
     }
     
     const notifications = await notificationService.broadcastNotification(
-      schoolId,
-      notificationData,
+      tenantId,
+      { ...notificationData, senderId },
       recipientIds
     );
+    
+    // Send real-time notifications to each recipient
+    if (notifications && notifications.length > 0) {
+      notifications.forEach(notif => {
+        if (notif.recipientId) {
+          sendNotificationToUser(notif.recipientId, notif);
+        }
+      });
+      if (tenantId) {
+        sendNotificationToInstitution(tenantId, { count: notifications.length, message: notificationData.title });
+      }
+    }
     
     logger.info('Notification broadcasted successfully:', { count: notifications.length });
     return createdResponse(res, { count: notifications.length, notifications }, 'Notification sent to ' + notifications.length + ' recipients');
@@ -443,18 +406,8 @@ const bulkDeleteNotifications = async (req, res) => {
     logger.info('Bulk deleting notifications');
     
     const { notificationIds } = req.body;
-    const schoolId = req.user?.schoolId;
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -483,7 +436,7 @@ const bulkDeleteNotifications = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await notificationService.bulkDeleteNotifications(schoolId, userId, notificationIds);
+    const result = await notificationService.bulkDeleteNotifications(userId, notificationIds);
     
     logger.info('Notifications bulk deleted successfully:', { count: result.deletedCount });
     return successResponse(res, { deletedCount: result.deletedCount }, 'Notifications deleted successfully');
@@ -499,18 +452,9 @@ const exportNotifications = async (req, res) => {
     logger.info('Exporting notifications data');
     
     const { format, type, priority, isRead } = req.query;
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -538,7 +482,7 @@ const exportNotifications = async (req, res) => {
     }
     
     const exportData = await notificationService.exportNotifications({
-      schoolId,
+      tenantId,
       userId,
       format: format.toLowerCase(),
       type,
@@ -559,18 +503,9 @@ const getNotificationStatistics = async (req, res) => {
   try {
     logger.info('Fetching notification statistics');
     
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -583,7 +518,7 @@ const getNotificationStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const statistics = await notificationService.getNotificationStatistics(schoolId, userId);
+    const statistics = await notificationService.getNotificationStatistics(tenantId, userId);
     
     logger.info('Notification statistics fetched successfully');
     return successResponse(res, statistics, 'Statistics retrieved successfully');
@@ -600,18 +535,9 @@ const getNotificationsByType = async (req, res) => {
     
     const { type } = req.params;
     const { page, limit } = req.query;
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -641,7 +567,7 @@ const getNotificationsByType = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await notificationService.getNotificationsByType(schoolId, userId, type, {
+    const result = await notificationService.getNotificationsByType(tenantId, userId, type, {
       page: pageNum,
       limit: limitNum
     });
@@ -659,18 +585,9 @@ const clearReadNotifications = async (req, res) => {
   try {
     logger.info('Clearing all read notifications');
     
-    const schoolId = req.user?.schoolId;
+    const tenantId = getTenantId(req);
     const userId = req.user?.id;
-    
-    // Validation
     const errors = [];
-    
-    if (!schoolId) {
-      errors.push('School ID is required');
-    } else {
-      const schoolIdError = validateObjectId(schoolId, 'School ID');
-      if (schoolIdError) errors.push(schoolIdError);
-    }
     
     if (!userId) {
       errors.push('User ID is required');
@@ -683,7 +600,7 @@ const clearReadNotifications = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await notificationService.clearReadNotifications(schoolId, userId);
+    const result = await notificationService.clearReadNotifications(tenantId, userId);
     
     logger.info('Read notifications cleared successfully:', { count: result.deletedCount });
     return successResponse(res, { deletedCount: result.deletedCount }, 'Read notifications cleared successfully');
@@ -696,9 +613,25 @@ const clearReadNotifications = async (req, res) => {
 // Helper functions
 async function sendEmailNotification(notification) {
   try {
-    logger.info('Sending email notification');
-    // Email sending logic would go here
-    logger.info('Email notification sent successfully');
+    const { userId, title, message, institutionId } = notification;
+    const User = mongoose.model('User');
+    const user = await User.findById(userId).select('email name').lean();
+    if (!user?.email) {
+      logger.warn('No email found for notification recipient:', userId);
+      return;
+    }
+    await emailService.sendMailSafe({
+      to: user.email,
+      subject: `Notification: ${title || 'EduSearch Update'}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; padding:20px; max-width:600px">
+          <h2 style="color:#6366f1">${title || 'Notification'}</h2>
+          <p>${message || 'No details provided.'}</p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0">
+          <p style="color:#6b7280;font-size:12px">This is an automated message from EduSearch.</p>
+        </div>
+      `
+    });
   } catch (error) {
     logger.error('Email notification error:', error);
   }

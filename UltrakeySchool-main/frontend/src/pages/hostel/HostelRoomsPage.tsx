@@ -1,7 +1,9 @@
 // frontend/src/pages/hostel/HostelRoomsPage.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 interface HostelRoom {
   _id: string;
@@ -30,6 +32,26 @@ const HostelRoomsPage: React.FC = () => {
     capacity: '1',
     rent: ''
   });
+
+  const exportColumns: ExportColumn[] = [
+    { key: 'roomNumber', label: 'Room No', format: (v, row) => v || row.roomNo || row.name || '' },
+    { key: 'type', label: 'Room Type', format: (_, row) => row.type?.name || row.roomType?.name || row.type || row.roomType || 'N/A' },
+    { key: 'capacity', label: 'Capacity', format: (v) => String(v || 0) },
+    { key: 'occupied', label: 'Occupied', format: (v, row) => String(v || row.occupiedBeds || 0) },
+    { key: 'available', label: 'Available', format: (_, row) => String((row.capacity || 0) - (row.occupied || row.occupiedBeds || 0)) },
+    { key: 'floor', label: 'Floor', format: (v) => v ? String(v) : 'N/A' },
+    { key: 'status', label: 'Status' },
+  ];
+
+  const handleExport = (type: 'pdf' | 'excel') => {
+    const data = rooms || [];
+    if (!data.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(data, 'hostel-rooms', exportColumns, 'Hostel Rooms');
+    } else {
+      exportToExcel(data, 'hostel-rooms', exportColumns);
+    }
+  };
 
   useEffect(() => {
     fetchRooms();
@@ -74,6 +96,7 @@ const HostelRoomsPage: React.FC = () => {
       if (response.data && response.data.success) {
         const newRoom = response.data.data?.room || response.data.data;
         setRooms([...rooms, newRoom]);
+        toast.success('Room added successfully');
       }
       setShowAddModal(false);
       setFormData({
@@ -85,7 +108,9 @@ const HostelRoomsPage: React.FC = () => {
       });
     } catch (err: any) {
       console.error('Error adding room:', err);
-      setError(err.response?.data?.message || 'Failed to add room');
+      const msg = err.response?.data?.message || 'Failed to add room';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -113,6 +138,7 @@ const HostelRoomsPage: React.FC = () => {
         capacity: parseInt(formData.capacity),
         rent: formData.rent
       });
+      toast.success('Room updated successfully');
       setRooms(rooms.map(room => 
         room._id === selectedRoom._id
           ? { 
@@ -136,7 +162,9 @@ const HostelRoomsPage: React.FC = () => {
       });
     } catch (err: any) {
       console.error('Error updating room:', err);
-      setError(err.response?.data?.message || 'Failed to update room');
+      const msg = err.response?.data?.message || 'Failed to update room';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -144,12 +172,15 @@ const HostelRoomsPage: React.FC = () => {
     if (!selectedRoom) return;
     try {
       await apiClient.delete(`/hostel/rooms/${selectedRoom._id}`);
+      toast.success('Room deleted successfully');
       setRooms(rooms.filter(room => room._id !== selectedRoom._id));
       setShowDeleteModal(false);
       setSelectedRoom(null);
     } catch (err: any) {
       console.error('Error deleting room:', err);
-      setError(err.response?.data?.message || 'Failed to delete room');
+      const msg = err.response?.data?.message || 'Failed to delete room';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -192,22 +223,22 @@ const HostelRoomsPage: React.FC = () => {
               </button>
             </div>
             <div className="dropdown me-2 mb-2">
-              <button 
-                className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
-                data-bs-toggle="dropdown"
-              >
-                <i className="ti ti-file-export me-2"></i>Export
+              <button className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center" data-bs-toggle="dropdown">
+                <i className="ti ti-file-export me-2" />
+                Export
               </button>
               <ul className="dropdown-menu dropdown-menu-end p-3">
                 <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
-                  </a>
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('pdf')}>
+                    <i className="ti ti-file-type-pdf me-2" />
+                    Export as PDF
+                  </button>
                 </li>
                 <li>
-                  <a href="#!" className="dropdown-item rounded-1">
-                    <i className="ti ti-file-type-xls me-1"></i>Export as Excel
-                  </a>
+                  <button className="dropdown-item rounded-1" onClick={() => handleExport('excel')}>
+                    <i className="ti ti-file-type-xls me-2" />
+                    Export as Excel
+                  </button>
                 </li>
               </ul>
             </div>

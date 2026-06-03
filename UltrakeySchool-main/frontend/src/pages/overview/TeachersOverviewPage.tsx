@@ -67,13 +67,10 @@ const TeachersOverviewPage: React.FC = () => {
       
       const response = await apiClient.get('/analytics/teachers-overview')
       
-      console.log('Teachers Overview API Response:', response.data)
-      
       if (response.data.success && response.data.data) {
         setDashboardData(response.data.data)
         toast.success('Teachers Overview loaded successfully')
       } else {
-        console.error('API response structure:', response.data)
         setError('Invalid API response structure')
       }
     } catch (err: any) {
@@ -323,7 +320,7 @@ const TeachersOverviewPage: React.FC = () => {
                     <tbody>
                       {dashboardData.recentTeachers.map((teacher: { id: React.Key | null | undefined; name: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; email: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; department: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; subject: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | React.ReactPortal | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined; joinDate: string | number | Date; status: string }) => (
                         <tr key={teacher.id}>
-                          <td>{teacher.name}</td>
+                          <td>{teacher.name || 'N/A'}</td>
                           <td>{teacher.email}</td>
                           <td>{teacher.department}</td>
                           <td>{teacher.subject}</td>

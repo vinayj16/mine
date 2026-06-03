@@ -4,8 +4,8 @@ const classPeriodSchema = new mongoose.Schema({
   periodNumber: { type: Number, required: true },
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },
-  subjectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true },
-  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+  subjectId: { type: String },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   roomNumber: String,
   periodType: { 
     type: String, 
@@ -15,9 +15,9 @@ const classPeriodSchema = new mongoose.Schema({
 }, { _id: true });
 
 const classTimetableSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -46,7 +46,7 @@ const classTimetableSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-classTimetableSchema.index({ schoolId: 1, classId: 1, dayOfWeek: 1 });
+classTimetableSchema.index({ institutionId: 1, classId: 1, dayOfWeek: 1 });
 classTimetableSchema.index({ academicYear: 1, isActive: 1 });
 
 export default mongoose.model('ClassTimetable', classTimetableSchema);

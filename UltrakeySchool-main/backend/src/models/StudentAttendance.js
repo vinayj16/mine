@@ -98,6 +98,6 @@ studentAttendanceSchema.index(
   { unique: true, sparse: true }
 );
 
-const StudentAttendance = mongoose.model('StudentAttendance', studentAttendanceSchema);
+const StudentAttendance = mongoose.model('StudentAttendance', studentAttendanceSchema, 'attendances');
 
 export default StudentAttendance;

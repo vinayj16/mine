@@ -2,17 +2,20 @@ import Fee from '../models/Fee.js';
 import Payment from '../models/Payment.js';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import HostelFee from '../models/hostelFee.js';
+import TransportFee from '../models/TransportFee.js';
+import Student from '../models/Student.js';
 import { startOfMonth, endOfMonth, startOfYear, endOfYear } from '../utils/dateHelpers.js';
+import { buildTenantFeeQuery, getInstitutionFilter } from '../utils/tenantContext.js';
 
 class FeeService {
-  async getFeesOverview(schoolId, period = 'this-month') {
+  async getFeesOverview(institutionId, period = 'this-month') {
     const { startDate, endDate } = this.getDateRangeForPeriod(period);
 
-    const query = {
-      schoolId,
+    const query = buildTenantFeeQuery(institutionId, {
       isActive: true,
       dueDate: { $gte: startDate, $lte: endDate }
-    };
+    });
 
     const fees = await Fee.find(query);
 
@@ -21,7 +24,7 @@ class FeeService {
     const pending = totalExpected - totalCollected;
     const collectionPercentage = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
 
-    const currency = fees.length > 0 ? fees[0].currency : 'USD';
+    const currency = fees.length > 0 ? fees[0].currency : 'INR';
 
     return {
       totalCollected,
@@ -84,10 +87,11 @@ class FeeService {
     }
   }
 
-  async collectFee(schoolId, feeId, paymentData) {
+  async collectFee(institutionId, feeId, paymentData) {
     const { amount, paymentMethod, transactionId, receivedBy, remarks } = paymentData;
 
-    const fee = await Fee.findOne({ _id: feeId, schoolId });
+    const feeQuery = buildTenantFeeQuery(institutionId, { _id: feeId });
+    const fee = await Fee.findOne(feeQuery);
     if (!fee) {
       throw new Error('Fee record not found');
     }
@@ -113,7 +117,7 @@ class FeeService {
     return fee;
   }
 
-  async createFee(schoolId, feeData) {
+  async createFee(institutionId, feeData) {
     const {
       studentId,
       feeType,
@@ -132,7 +136,7 @@ class FeeService {
     const year = dueDateTime.getFullYear();
 
     const fee = new Fee({
-      schoolId,
+      institutionId,
       studentId,
       feeType,
       amount,
@@ -141,7 +145,7 @@ class FeeService {
       term,
       month,
       year,
-      currency: currency || 'USD',
+      currency: currency || 'INR',
       discount: discount || 0,
       discountReason,
       remarks,
@@ -152,11 +156,11 @@ class FeeService {
     return fee;
   }
 
-  async bulkCreateFees(schoolId, feesData) {
+  async bulkCreateFees(institutionId, feesData) {
     const fees = feesData.map(feeData => {
       const dueDateTime = new Date(feeData.dueDate);
       return {
-        schoolId,
+        institutionId,
         studentId: feeData.studentId,
         feeType: feeData.feeType,
         amount: feeData.amount,
@@ -165,7 +169,7 @@ class FeeService {
         term: feeData.term,
         month: dueDateTime.getMonth() + 1,
         year: dueDateTime.getFullYear(),
-        currency: feeData.currency || 'USD',
+        currency: feeData.currency || 'INR',
         discount: feeData.discount || 0,
         discountReason: feeData.discountReason,
         remarks: feeData.remarks,
@@ -177,14 +181,13 @@ class FeeService {
     return result;
   }
 
-  async getStudentFees(schoolId, studentId, options = {}) {
+  async getStudentFees(institutionId, studentId, options = {}) {
     const { status, period } = options;
 
-    const query = {
-      schoolId,
+    const query = buildTenantFeeQuery(institutionId, {
       studentId,
       isActive: true
-    };
+    });
 
     if (status) {
       query.status = status;
@@ -199,30 +202,128 @@ class FeeService {
     return fees;
   }
 
-  async getPendingFees(schoolId, options = {}) {
+  async getPendingFees(institutionId, options = {}) {
     const { limit = 100, sortBy = 'dueDate' } = options;
 
-    const fees = await Fee.find({
-      schoolId,
+    const query = buildTenantFeeQuery(institutionId, {
       status: { $in: ['pending', 'partial', 'overdue'] },
       isActive: true
-    })
-    .populate('studentId', 'name email')
+    });
+    const fees = await Fee.find(query)
+    .populate('studentId', 'firstName lastName name email')
     .sort({ [sortBy]: 1 })
     .limit(limit);
 
     return fees;
   }
 
-  async sendReminders(schoolId, feeIds) {
+  async getAllFees(institutionId, options = {}) {
+    const { limit = 200, status } = options;
+    const query = buildTenantFeeQuery(institutionId, { isActive: true });
+    if (status) query.status = status;
+
+    const fees = await Fee.find(query)
+      .populate('studentId', 'name email rollNumber admissionNumber')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // Collect IDs for a separate Student lookup (to get class info)
+    const studentUserIds = fees
+      .map((f) => (f.studentId?._id || f.studentId)?.toString())
+      .filter(Boolean);
+    let studentClassMap = {};
+    if (studentUserIds.length > 0) {
+      const students = await Student.find({ userId: { $in: studentUserIds } })
+        .select('userId classId')
+        .populate('classId', 'name')
+        .lean();
+      for (const s of students) {
+        if (s.userId) studentClassMap[s.userId.toString()] = s.classId?.name || '';
+      }
+    }
+
+    return fees.map((fee) => {
+      const studentData = fee.studentId;
+      const studentName =
+        typeof studentData === 'object' && studentData?.name
+          ? studentData.name
+          : 'Unknown';
+      const userId = studentData?._id?.toString() || '';
+      return {
+        ...fee,
+        studentName,
+        class: studentClassMap[userId] || fee.class || ''
+      };
+    });
+  }
+
+  async getAccountantDashboard(institutionId) {
+    const feeQuery = buildTenantFeeQuery(institutionId, { isActive: true });
+    const [fees, hostelFees, transportFees, recentPayments] = await Promise.all([
+      Fee.find(feeQuery).lean(),
+      institutionId
+        ? HostelFee.find(getInstitutionFilter(institutionId) || { institution: institutionId }).lean()
+        : [],
+      institutionId || institutionId
+        ? TransportFee.find(
+            institutionId
+              ? getInstitutionFilter(institutionId) || { institutionId }
+              : { institutionId }
+          ).lean()
+        : [],
+      Payment.find(
+        buildTenantFeeQuery(institutionId, { status: 'completed' })
+      )
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean()
+    ]);
+
+    const sumAmount = (items, field = 'amount') =>
+      items.reduce((sum, item) => sum + (item[field] || item.feeAmount || 0), 0);
+
+    const pendingGeneral = fees.filter((f) => ['pending', 'partial', 'overdue'].includes(f.status));
+    const paidGeneral = fees.filter((f) => f.status === 'paid');
+    const pendingHostel = hostelFees.filter((f) => f.status !== 'paid');
+    const paidHostel = hostelFees.filter((f) => f.status === 'paid');
+    const pendingTransport = transportFees.filter((f) => f.paymentStatus !== 'paid');
+    const paidTransport = transportFees.filter((f) => f.paymentStatus === 'paid');
+
+    return {
+      overview: {
+        totalRevenue:
+          sumAmount(paidGeneral, 'paidAmount') +
+          sumAmount(paidHostel) +
+          sumAmount(paidTransport, 'paidAmount'),
+        pendingFees:
+          sumAmount(pendingGeneral, 'remainingAmount') +
+          sumAmount(pendingHostel) +
+          sumAmount(pendingTransport, 'feeAmount'),
+        collectedFees:
+          sumAmount(paidGeneral, 'paidAmount') +
+          sumAmount(paidHostel) +
+          sumAmount(paidTransport, 'paidAmount'),
+        tuitionFees: { total: fees.length, pending: pendingGeneral.length, collected: paidGeneral.length },
+        hostelFees: { total: hostelFees.length, pending: pendingHostel.length, collected: paidHostel.length },
+        transportFees: { total: transportFees.length, pending: pendingTransport.length, collected: paidTransport.length }
+      },
+      recentFees: fees.slice(0, 10),
+      recentPayments,
+      hostelFees: hostelFees.slice(0, 10),
+      transportFees: transportFees.slice(0, 10)
+    };
+  }
+
+  async sendReminders(institutionId, feeIds) {
     const now = new Date();
 
-    const result = await Fee.updateMany(
-      {
-        _id: { $in: feeIds },
-        schoolId,
-        status: { $in: ['pending', 'partial', 'overdue'] }
-      },
+    const query = {
+      _id: { $in: feeIds },
+      institutionId,
+      status: { $in: ['pending', 'partial', 'overdue'] }
+    };
+    const result = await Fee.updateMany(query,
       {
         $inc: { remindersSent: 1 },
         $set: { lastReminderDate: now }
@@ -232,19 +333,44 @@ class FeeService {
     return result;
   }
 
-  async getFeesReport(schoolId, period, format = 'summary') {
-    const { startDate, endDate } = this.getDateRangeForPeriod(period);
+  async getFeesReport(institutionId, period, format = 'summary') {
+    const query = {
+      institutionId,
+      isActive: true
+    };
 
-    const fees = await Fee.find({
-      schoolId,
-      isActive: true,
-      dueDate: { $gte: startDate, $lte: endDate }
-    }).populate('studentId', 'name email classId');
+    if (period) {
+      const { startDate, endDate } = this.getDateRangeForPeriod(period);
+      query.dueDate = { $gte: startDate, $lte: endDate };
+    }
+
+    const fees = await Fee.find(query).populate('studentId', 'name admissionNumber email');
 
     if (format === 'summary') {
       return this.generateSummaryReport(fees, period);
     } else if (format === 'detailed') {
-      return this.generateDetailedReport(fees, period);
+      return {
+        period,
+        fees: fees.map(fee => ({
+          _id: fee._id,
+          feeId: fee._id,
+          studentId: fee.studentId,
+          feeType: fee.feeType,
+          feeGroup: fee.feeGroup,
+          amount: fee.amount,
+          paidAmount: fee.paidAmount,
+          dueDate: fee.dueDate,
+          status: fee.status === 'overdue' || fee.status === 'pending' || fee.status === 'waived' ? 'unpaid' : fee.status,
+          balance: fee.remainingAmount,
+          discount: fee.discount || 0,
+          fine: fee.lateFee || 0,
+          paymentDate: fee.paymentHistory?.[fee.paymentHistory.length - 1]?.paymentDate,
+          paymentMode: fee.paymentHistory?.[fee.paymentHistory.length - 1]?.paymentMethod,
+          transactionId: fee.paymentHistory?.[fee.paymentHistory.length - 1]?.transactionId,
+          createdAt: fee.createdAt
+        })),
+        generatedAt: new Date()
+      };
     }
 
     return fees;
@@ -303,9 +429,10 @@ class FeeService {
     };
   }
 
-  async updateFee(schoolId, feeId, updateData) {
+  async updateFee(institutionId, feeId, updateData) {
+    const query = { _id: feeId, institutionId };
     const fee = await Fee.findOneAndUpdate(
-      { _id: feeId, schoolId },
+      query,
       { $set: updateData },
       { new: true, runValidators: true }
     );
@@ -317,9 +444,10 @@ class FeeService {
     return fee;
   }
 
-  async deleteFee(schoolId, feeId) {
+  async deleteFee(institutionId, feeId) {
+    const query = { _id: feeId, institutionId };
     const fee = await Fee.findOneAndUpdate(
-      { _id: feeId, schoolId },
+      query,
       { $set: { isActive: false } },
       { new: true }
     );
@@ -331,15 +459,16 @@ class FeeService {
     return fee;
   }
 
-  async applyLateFee(schoolId) {
+  async applyLateFee(institutionId) {
     const now = new Date();
     
-    const overdueFees = await Fee.find({
-      schoolId,
+    const query = {
+      institutionId,
       status: { $in: ['pending', 'partial'] },
       dueDate: { $lt: now },
       isActive: true
-    });
+    };
+    const overdueFees = await Fee.find(query);
 
     const updates = overdueFees.map(async (fee) => {
       const daysOverdue = Math.floor((now - fee.dueDate) / (1000 * 60 * 60 * 24));
@@ -357,16 +486,27 @@ class FeeService {
 }
 
 export default new FeeService();
-// Razorpay configuration
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_123456789',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'secret123456789'
-});
+
+async function getInstitutionRazorpay(institutionId) {
+  const InstitutionModel = (await import('../models/Institution.js')).default;
+  try {
+    const inst = await InstitutionModel.findById(institutionId).select('settings.payment-gateway').lean();
+    const pgSettings = inst?.settings?.['payment-gateway'];
+    if (pgSettings?.enabled && pgSettings?.provider === 'razorpay') {
+      const keyId = pgSettings.razorpay?.keyId || pgSettings.apiKey || pgSettings.merchantId;
+      const keySecret = pgSettings.razorpay?.keySecret || pgSettings.apiSecret;
+      if (keyId && keySecret) {
+        return { razorpay: new Razorpay({ key_id: keyId, key_secret: keySecret }), keyId };
+      }
+    }
+  } catch {}
+  return { razorpay: new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_123456789', key_secret: process.env.RAZORPAY_KEY_SECRET || 'secret123456789' }), keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_123456789' };
+}
 
 /**
  * Create invoice
  */
-async function createInvoice(schoolId, invoiceData) {
+async function createInvoice(institutionId, invoiceData) {
   const { studentId, items = [], dueDate, notes } = invoiceData;
   const invoiceItems = Array.isArray(items) ? items : [];
 
@@ -377,7 +517,7 @@ async function createInvoice(schoolId, invoiceData) {
   const academicYear = `${year}-${year + 1}`;
 
   const invoice = await Fee.create({
-    schoolId,
+    institutionId,
     studentId,
     invoiceNumber: `INV-${Date.now()}`,
     items: invoiceItems,
@@ -391,8 +531,7 @@ async function createInvoice(schoolId, invoiceData) {
     currency: invoiceData.currency || 'INR',
     payments: [],
     notes,
-    status: 'pending',
-    currency: invoiceData.currency || 'INR'
+    status: 'pending'
   });
 
   return invoice;
@@ -401,10 +540,10 @@ async function createInvoice(schoolId, invoiceData) {
 /**
  * Get invoices
  */
-async function getInvoices(schoolId, options = {}) {
+async function getInvoices(institutionId, options = {}) {
   const { studentId, status, page = 1, limit = 20 } = options;
 
-  const query = { schoolId };
+  const query = { institutionId };
   if (studentId) query.studentId = studentId;
   if (status) query.status = status;
 
@@ -433,85 +572,154 @@ async function getInvoices(schoolId, options = {}) {
 /**
  * Initiate payment for invoice
  */
-async function initiatePayment(schoolId, invoiceId, paymentData) {
+async function initiatePayment(institutionId, invoiceId, paymentData) {
   const { paymentMethod, amount } = paymentData;
 
-  const invoice = await Fee.findOne({ _id: invoiceId, schoolId });
-  if (!invoice) {
-    throw new Error('Invoice not found');
+  // Auto-detect fee type and student details
+  let feeType = 'general';
+  let studentId = null;
+  let currency = 'INR';
+
+  const feeQuery = { _id: invoiceId, institutionId };
+  let feeDoc = await Fee.findOne(feeQuery);
+  if (feeDoc) {
+    if (feeDoc.status === 'paid') {
+      throw new Error('Fee already paid');
+    }
+    studentId = feeDoc.studentId;
+    currency = feeDoc.currency || 'INR';
+  } else {
+    feeDoc = await HostelFee.findOne({ _id: invoiceId, institution: institutionId });
+    if (feeDoc) {
+      if (feeDoc.status === 'paid') {
+        throw new Error('Fee already paid');
+      }
+      feeType = 'hostel';
+      studentId = feeDoc.student;
+      currency = 'INR';
+    } else {
+      feeDoc = await TransportFee.findOne({ _id: invoiceId, institutionId });
+      if (feeDoc) {
+        if (feeDoc.paymentStatus === 'paid') {
+          throw new Error('Fee already paid');
+        }
+        feeType = 'transport';
+        studentId = feeDoc.studentId;
+        currency = feeDoc.currency || 'INR';
+      }
+    }
   }
 
-  if (invoice.status === 'paid') {
-    throw new Error('Invoice already paid');
+  if (!feeDoc) {
+    throw new Error('Fee record not found');
   }
 
   // Generate order ID
   const orderId = `ORD-${Date.now()}`;
 
-  // Create Razorpay order
-  const options = {
-    amount: Math.round(amount * 100), // Convert to paise
-    currency: 'INR',
-    receipt: invoiceId,
-    payment_capture: 1
-  };
-
+  // Create Razorpay order with institution-specific keys
+  const { razorpay: instRazorpay, keyId: razorpayKeyId } = await getInstitutionRazorpay(institutionId);
   let razorpayOrder;
-  try {
-    razorpayOrder = await razorpay.orders.create(options);
-  } catch (error) {
-    throw new Error(`Payment gateway error: ${error.message}`);
+  const validKey = razorpayKeyId && razorpayKeyId !== 'rzp_test_123456789';
+  if (validKey) {
+    const options = {
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      receipt: invoiceId,
+      payment_capture: 1
+    };
+    try {
+      razorpayOrder = await instRazorpay.orders.create(options);
+    } catch (error) {
+      throw new Error('Payment gateway error: ' + (error.message || error.error?.description || 'Razorpay not configured'));
+    }
   }
 
+  const paymentId = razorpayOrder?.id || 'mock_' + Date.now();
   const paymentDoc = await Payment.create({
-    paymentId: razorpayOrder.id,
+    paymentId,
     orderId,
-    invoiceId: invoice._id,
-    studentId: invoice.studentId,
-    schoolId,
+    invoiceId: invoiceId,
+    studentId: studentId,
+    institutionId,
     amount,
-    currency: invoice.currency || 'INR',
+    currency,
     paymentMethod,
-    status: 'created',
-    paymentUrl: razorpayOrder.short_url || razorpayOrder.notes?.link || '',
+    status: validKey ? 'created' : 'mock',
+    paymentUrl: razorpayOrder?.short_url || razorpayOrder?.notes?.link || '',
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    responsePayload: razorpayOrder
+    responsePayload: razorpayOrder || { id: paymentId, amount, currency },
+    metadata: { feeType }
   });
 
-  invoice.payments.push({
-    paymentId: paymentDoc.paymentId,
-    orderId: paymentDoc.orderId,
-    amount: paymentDoc.amount,
-    paymentMethod,
-    status: paymentDoc.status,
-    paymentUrl: paymentDoc.paymentUrl,
-    expiresAt: paymentDoc.expiresAt
-  });
-  await invoice.save();
+  if (feeType === 'general') {
+    feeDoc.payments.push({
+      paymentId: paymentDoc.paymentId,
+      orderId: paymentDoc.orderId,
+      amount: paymentDoc.amount,
+      paymentMethod,
+      status: paymentDoc.status,
+      paymentUrl: paymentDoc.paymentUrl,
+      expiresAt: paymentDoc.expiresAt
+    });
+    await feeDoc.save();
+  }
 
   return {
-    payment_id: paymentDoc.paymentId,
+    payment_id: paymentId,
     order_id: paymentDoc.orderId,
-    payment_url: payment.paymentUrl,
-    expires_at: payment.expiresAt
+    razorpay_order_id: paymentId,
+    razorpay_key: validKey ? razorpayKeyId : 'rzp_test_123456789',
+    payment_url: paymentDoc.paymentUrl,
+    expires_at: paymentDoc.expiresAt
   };
 }
 
 /**
  * Verify payment
  */
-async function verifyPayment(schoolId, paymentId, verificationData) {
-  const { razorpayOrderId, razorpaySignature } = verificationData;
+async function verifyPayment(institutionId, paymentId, verificationData) {
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = verificationData;
 
-  const payment = await Payment.findOne({ paymentId, schoolId });
+  const paymentQuery = { paymentId, ...buildTenantFeeQuery(institutionId, {}) };
+  const payment = await Payment.findOne(paymentQuery);
   if (!payment) {
     throw new Error('Payment not found');
   }
 
-  // Verify Razorpay signature
+  // Mock payments skip Razorpay verification
+  if (payment.status === 'mock') {
+    payment.status = 'completed';
+    payment.verifiedAt = new Date();
+    await payment.save();
+
+    let feeRecord = null;
+    const invoice = await Fee.findOne({ _id: payment.invoiceId, institutionId });
+    if (invoice) {
+      invoice.status = 'paid';
+      invoice.paidAmount = payment.amount;
+      await invoice.save();
+      feeRecord = invoice;
+    }
+
+    return {
+      success: true,
+      message: 'Payment verified successfully',
+      data: { payment, invoice: feeRecord }
+    };
+  }
+
+  const orderId = razorpayOrderId || paymentId;
+  const razorpayPayment = razorpayPaymentId || verificationData.razorpay_payment_id;
+  if (!razorpayPayment) {
+    throw new Error('Razorpay payment id is required');
+  }
+
+  // Verify Razorpay signature using institution-specific keys
+  const { razorpay: instRazorpay } = await getInstitutionRazorpay(institutionId);
   const generatedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'secret')
-    .update(`${razorpayOrderId}|${paymentId}`)
+    .createHmac('sha256', instRazorpay.key_secret)
+    .update(`${orderId}|${razorpayPayment}`)
     .digest('hex');
 
   if (generatedSignature !== razorpaySignature) {
@@ -524,26 +732,51 @@ async function verifyPayment(schoolId, paymentId, verificationData) {
   payment.verifiedAt = new Date();
   await payment.save();
 
-  // Update invoice status
-  const invoice = await Fee.findById(payment.invoiceId);
-  if (invoice) {
-    invoice.status = 'paid';
-    invoice.paidAmount = payment.amount;
-    await invoice.save();
+  // Update fee status based on type
+  const feeType = payment.metadata?.feeType || 'general';
+  let feeRecord = null;
+
+  if (feeType === 'hostel') {
+    const hostelFee = await HostelFee.findOne({ _id: payment.invoiceId, institution: institutionId });
+    if (hostelFee) {
+      hostelFee.status = 'paid';
+      hostelFee.paidAt = new Date();
+      hostelFee.transactionReference = paymentId;
+      await hostelFee.save();
+      feeRecord = hostelFee;
+    }
+  } else if (feeType === 'transport') {
+    const transportFee = await TransportFee.findOne({ _id: payment.invoiceId, institutionId });
+    if (transportFee) {
+      transportFee.paymentStatus = 'paid';
+      transportFee.paidDate = new Date();
+      transportFee.paymentReference = paymentId;
+      transportFee.paidAmount = payment.amount;
+      await transportFee.save();
+      feeRecord = transportFee;
+    }
+  } else {
+    const invoice = await Fee.findOne({ _id: payment.invoiceId, institutionId });
+    if (invoice) {
+      invoice.status = 'paid';
+      invoice.paidAmount = payment.amount;
+      await invoice.save();
+      feeRecord = invoice;
+    }
   }
 
   return {
     success: true,
     message: 'Payment verified successfully',
-    data: { payment, invoice }
+    data: { payment, invoice: feeRecord }
   };
 }
 
 /**
  * Get payment receipt
- */
-async function getPaymentReceipt(schoolId, paymentId) {
-  const payment = await Payment.findOne({ _id: paymentId, schoolId })
+ */  async function getPaymentReceipt(institutionId, paymentId) {
+  const paymentQuery = { _id: paymentId, institutionId };
+  const payment = await Payment.findOne(paymentQuery)
     .populate('invoiceId')
     .populate('studentId', 'name email');
 

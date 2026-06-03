@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/client';
+import { exportToPDF, exportToExcel, type ExportColumn } from '../../utils/exportUtils';
 
 interface LeaveReport {
   _id: string;
@@ -51,9 +52,9 @@ const LeaveReportPage: React.FC = () => {
 
       if (response.data.success) {
         const reports = response.data.data || [];
-        
+
         setLeaveReports(reports);
-        
+
         if (reports.length === 0) {
           toast.info('No leave reports found for the selected filters');
         }
@@ -113,8 +114,26 @@ const LeaveReportPage: React.FC = () => {
     setLeaveReports(sorted);
   };
 
+  const exportColumns: ExportColumn[] = [
+    { key: 'leaveId', label: 'Leave ID', format: (v, row) => v || row._id || '' },
+    { key: 'staffName', label: 'Staff Name' },
+    { key: 'staffId', label: 'Staff ID' },
+    { key: 'leaveType', label: 'Leave Type' },
+    { key: 'startDate', label: 'Start Date', format: (v) => v || '-' },
+    { key: 'endDate', label: 'End Date', format: (v) => v || '-' },
+    { key: 'days', label: 'Days', format: (v, row) => String(v || row.noOfDays || '') },
+    { key: 'status', label: 'Status' },
+    { key: 'appliedOn', label: 'Applied On', format: (v, row) => v ? new Date(v).toLocaleDateString() : (row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '-') },
+    { key: 'reason', label: 'Reason' },
+  ];
+
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export to ${type} feature coming soon`);
+    if (!leaveReports.length) { toast.error('No data to export'); return; }
+    if (type === 'pdf') {
+      exportToPDF(leaveReports, 'leave-report', exportColumns, 'Leave Report');
+    } else {
+      exportToExcel(leaveReports, 'leave-report', exportColumns);
+    }
   };
 
   const getLeaveTypeColor = (leaveType: string) => {
@@ -142,210 +161,210 @@ const LeaveReportPage: React.FC = () => {
   return (
     <>
 
-        {/* Page Header */}
-        <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
-          <div className="my-auto mb-2">
-            <h3 className="page-title mb-1">Leave Report</h3>
-            <nav>
-              <ol className="breadcrumb mb-0">
-                <li className="breadcrumb-item">
-                  <Link to="/">Dashboard</Link>
-                </li>
-                <li className="breadcrumb-item">
-                  <Link to="#">Report</Link>
-                </li>
-                <li className="breadcrumb-item active" aria-current="page">Leave Report</li>
-              </ol>
-            </nav>
+      {/* Page Header */}
+      <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
+        <div className="my-auto mb-2">
+          <h3 className="page-title mb-1">Leave Report</h3>
+          <nav>
+            <ol className="breadcrumb mb-0">
+              <li className="breadcrumb-item">
+                <Link to="/">Dashboard</Link>
+              </li>
+              <li className="breadcrumb-item">
+                <Link to="#">Report</Link>
+              </li>
+              <li className="breadcrumb-item active" aria-current="page">Leave Report</li>
+            </ol>
+          </nav>
+        </div>
+        <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
+          <div className="pe-1 mb-2">
+            <button
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              onClick={handleRefresh}
+              disabled={loading}
+              title="Refresh"
+            >
+              <i className="ti ti-refresh"></i>
+            </button>
           </div>
-          <div className="d-flex my-xl-auto right-content align-items-center flex-wrap">
-            <div className="pe-1 mb-2">
-              <button
-                className="btn btn-outline-light bg-white btn-icon me-1"
-                onClick={handleRefresh}
-                disabled={loading}
-                title="Refresh"
-              >
-                <i className="ti ti-refresh"></i>
-              </button>
+          <div className="pe-1 mb-2">
+            <button
+              type="button"
+              className="btn btn-outline-light bg-white btn-icon me-1"
+              onClick={() => window.print()}
+              title="Print"
+            >
+              <i className="ti ti-printer"></i>
+            </button>
+          </div>
+          <div className="dropdown me-2 mb-2">
+            <button
+              className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
+              data-bs-toggle="dropdown"
+            >
+              <i className="ti ti-file-export me-2"></i>Export
+            </button>
+            <ul className="dropdown-menu dropdown-menu-end p-3">
+              <li>
+                <button
+                  className="dropdown-item rounded-1"
+                  onClick={() => handleExport('pdf')}
+                >
+                  <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
+                </button>
+              </li>
+              <li>
+                <button
+                  className="dropdown-item rounded-1"
+                  onClick={() => handleExport('excel')}
+                >
+                  <i className="ti ti-file-type-xls me-1"></i>Export as Excel
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      {/* /Page Header */}
+
+      {/* Student List */}
+      <div className="card">
+        <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
+          <h4 className="mb-3">Leave Report List</h4>
+          <div className="d-flex align-items-center flex-wrap">
+            <div className="input-icon-start mb-3 me-2 position-relative">
+              <span className="icon-addon">
+                <i className="ti ti-calendar"></i>
+              </span>
+              <input type="text" className="form-control date-range bookingrange" placeholder="Select"
+                value="Academic Year : 2024 / 2025" readOnly />
             </div>
-            <div className="pe-1 mb-2">
-              <button
-                type="button"
-                className="btn btn-outline-light bg-white btn-icon me-1"
-                onClick={() => window.print()}
-                title="Print"
-              >
-                <i className="ti ti-printer"></i>
+            <div className="dropdown mb-3 me-2">
+              <button className="btn btn-outline-light bg-white dropdown-toggle"
+                onClick={() => setShowFilter(!showFilter)}>
+                <i className="ti ti-filter me-2"></i>Filter
               </button>
+              {showFilter && (
+                <div className="dropdown-menu drop-width show" style={{ position: 'absolute', inset: '0px auto auto 0px', margin: '0px', transform: 'translate(0px, 40px)' }}>
+                  <form onSubmit={handleApplyFilters}>
+                    <div className="d-flex align-items-center border-bottom p-3">
+                      <h4>Filter</h4>
+                    </div>
+                    <div className="p-3 border-bottom">
+                      <div className="row">
+                        <div className="col-md-12">
+                          <div className="mb-3">
+                            <label className="form-label">Status</label>
+                            <select className="form-select" name="status" value={filters.status} onChange={handleFilterChange}>
+                              <option value="">Select Status</option>
+                              <option value="pending">Pending</option>
+                              <option value="approved">Approved</option>
+                              <option value="rejected">Rejected</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="col-md-12">
+                          <div className="mb-0">
+                            <label className="form-label">Leave Type</label>
+                            <select className="form-select" name="leaveType" value={filters.leaveType} onChange={handleFilterChange}>
+                              <option value="">Select Type</option>
+                              <option value="casual">Casual</option>
+                              <option value="sick">Sick</option>
+                              <option value="maternity">Maternity</option>
+                              <option value="paternity">Paternity</option>
+                              <option value="annual">Annual</option>
+                              <option value="emergency">Emergency</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-3 d-flex align-items-center justify-content-end">
+                      <button type="button" className="btn btn-light me-3" onClick={resetFilters}>Reset</button>
+                      <button type="submit" className="btn btn-primary">Apply</button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
-            <div className="dropdown me-2 mb-2">
-              <button
-                className="dropdown-toggle btn btn-light fw-medium d-inline-flex align-items-center"
-                data-bs-toggle="dropdown"
-              >
-                <i className="ti ti-file-export me-2"></i>Export
+            <div className="dropdown mb-3">
+              <button className="btn btn-outline-light bg-white dropdown-toggle"
+                data-bs-toggle="dropdown">
+                <i className="ti ti-sort-ascending-2 me-2"></i>Sort by A-Z
               </button>
-              <ul className="dropdown-menu dropdown-menu-end p-3">
+              <ul className="dropdown-menu p-3">
                 <li>
                   <button
-                    className="dropdown-item rounded-1"
-                    onClick={() => handleExport('pdf')}
-                  >
-                    <i className="ti ti-file-type-pdf me-1"></i>Export as PDF
+                    className={`dropdown-item rounded-1 ${sortBy === 'ascending' ? 'active' : ''}`}
+                    onClick={() => handleSort('ascending')}>
+                    Ascending
                   </button>
                 </li>
                 <li>
                   <button
-                    className="dropdown-item rounded-1"
-                    onClick={() => handleExport('excel')}
-                  >
-                    <i className="ti ti-file-type-xls me-1"></i>Export as Excel
+                    className={`dropdown-item rounded-1 ${sortBy === 'descending' ? 'active' : ''}`}
+                    onClick={() => handleSort('descending')}>
+                    Descending
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className={`dropdown-item rounded-1 ${sortBy === 'recently-viewed' ? 'active' : ''}`}
+                    onClick={() => handleSort('recently-viewed')}>
+                    Recently Viewed
+                  </button>
+                </li>
+                <li>
+                  <button
+                    className={`dropdown-item rounded-1 ${sortBy === 'recently-added' ? 'active' : ''}`}
+                    onClick={() => handleSort('recently-added')}>
+                    Recently Added
                   </button>
                 </li>
               </ul>
             </div>
           </div>
         </div>
-        {/* /Page Header */}
+        <div className="card-body p-0 py-3">
+          {/* Loading State */}
+          {loading && (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <p className="mt-2 text-muted">Loading leave reports...</p>
+            </div>
+          )}
 
-        {/* Student List */}
-        <div className="card">
-          <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
-            <h4 className="mb-3">Leave Report List</h4>
-            <div className="d-flex align-items-center flex-wrap">
-              <div className="input-icon-start mb-3 me-2 position-relative">
-                <span className="icon-addon">
-                  <i className="ti ti-calendar"></i>
-                </span>
-                <input type="text" className="form-control date-range bookingrange" placeholder="Select"
-                  value="Academic Year : 2024 / 2025" readOnly />
-              </div>
-              <div className="dropdown mb-3 me-2">
-                <button className="btn btn-outline-light bg-white dropdown-toggle"
-                  onClick={() => setShowFilter(!showFilter)}>
-                  <i className="ti ti-filter me-2"></i>Filter
+          {/* Error State */}
+          {error && !loading && (
+            <div className="p-3">
+              <div className="alert alert-danger" role="alert">
+                <i className="ti ti-alert-circle me-2"></i>
+                {error}
+                <button
+                  className="btn btn-sm btn-outline-danger ms-3"
+                  onClick={fetchLeaveReports}
+                >
+                  <i className="ti ti-refresh me-1"></i>Retry
                 </button>
-                {showFilter && (
-                  <div className="dropdown-menu drop-width show" style={{ position: 'absolute', inset: '0px auto auto 0px', margin: '0px', transform: 'translate(0px, 40px)' }}>
-                    <form onSubmit={handleApplyFilters}>
-                      <div className="d-flex align-items-center border-bottom p-3">
-                        <h4>Filter</h4>
-                      </div>
-                      <div className="p-3 border-bottom">
-                        <div className="row">
-                          <div className="col-md-12">
-                            <div className="mb-3">
-                              <label className="form-label">Status</label>
-                              <select className="form-select" name="status" value={filters.status} onChange={handleFilterChange}>
-                                <option value="">Select Status</option>
-                                <option value="pending">Pending</option>
-                                <option value="approved">Approved</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="cancelled">Cancelled</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="col-md-12">
-                            <div className="mb-0">
-                              <label className="form-label">Leave Type</label>
-                              <select className="form-select" name="leaveType" value={filters.leaveType} onChange={handleFilterChange}>
-                                <option value="">Select Type</option>
-                                <option value="casual">Casual</option>
-                                <option value="sick">Sick</option>
-                                <option value="maternity">Maternity</option>
-                                <option value="paternity">Paternity</option>
-                                <option value="annual">Annual</option>
-                                <option value="emergency">Emergency</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-3 d-flex align-items-center justify-content-end">
-                        <button type="button" className="btn btn-light me-3" onClick={resetFilters}>Reset</button>
-                        <button type="submit" className="btn btn-primary">Apply</button>
-                      </div>
-                    </form>
-                  </div>
-                )}
-              </div>
-              <div className="dropdown mb-3">
-                <button className="btn btn-outline-light bg-white dropdown-toggle"
-                  data-bs-toggle="dropdown">
-                  <i className="ti ti-sort-ascending-2 me-2"></i>Sort by A-Z
-                </button>
-                <ul className="dropdown-menu p-3">
-                  <li>
-                    <button 
-                      className={`dropdown-item rounded-1 ${sortBy === 'ascending' ? 'active' : ''}`}
-                      onClick={() => handleSort('ascending')}>
-                      Ascending
-                    </button>
-                  </li>
-                  <li>
-                    <button 
-                      className={`dropdown-item rounded-1 ${sortBy === 'descending' ? 'active' : ''}`}
-                      onClick={() => handleSort('descending')}>
-                      Descending
-                    </button>
-                  </li>
-                  <li>
-                    <button 
-                      className={`dropdown-item rounded-1 ${sortBy === 'recently-viewed' ? 'active' : ''}`}
-                      onClick={() => handleSort('recently-viewed')}>
-                      Recently Viewed
-                    </button>
-                  </li>
-                  <li>
-                    <button 
-                      className={`dropdown-item rounded-1 ${sortBy === 'recently-added' ? 'active' : ''}`}
-                      onClick={() => handleSort('recently-added')}>
-                      Recently Added
-                    </button>
-                  </li>
-                </ul>
               </div>
             </div>
-          </div>
-          <div className="card-body p-0 py-3">
-            {/* Loading State */}
-            {loading && (
-              <div className="text-center py-5">
-                <div className="spinner-border text-primary" role="status">
-                  <span className="visually-hidden">Loading...</span>
-                </div>
-                <p className="mt-2 text-muted">Loading leave reports...</p>
-              </div>
-            )}
+          )}
 
-            {/* Error State */}
-            {error && !loading && (
-              <div className="p-3">
-                <div className="alert alert-danger" role="alert">
-                  <i className="ti ti-alert-circle me-2"></i>
-                  {error}
-                  <button
-                    className="btn btn-sm btn-outline-danger ms-3"
-                    onClick={fetchLeaveReports}
-                  >
-                    <i className="ti ti-refresh me-1"></i>Retry
-                  </button>
-                </div>
-              </div>
-            )}
+          {/* Empty State */}
+          {!loading && !error && leaveReports.length === 0 && (
+            <div className="text-center py-5">
+              <i className="ti ti-calendar-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
+              <p className="mt-2 text-muted">No leave reports found</p>
+              <p className="text-muted small">Leave reports will appear here once staff members apply for leave</p>
+            </div>
+          )}
 
-            {/* Empty State */}
-            {!loading && !error && leaveReports.length === 0 && (
-              <div className="text-center py-5">
-                <i className="ti ti-calendar-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
-                <p className="mt-2 text-muted">No leave reports found</p>
-                <p className="text-muted small">Leave reports will appear here once staff members apply for leave</p>
-              </div>
-            )}
-
-            {/* Leave Reports List */}
-            {!loading && !error && leaveReports.length > 0 && (
+          {/* Leave Reports List */}
+          {!loading && !error && leaveReports.length > 0 && (
             <div className="table-responsive">
               <table className="table datatable">
                 <thead className="thead-light">
@@ -401,12 +420,12 @@ const LeaveReportPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            )}
-            {/* /Student List */}
-          </div>
+          )}
+          {/* /Student List */}
         </div>
-        {/* /Student List */}
-     
+      </div>
+      {/* /Student List */}
+
     </>
   );
 };

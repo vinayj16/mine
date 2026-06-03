@@ -46,12 +46,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENTS,
         { institutionId, ...filters }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to fetch transport assignments');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to fetch assignments:', error);
       throw error;
@@ -64,12 +59,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENT_DETAIL(id),
         { institutionId }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to fetch transport assignment');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to fetch assignment:', error);
       throw error;
@@ -82,12 +72,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENTS,
         { institutionId, ...data }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to create transport assignment');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to create assignment:', error);
       throw error;
@@ -100,12 +85,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENT_DETAIL(id),
         { institutionId, ...data }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to update transport assignment');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to update assignment:', error);
       throw error;
@@ -118,12 +98,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENT_DETAIL(id),
         { institutionId }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to delete transport assignment');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to delete assignment:', error);
       throw error;
@@ -136,12 +111,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.BULK_DELETE,
         { ids, institutionId }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to bulk delete transport assignments');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to bulk delete assignments:', error);
       throw error;
@@ -154,12 +124,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENTS_BY_ROUTE(routeId),
         { institutionId }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to fetch assignments by route');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to fetch assignments by route:', error);
       throw error;
@@ -172,12 +137,7 @@ export const transportAssignmentService = {
         API_ENDPOINTS.TRANSPORT.ASSIGNMENTS_BY_VEHICLE(vehicleId),
         { institutionId }
       );
-      
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to fetch assignments by vehicle');
-      }
-      
-      return response.data;
+      return response as any;
     } catch (error) {
       console.error('[Transport Assignment Service] Failed to fetch assignments by vehicle:', error);
       throw error;

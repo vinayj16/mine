@@ -135,7 +135,7 @@ const onlineExamSchema = new mongoose.Schema({
     enum: ['draft', 'published', 'ongoing', 'completed', 'cancelled'],
     default: 'draft',
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
     required: true,
@@ -239,7 +239,7 @@ const examSubmissionSchema = new mongoose.Schema({
   feedback: {
     type: String,
   },
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
     required: true,
@@ -254,7 +254,7 @@ const examSubmissionSchema = new mongoose.Schema({
 });
 
 // Indexes
-onlineExamSchema.index({ schoolId: 1, class: 1, status: 1 });
+onlineExamSchema.index({ institutionId: 1, class: 1, status: 1 });
 onlineExamSchema.index({ teacher: 1, status: 1 });
 onlineExamSchema.index({ startTime: 1, endTime: 1 });
 examSubmissionSchema.index({ exam: 1, student: 1 });

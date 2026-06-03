@@ -413,7 +413,7 @@ const AdminLibraryBooksPage: React.FC = () => {
                             </td>
                             <td>{book.author}</td>
                             <td>
-                              <span className="badge bg-secondary">{book.category}</span>
+                              <span className="badge bg-secondary">{typeof book.category === 'object' ? book.category?.name || '-' : book.category}</span>
                             </td>
                             <td>{book.location}</td>
                             <td>{book.rack}</td>

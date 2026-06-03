@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const callLogSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -51,7 +51,7 @@ const callLogSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-callLogSchema.index({ schoolId: 1, callDate: -1 });
+callLogSchema.index({ institutionId: 1, callDate: -1 });
 callLogSchema.index({ callerId: 1 });
 
 export default mongoose.model('CallLog', callLogSchema);

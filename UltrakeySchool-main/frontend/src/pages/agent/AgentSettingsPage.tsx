@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { agentService } from '../../services/agentService';
+import authService from '../../api/authService';
 import type { AgentSettings } from '../../services/agentService';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const DEFAULT_SETTINGS: AgentSettings = {
   notifications: {
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: AgentSettings = {
 const AgentSettingsPage = () => {
   const [settings, setSettings] = useState<AgentSettings>(DEFAULT_SETTINGS);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
@@ -105,11 +108,14 @@ const AgentSettingsPage = () => {
   };
 
   const handleReset = () => {
-    if (window.confirm('Are you sure you want to reset all settings to default values?')) {
-      setSettings(DEFAULT_SETTINGS);
-      setHasChanges(true);
-      toast.info('Settings reset to default values. Click Save to apply changes.');
-    }
+    setShowDeleteModal(true);
+  };
+
+  const handleResetConfirm = () => {
+    setSettings(DEFAULT_SETTINGS);
+    setHasChanges(true);
+    toast.info('Settings reset to default values. Click Save to apply changes.');
+    setShowDeleteModal(false);
   };
 
   const handlePasswordChange = async () => {
@@ -125,11 +131,10 @@ const AgentSettingsPage = () => {
 
     try {
       setChangingPassword(true);
-      // TODO: Call actual password change API endpoint
-      // await authService.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await authService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
+      });
       
       toast.success('Password changed successfully!');
       setShowPasswordModal(false);
@@ -432,7 +437,6 @@ const AgentSettingsPage = () => {
                     onChange={(e) => handleSettingChange('preferences', 'currency', e.target.value)}
                   >
                     <option value="INR">Indian Rupee (INR)</option>
-                    <option value="USD">US Dollar (USD)</option>
                     <option value="EUR">Euro (EUR)</option>
                     <option value="GBP">British Pound (GBP)</option>
                   </select>
@@ -507,6 +511,8 @@ const AgentSettingsPage = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={handleResetConfirm} message="Are you sure you want to reset all settings to default values?" />
 
       {/* Password Change Modal */}
       {showPasswordModal && (

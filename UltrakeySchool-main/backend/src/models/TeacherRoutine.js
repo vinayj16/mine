@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const teacherRoutineSchema = new mongoose.Schema({
-  schoolId: {
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
+    ref: 'Institution',
     required: true,
     index: true
   },
@@ -70,8 +70,8 @@ const teacherRoutineSchema = new mongoose.Schema({
   timestamps: true
 });
 
-teacherRoutineSchema.index({ schoolId: 1, teacherId: 1, dayOfWeek: 1 });
-teacherRoutineSchema.index({ schoolId: 1, academicYear: 1, term: 1 });
+teacherRoutineSchema.index({ institutionId: 1, teacherId: 1, dayOfWeek: 1 });
+teacherRoutineSchema.index({ institutionId: 1, academicYear: 1, term: 1 });
 
 const TeacherRoutine = mongoose.model('TeacherRoutine', teacherRoutineSchema);
 

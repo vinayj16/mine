@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../../api/client'
 import { toast } from 'react-toastify'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 const RoomsPage = () => {
   const [loading, setLoading] = useState(true)
   const [rooms, setRooms] = useState<any[]>([])
   const [showModal, setShowModal] = useState(false)
   const [editingRoom, setEditingRoom] = useState<any>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [formData, setFormData] = useState({
     roomNumber: '', block: '', floor: '1', type: 'single', capacity: '2', rent: ''
   })
@@ -50,11 +53,18 @@ const RoomsPage = () => {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this room?')) return
+    setDeleteTarget(id)
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
     try {
-      const res = await apiClient.delete(`/hostel/rooms/${id}`)
+      const res = await apiClient.delete(`/hostel/rooms/${deleteTarget}`)
       if (res.data.success) { toast.success('Deleted'); fetchRooms() }
     } catch { toast.error('Failed to delete') }
+    setShowDeleteModal(false)
+    setDeleteTarget(null)
   }
 
   if (loading) return <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}><div className="spinner-border text-primary"></div></div>
@@ -84,7 +94,7 @@ const RoomsPage = () => {
                 <tr key={r._id}>
                   <td className="py-2 px-3 fw-medium">{r.roomNumber}</td>
                   <td className="py-2">{r.block}</td>
-                  <td className="py-2"><span className="badge bg-secondary">{r.type}</span></td>
+                  <td className="py-2"><span className="badge bg-secondary">{typeof r.type === 'object' ? r.type?.name || '-' : r.type}</span></td>
                   <td className="py-2 text-center">{r.currentResidents}/{r.capacity}</td>
                   <td className="py-2 text-end">&#8377;{r.rent?.toLocaleString() || 0}</td>
                   <td className="py-2"><span className={`badge ${r.status === 'available' ? 'bg-success' : 'bg-warning'}`}>{r.status}</span></td>
@@ -113,6 +123,8 @@ const RoomsPage = () => {
           </div></div>
         </div>
       )}
+
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleDeleteConfirm} message="Delete this room?" />
 
       {/* EDIT MODAL */}
       {editingRoom && (

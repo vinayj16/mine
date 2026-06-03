@@ -60,10 +60,10 @@ class ThemeService {
   /**
    * Get system theme configuration
    */
-  async getSystemTheme(schoolId) {
+  async getSystemTheme(institutionId) {
     // Get school-specific theme configuration
     const Institution = (await import('../models/Institution.js')).default;
-    const institution = await Institution.findById(schoolId);
+    const institution = await Institution.findById(institutionId);
 
     if (!institution) {
       throw new Error('Institution not found');
@@ -82,9 +82,9 @@ class ThemeService {
   /**
    * Update system theme configuration
    */
-  async updateSystemTheme(schoolId, themeData) {
+  async updateSystemTheme(institutionId, themeData) {
     const Institution = (await import('../models/Institution.js')).default;
-    const institution = await Institution.findById(schoolId);
+    const institution = await Institution.findById(institutionId);
 
     if (!institution) {
       throw new Error('Institution not found');

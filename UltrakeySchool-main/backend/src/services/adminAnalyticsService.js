@@ -10,7 +10,7 @@ class AdminAnalyticsService {
   /**
    * Get comprehensive admin analytics dashboard data
    */
-  async getAdminAnalytics(schoolId, period = 'month') {
+  async getAdminAnalytics(institutionId, period = 'month') {
     const [
       admissionsData,
       attendanceData,
@@ -18,11 +18,11 @@ class AdminAnalyticsService {
       staffData,
       complaintsData
     ] = await Promise.all([
-      this.getAdmissionsAnalytics(schoolId, period),
-      this.getAttendanceAnalytics(schoolId, period),
-      this.getFeesAnalytics(schoolId, period),
-      this.getStaffAnalytics(schoolId, period),
-      this.getComplaintsAnalytics(schoolId, period)
+      this.getAdmissionsAnalytics(institutionId, period),
+      this.getAttendanceAnalytics(institutionId, period),
+      this.getFeesAnalytics(institutionId, period),
+      this.getStaffAnalytics(institutionId, period),
+      this.getComplaintsAnalytics(institutionId, period)
     ]);
 
     return {
@@ -37,29 +37,29 @@ class AdminAnalyticsService {
   /**
    * Get Admissions Analytics
    */
-  async getAdmissionsAnalytics(schoolId, period) {
+  async getAdmissionsAnalytics(institutionId, period) {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const startOfYear = new Date(today.getFullYear(), 0, 1);
 
     // Total admissions this year
     const totalAdmissions = await Student.countDocuments({
-      schoolId,
+      institutionId,
       createdAt: { $gte: startOfYear }
     });
 
     // New admissions this month
     const newAdmissionsMonth = await Student.countDocuments({
-      schoolId,
+      institutionId,
       createdAt: { $gte: startOfMonth }
     });
 
     // Total students
-    const totalStudents = await Student.countDocuments({ schoolId, isActive: true });
+    const totalStudents = await Student.countDocuments({ institutionId, isActive: true });
 
     // Get class-wise strength
     const classStrength = await Student.aggregate([
-      { $match: { schoolId, isActive: true } },
+      { $match: { institutionId, isActive: true } },
       { $group: { _id: '$classId', count: { $sum: 1 } } },
       { $lookup: { from: 'classes', localField: '_id', foreignField: '_id', as: 'class' } },
       { $unwind: '$class' },
@@ -67,15 +67,15 @@ class AdminAnalyticsService {
     ]);
 
     // Monthly admission trend (last 12 months)
-    const monthlyTrend = await this.getMonthlyAdmissionTrend(schoolId, 12);
+    const monthlyTrend = await this.getMonthlyAdmissionTrend(institutionId, 12);
 
     // Dropout rate
-    const inactiveStudents = await Student.countDocuments({ schoolId, isActive: false });
+    const inactiveStudents = await Student.countDocuments({ institutionId, isActive: false });
     const dropoutRate = totalStudents > 0 ? ((inactiveStudents / (totalStudents + inactiveStudents)) * 100).toFixed(1) : 0;
 
     // Recent applications (pending admissions)
     const recentApplications = await Student.find({
-      schoolId,
+      institutionId,
       status: { $in: ['pending', 'applied'] }
     })
       .sort({ createdAt: -1 })
@@ -105,38 +105,38 @@ class AdminAnalyticsService {
   /**
    * Get Attendance Analytics
    */
-  async getAttendanceAnalytics(schoolId, period) {
+  async getAttendanceAnalytics(institutionId, period) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
     // Today's attendance
     const [totalStudents, presentToday] = await Promise.all([
-      Student.countDocuments({ schoolId, isActive: true }),
-      Attendance.countDocuments({ schoolId, date: today, status: 'present', userType: 'student' })
+      Student.countDocuments({ institutionId, isActive: true }),
+      Attendance.countDocuments({ institutionId, date: today, status: 'present', userType: 'student' })
     ]);
 
     const attendancePercentage = totalStudents > 0 ? ((presentToday / totalStudents) * 100).toFixed(1) : 0;
 
     // Teacher attendance
     const [totalTeachers, teachersPresent] = await Promise.all([
-      Teacher.countDocuments({ schoolId, isActive: true }),
-      Attendance.countDocuments({ schoolId, date: today, status: 'present', userType: 'teacher' })
+      Teacher.countDocuments({ institutionId, isActive: true }),
+      Attendance.countDocuments({ institutionId, date: today, status: 'present', userType: 'teacher' })
     ]);
 
     const teacherAttendancePercentage = totalTeachers > 0 ? ((teachersPresent / totalTeachers) * 100).toFixed(1) : 0;
 
     // Monthly attendance trend (last 9 months)
-    const monthlyTrend = await this.getMonthlyAttendanceTrend(schoolId, 9);
+    const monthlyTrend = await this.getMonthlyAttendanceTrend(institutionId, 9);
 
     // Class-wise attendance
-    const classWiseAttendance = await this.getClassWiseAttendance(schoolId, startOfMonth, today);
+    const classWiseAttendance = await this.getClassWiseAttendance(institutionId, startOfMonth, today);
 
     // Frequent absentees (students with < 75% attendance)
-    const frequentAbsentees = await this.getFrequentAbsentees(schoolId, 30);
+    const frequentAbsentees = await this.getFrequentAbsentees(institutionId, 30);
 
     // Weekly attendance (last 5 days)
-    const weeklyAttendance = await this.getWeeklyAttendance(schoolId, 5);
+    const weeklyAttendance = await this.getWeeklyAttendance(institutionId, 5);
 
     return {
       kpis: {
@@ -156,7 +156,7 @@ class AdminAnalyticsService {
   /**
    * Get Fees Analytics
    */
-  async getFeesAnalytics(schoolId, period) {
+  async getFeesAnalytics(institutionId, period) {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -165,7 +165,7 @@ class AdminAnalyticsService {
     const collectedThisMonth = await Fee.aggregate([
       {
         $match: {
-          schoolId,
+          institutionId,
           status: 'paid',
           paidDate: { $gte: startOfMonth, $lte: endOfMonth }
         }
@@ -179,7 +179,7 @@ class AdminAnalyticsService {
     const pendingFees = await Fee.aggregate([
       {
         $match: {
-          schoolId,
+          institutionId,
           status: { $in: ['pending', 'overdue'] }
         }
       },
@@ -193,7 +193,7 @@ class AdminAnalyticsService {
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
     const overdueStudents = await Fee.find({
-      schoolId,
+      institutionId,
       status: 'overdue',
       dueDate: { $lt: sixtyDaysAgo }
     })
@@ -202,11 +202,11 @@ class AdminAnalyticsService {
       .limit(5);
 
     // Monthly collection trend (last 9 months)
-    const monthlyTrend = await this.getMonthlyFeesTrend(schoolId, 9);
+    const monthlyTrend = await this.getMonthlyFeesTrend(institutionId, 9);
 
     // Payment mode distribution
     const paymentModes = await Fee.aggregate([
-      { $match: { schoolId, status: 'paid' } },
+      { $match: { institutionId, status: 'paid' } },
       { $group: { _id: '$paymentMode', count: { $sum: 1 } } }
     ]);
 
@@ -214,7 +214,7 @@ class AdminAnalyticsService {
     const pendingByClass = await Fee.aggregate([
       {
         $match: {
-          schoolId,
+          institutionId,
           status: { $in: ['pending', 'overdue'] }
         }
       },
@@ -272,19 +272,19 @@ class AdminAnalyticsService {
   /**
    * Get Staff Analytics
    */
-  async getStaffAnalytics(schoolId, period) {
+  async getStaffAnalytics(institutionId, period) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // Total staff counts
     const [totalTeachers, totalNonTeaching] = await Promise.all([
-      Teacher.countDocuments({ schoolId, isActive: true, role: 'teacher' }),
-      Teacher.countDocuments({ schoolId, isActive: true, role: { $ne: 'teacher' } })
+      Teacher.countDocuments({ institutionId, isActive: true, role: 'teacher' }),
+      Teacher.countDocuments({ institutionId, isActive: true, role: { $ne: 'teacher' } })
     ]);
 
     // Staff attendance today
     const staffPresent = await Attendance.countDocuments({
-      schoolId,
+      institutionId,
       date: today,
       status: 'present',
       userType: 'teacher'
@@ -296,14 +296,14 @@ class AdminAnalyticsService {
 
     // Pending leave requests
     const pendingLeaves = await Leave.find({
-      schoolId,
+      institutionId,
       status: 'pending'
     })
       .populate('userId', 'name role avatar')
       .limit(5);
 
     // Department-wise attendance
-    const deptAttendance = await this.getDepartmentAttendance(schoolId, today);
+    const deptAttendance = await this.getDepartmentAttendance(institutionId, today);
 
     return {
       kpis: {
@@ -326,47 +326,47 @@ class AdminAnalyticsService {
   /**
    * Get Complaints Analytics
    */
-  async getComplaintsAnalytics(schoolId, period) {
+  async getComplaintsAnalytics(institutionId, period) {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
     // Total complaints this month
     const totalComplaints = await Complaint.countDocuments({
-      schoolId,
+      institutionId,
       createdAt: { $gte: startOfMonth }
     });
 
     // Resolved complaints
     const resolvedComplaints = await Complaint.countDocuments({
-      schoolId,
+      institutionId,
       status: 'resolved',
       createdAt: { $gte: startOfMonth }
     });
 
     // Open complaints
     const openComplaints = await Complaint.countDocuments({
-      schoolId,
+      institutionId,
       status: { $in: ['open', 'pending', 'in-progress'] }
     });
 
     // Complaints by category
     const byCategory = await Complaint.aggregate([
-      { $match: { schoolId } },
+      { $match: { institutionId } },
       { $group: { _id: '$category', count: { $sum: 1 } } }
     ]);
 
     // Recent complaints
-    const recentComplaints = await Complaint.find({ schoolId })
+    const recentComplaints = await Complaint.find({ institutionId })
       .sort({ createdAt: -1 })
       .limit(5)
       .select('complaintId title category status createdAt');
 
     // Monthly trend (last 6 months)
-    const monthlyTrend = await this.getMonthlyComplaintsTrend(schoolId, 6);
+    const monthlyTrend = await this.getMonthlyComplaintsTrend(institutionId, 6);
 
     // Average resolution time
-    const avgResolutionTime = await this.getAverageResolutionTime(schoolId);
+    const avgResolutionTime = await this.getAverageResolutionTime(institutionId);
 
     return {
       kpis: {
@@ -392,7 +392,7 @@ class AdminAnalyticsService {
   }
 
   // Helper methods
-  async getMonthlyAdmissionTrend(schoolId, months) {
+  async getMonthlyAdmissionTrend(institutionId, months) {
     const result = [];
     const today = new Date();
 
@@ -401,7 +401,7 @@ class AdminAnalyticsService {
       const endDate = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
 
       const count = await Student.countDocuments({
-        schoolId,
+        institutionId,
         createdAt: { $gte: startDate, $lte: endDate }
       });
 
@@ -414,7 +414,7 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getMonthlyAttendanceTrend(schoolId, months) {
+  async getMonthlyAttendanceTrend(institutionId, months) {
     const result = [];
     const today = new Date();
 
@@ -424,8 +424,8 @@ class AdminAnalyticsService {
 
       const [totalDays, studentAttendance, teacherAttendance] = await Promise.all([
         this.getWorkingDays(startDate, endDate),
-        this.getAverageAttendance(schoolId, startDate, endDate, 'student'),
-        this.getAverageAttendance(schoolId, startDate, endDate, 'teacher')
+        this.getAverageAttendance(institutionId, startDate, endDate, 'student'),
+        this.getAverageAttendance(institutionId, startDate, endDate, 'teacher')
       ]);
 
       result.push({
@@ -438,7 +438,7 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getMonthlyFeesTrend(schoolId, months) {
+  async getMonthlyFeesTrend(institutionId, months) {
     const result = [];
     const today = new Date();
 
@@ -450,7 +450,7 @@ class AdminAnalyticsService {
         Fee.aggregate([
           {
             $match: {
-              schoolId,
+              institutionId,
               status: 'paid',
               paidDate: { $gte: startDate, $lte: endDate }
             }
@@ -460,7 +460,7 @@ class AdminAnalyticsService {
         Fee.aggregate([
           {
             $match: {
-              schoolId,
+              institutionId,
               status: { $in: ['pending', 'overdue'] },
               dueDate: { $gte: startDate, $lte: endDate }
             }
@@ -479,7 +479,7 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getMonthlyComplaintsTrend(schoolId, months) {
+  async getMonthlyComplaintsTrend(institutionId, months) {
     const result = [];
     const today = new Date();
 
@@ -489,11 +489,11 @@ class AdminAnalyticsService {
 
       const [raised, resolved] = await Promise.all([
         Complaint.countDocuments({
-          schoolId,
+          institutionId,
           createdAt: { $gte: startDate, $lte: endDate }
         }),
         Complaint.countDocuments({
-          schoolId,
+          institutionId,
           status: 'resolved',
           resolvedAt: { $gte: startDate, $lte: endDate }
         })
@@ -518,14 +518,14 @@ class AdminAnalyticsService {
     return totalCapacity > 0 ? ((totalStudents / totalCapacity) * 100).toFixed(1) : 0;
   }
 
-  async getClassWiseAttendance(schoolId, startDate, endDate) {
-    const classes = await Class.find({ schoolId }).select('name');
+  async getClassWiseAttendance(institutionId, startDate, endDate) {
+    const classes = await Class.find({ institutionId }).select('name');
     const result = [];
 
     for (const cls of classes) {
-      const students = await Student.countDocuments({ schoolId, classId: cls._id, isActive: true });
+      const students = await Student.countDocuments({ institutionId, classId: cls._id, isActive: true });
       const attendance = await Attendance.countDocuments({
-        schoolId,
+        institutionId,
         classId: cls._id,
         date: { $gte: startDate, $lte: endDate },
         status: 'present'
@@ -544,17 +544,17 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getFrequentAbsentees(schoolId, days) {
+  async getFrequentAbsentees(institutionId, days) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const students = await Student.find({ schoolId, isActive: true }).select('name classId');
+    const students = await Student.find({ institutionId, isActive: true }).select('name classId');
     const result = [];
 
     for (const student of students) {
       const totalDays = await this.getWorkingDays(startDate, new Date());
       const presentDays = await Attendance.countDocuments({
-        schoolId,
+        institutionId,
         userId: student._id,
         date: { $gte: startDate },
         status: 'present'
@@ -576,7 +576,7 @@ class AdminAnalyticsService {
     return result.slice(0, 10);
   }
 
-  async getWeeklyAttendance(schoolId, days) {
+  async getWeeklyAttendance(institutionId, days) {
     const result = [];
     const today = new Date();
 
@@ -586,8 +586,8 @@ class AdminAnalyticsService {
       date.setHours(0, 0, 0, 0);
 
       const [present, absent] = await Promise.all([
-        Attendance.countDocuments({ schoolId, date, status: 'present', userType: 'student' }),
-        Attendance.countDocuments({ schoolId, date, status: 'absent', userType: 'student' })
+        Attendance.countDocuments({ institutionId, date, status: 'present', userType: 'student' }),
+        Attendance.countDocuments({ institutionId, date, status: 'absent', userType: 'student' })
       ]);
 
       result.push({
@@ -600,14 +600,14 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getDepartmentAttendance(schoolId, date) {
+  async getDepartmentAttendance(institutionId, date) {
     const departments = ['Science', 'Maths', 'English', 'Social', 'Non-Teaching'];
     const result = [];
 
     for (const dept of departments) {
-      const total = await Teacher.countDocuments({ schoolId, department: dept, isActive: true });
+      const total = await Teacher.countDocuments({ institutionId, department: dept, isActive: true });
       const present = await Attendance.countDocuments({
-        schoolId,
+        institutionId,
         date,
         status: 'present',
         userType: 'teacher',
@@ -625,16 +625,16 @@ class AdminAnalyticsService {
     return result;
   }
 
-  async getAverageAttendance(schoolId, startDate, endDate, userType) {
+  async getAverageAttendance(institutionId, startDate, endDate, userType) {
     const workingDays = await this.getWorkingDays(startDate, endDate);
     if (workingDays === 0) return 0;
 
     const totalUsers = userType === 'student'
-      ? await Student.countDocuments({ schoolId, isActive: true })
-      : await Teacher.countDocuments({ schoolId, isActive: true });
+      ? await Student.countDocuments({ institutionId, isActive: true })
+      : await Teacher.countDocuments({ institutionId, isActive: true });
 
     const totalPresent = await Attendance.countDocuments({
-      schoolId,
+      institutionId,
       date: { $gte: startDate, $lte: endDate },
       status: 'present',
       userType
@@ -659,9 +659,9 @@ class AdminAnalyticsService {
     return count;
   }
 
-  async getAverageResolutionTime(schoolId) {
+  async getAverageResolutionTime(institutionId) {
     const resolvedComplaints = await Complaint.find({
-      schoolId,
+      institutionId,
       status: 'resolved',
       resolvedAt: { $exists: true }
     }).select('createdAt resolvedAt');

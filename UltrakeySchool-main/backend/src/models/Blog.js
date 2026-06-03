@@ -9,7 +9,7 @@ const blogSchema = new mongoose.Schema({
   slug: {
     type: String,
     unique: true,
-    trim: true
+    sparse: true
   },
   content: {
     type: String,
@@ -17,41 +17,77 @@ const blogSchema = new mongoose.Schema({
   },
   excerpt: {
     type: String,
-    trim: true
+    maxlength: 300
   },
   author: {
-    type: String,
-    default: 'EduSearch Team'
+    name: { type: String, default: 'Admin' },
+    avatar: String
+  },
+  coverImage: {
+    type: String
   },
   category: {
     type: String,
-    trim: true
+    enum: ['News', 'Events', 'Academic', 'Sports', 'General', 'Announcement'],
+    default: 'General'
   },
-  tags: [{
-    type: String
-  }],
-  featuredImage: {
-    type: String,
-    default: ''
-  },
+  tags: [String],
   status: {
     type: String,
     enum: ['draft', 'published', 'archived'],
-    default: 'published'
+    default: 'published',
+    index: true
   },
   publishedAt: {
     type: Date,
     default: Date.now
   },
-  views: {
-    type: Number,
-    default: 0
+  featured: {
+    type: Boolean,
+    default: false
+  },
+  readTime: {
+    type: Number, // in minutes
+    default: 3
+  },
+  institutionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Institution'
+  },
+  meta: {
+    views: { type: Number, default: 0 },
+    likes: { type: Number, default: 0 },
+    shares: { type: Number, default: 0 }
   }
 }, {
   timestamps: true
 });
 
 blogSchema.index({ status: 1, publishedAt: -1 });
-blogSchema.index({ slug: 1 });
+blogSchema.index({ category: 1, status: 1 });
+blogSchema.index({ featured: 1, status: 1 });
 
-export default mongoose.model('blogs', blogSchema);
+blogSchema.pre('save', function(next) {
+  if (this.isModified('title') && !this.slug) {
+    this.slug = this.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  }
+  next();
+});
+
+blogSchema.virtual('formattedDate').get(function() {
+  return this.publishedAt 
+    ? new Date(this.publishedAt).toLocaleDateString('en-IN', { 
+        year: 'numeric', month: 'long', day: 'numeric' 
+      })
+    : '';
+});
+
+blogSchema.set('toJSON', { virtuals: true });
+blogSchema.set('toObject', { virtuals: true });
+
+const Blog = mongoose.model('Blog', blogSchema);
+
+export default Blog;

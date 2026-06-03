@@ -14,9 +14,9 @@ const HostelsPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const res = await apiClient.get('/hostel/hostels').catch(() => ({ data: { success: true, data: [] } }))
+      const res = await apiClient.get('/hostel/hostels').catch(() => { toast.error('Failed to load hostels'); return { data: { success: true, data: [] } } })
       if (res.data?.success) setHostels(res.data.data?.hostels || res.data.data || [])
-    } catch (err) { console.error('Error:', err) } finally { setLoading(false) }
+    } catch (err) { console.error('Error:', err); toast.error('Failed to load hostels') } finally { setLoading(false) }
   }
 
   const handleCreate = async () => {

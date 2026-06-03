@@ -1,8 +1,3 @@
-/**
- * Input Sanitization Middleware
- * Prevents XSS, NoSQL injection, and other attacks
- */
-
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
 import hpp from 'hpp';

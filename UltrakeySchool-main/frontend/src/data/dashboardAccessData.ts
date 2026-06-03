@@ -78,10 +78,6 @@ export const dashboardApi = {
           dashboardData = await dashboardService.getAdminDashboard()
           kpis = await dashboardApi.getHostelWardenKpis(dashboardData)
           break
-        case 'principal':
-          dashboardData = await dashboardService.getAdminDashboard()
-          kpis = await dashboardApi.getPrincipalKpis(dashboardData)
-          break
         case 'agent':
           dashboardData = await dashboardService.getAdminDashboard()
           kpis = await dashboardApi.getAgentKpis(dashboardData)
@@ -279,7 +275,7 @@ export const dashboardApi = {
         role: 'ACCOUNTANT',
         title: 'Finance Cockpit',
         description: 'Revenue, dues, and payments status with live reconciliation pulls.',
-        route: '/dashboard/finance',
+        route: '/dashboard/accountant',
         badge: 'Finance',
         permissions: ['finance.*', 'fees.*', 'reports.financial'],
         startingPoint: 'Launch Finance Dashboard, then switch to Transactions to verify reconciliations.'

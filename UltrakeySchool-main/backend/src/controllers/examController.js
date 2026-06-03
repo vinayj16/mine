@@ -71,14 +71,14 @@ const createExam = async (req, res, next) => {
   try {
     logger.info('Creating exam');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { title, description, examType, classId, subjectId, date, startTime, endTime, duration, totalMarks, passingMarks, academicYear, term, gradingSystem } = req.body;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!title || title.trim().length === 0) {
       errors.push('Title is required');
@@ -172,7 +172,7 @@ const createExam = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
 
-    const exam = await examService.createExam(schoolId, req.body);
+    const exam = await examService.createExam(institutionId, req.body);
     
     logger.info('Exam created successfully:', { examId: exam._id });
     return createdResponse(res, exam, 'Exam created successfully');
@@ -186,14 +186,14 @@ const getExams = async (req, res, next) => {
   try {
     logger.info('Fetching exams');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, academicYear, term, status, examType, subjectId, startDate, endDate, page, limit, search } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -267,7 +267,7 @@ const getExams = async (req, res, next) => {
     if (endDate) filters.endDate = endDate;
     if (search) filters.search = search;
     
-    const exams = await examService.getExams(schoolId, filters);
+    const exams = await examService.getExams(institutionId, filters);
     
     logger.info('Exams fetched successfully');
     return successResponse(res, exams, 'Exams retrieved successfully');
@@ -281,13 +281,13 @@ const getExamById = async (req, res, next) => {
   try {
     logger.info('Fetching exam by ID');
     
-    const { schoolId, examId } = req.params;
+    const { institutionId, examId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const examIdError = validateObjectId(examId, 'Exam ID');
     if (examIdError) errors.push(examIdError);
@@ -296,7 +296,7 @@ const getExamById = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exam = await examService.getExamById(examId, schoolId);
+    const exam = await examService.getExamById(examId, institutionId);
     
     if (!exam) {
       return notFoundResponse(res, 'Exam not found');
@@ -314,14 +314,14 @@ const updateExam = async (req, res, next) => {
   try {
     logger.info('Updating exam');
     
-    const { schoolId, examId } = req.params;
+    const { institutionId, examId } = req.params;
     const { title, description, examType, date, startTime, endTime, duration, totalMarks, passingMarks, academicYear, term, status, gradingSystem } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const examIdError = validateObjectId(examId, 'Exam ID');
     if (examIdError) errors.push(examIdError);
@@ -406,7 +406,7 @@ const updateExam = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exam = await examService.updateExam(examId, schoolId, req.body);
+    const exam = await examService.updateExam(examId, institutionId, req.body);
     
     if (!exam) {
       return notFoundResponse(res, 'Exam not found');
@@ -424,13 +424,13 @@ const deleteExam = async (req, res, next) => {
   try {
     logger.info('Deleting exam');
     
-    const { schoolId, examId } = req.params;
+    const { institutionId, examId } = req.params;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const examIdError = validateObjectId(examId, 'Exam ID');
     if (examIdError) errors.push(examIdError);
@@ -439,7 +439,7 @@ const deleteExam = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const result = await examService.deleteExam(examId, schoolId);
+    const result = await examService.deleteExam(examId, institutionId);
     
     if (!result) {
       return notFoundResponse(res, 'Exam not found');
@@ -457,14 +457,14 @@ const getExamsByClass = async (req, res, next) => {
   try {
     logger.info('Fetching exams by class');
     
-    const { schoolId, classId } = req.params;
+    const { institutionId, classId } = req.params;
     const { page, limit, academicYear, term } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const classIdError = validateObjectId(classId, 'Class ID');
     if (classIdError) errors.push(classIdError);
@@ -493,7 +493,7 @@ const getExamsByClass = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exams = await examService.getExamsByClass(schoolId, classId, { page: pageNum, limit: limitNum, academicYear, term });
+    const exams = await examService.getExamsByClass(institutionId, classId, { page: pageNum, limit: limitNum, academicYear, term });
     
     logger.info('Exams by class fetched successfully:', { classId });
     return successResponse(res, exams, 'Exams retrieved successfully');
@@ -507,14 +507,14 @@ const markAttendance = async (req, res, next) => {
   try {
     logger.info('Marking exam attendance');
     
-    const { schoolId, examId } = req.params;
+    const { institutionId, examId } = req.params;
     const { studentId, status, remarks } = req.body;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const examIdError = validateObjectId(examId, 'Exam ID');
     if (examIdError) errors.push(examIdError);
@@ -540,7 +540,7 @@ const markAttendance = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const exam = await examService.markAttendance(examId, schoolId, studentId, status, remarks);
+    const exam = await examService.markAttendance(examId, institutionId, studentId, status, remarks);
     
     if (!exam) {
       return notFoundResponse(res, 'Exam not found');
@@ -558,14 +558,14 @@ const getAttendance = async (req, res, next) => {
   try {
     logger.info('Fetching exam attendance');
     
-    const { schoolId, examId } = req.params;
+    const { institutionId, examId } = req.params;
     const { status } = req.query;
     
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const examIdError = validateObjectId(examId, 'Exam ID');
     if (examIdError) errors.push(examIdError);
@@ -578,7 +578,7 @@ const getAttendance = async (req, res, next) => {
       return validationErrorResponse(res, errors);
     }
     
-    const attendance = await examService.getAttendance(examId, schoolId, status);
+    const attendance = await examService.getAttendance(examId, institutionId, status);
     
     if (!attendance) {
       return notFoundResponse(res, 'Exam not found');
@@ -597,14 +597,14 @@ const bulkUpdateExams = async (req, res) => {
   try {
     logger.info('Bulk updating exams');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { examIds, updates } = req.body;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!Array.isArray(examIds) || examIds.length === 0) {
       errors.push('Exam IDs array is required and must not be empty');
@@ -641,7 +641,7 @@ const bulkUpdateExams = async (req, res) => {
     }
 
     const result = await Exam.updateMany(
-      { _id: { $in: examIds }, schoolId: new mongoose.Types.ObjectId(schoolId) },
+      { _id: { $in: examIds }, institutionId: new mongoose.Types.ObjectId(institutionId) },
       { $set: updates }
     );
 
@@ -660,14 +660,14 @@ const bulkDeleteExams = async (req, res) => {
   try {
     logger.info('Bulk deleting exams');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { examIds } = req.body;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (!Array.isArray(examIds) || examIds.length === 0) {
       errors.push('Exam IDs array is required and must not be empty');
@@ -693,7 +693,7 @@ const bulkDeleteExams = async (req, res) => {
 
     const result = await Exam.deleteMany({
       _id: { $in: examIds },
-      schoolId: new mongoose.Types.ObjectId(schoolId)
+      institutionId: new mongoose.Types.ObjectId(institutionId)
     });
 
     logger.info('Exams bulk deleted successfully:', { count: result.deletedCount });
@@ -711,14 +711,14 @@ const exportExams = async (req, res) => {
   try {
     logger.info('Exporting exams');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { format, classId, academicYear, term, status, examType, startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const validFormats = ['json', 'csv', 'xlsx', 'pdf'];
     if (!format) {
@@ -768,7 +768,7 @@ const exportExams = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const filters = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const filters = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (classId) filters.classId = new mongoose.Types.ObjectId(classId);
     if (academicYear) filters.academicYear = academicYear;
     if (term) filters.term = term;
@@ -800,14 +800,14 @@ const getExamStatistics = async (req, res) => {
   try {
     logger.info('Fetching exam statistics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { classId, academicYear, term, startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     if (classId) {
       const classIdError = validateObjectId(classId, 'Class ID');
@@ -842,7 +842,7 @@ const getExamStatistics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const filters = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const filters = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (classId) filters.classId = new mongoose.Types.ObjectId(classId);
     if (academicYear) filters.academicYear = academicYear;
     if (term) filters.term = term;
@@ -903,14 +903,14 @@ const getExamAnalytics = async (req, res) => {
   try {
     logger.info('Fetching exam analytics');
     
-    const { schoolId } = req.params;
+    const { institutionId } = req.params;
     const { groupBy, classId, academicYear, term, startDate, endDate } = req.query;
 
     // Validation
     const errors = [];
     
-    const schoolIdError = validateObjectId(schoolId, 'School ID');
-    if (schoolIdError) errors.push(schoolIdError);
+    const institutionIdError = validateObjectId(institutionId, 'School ID');
+    if (institutionIdError) errors.push(institutionIdError);
     
     const validGroupBy = ['day', 'week', 'month', 'year', 'examType', 'status', 'class', 'term'];
     if (!groupBy) {
@@ -952,7 +952,7 @@ const getExamAnalytics = async (req, res) => {
       return validationErrorResponse(res, errors);
     }
 
-    const filters = { schoolId: new mongoose.Types.ObjectId(schoolId) };
+    const filters = { institutionId: new mongoose.Types.ObjectId(institutionId) };
     if (classId) filters.classId = new mongoose.Types.ObjectId(classId);
     if (academicYear) filters.academicYear = academicYear;
     if (term) filters.term = term;

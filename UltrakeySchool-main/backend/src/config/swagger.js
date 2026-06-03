@@ -1,8 +1,3 @@
-/**
- * Swagger/OpenAPI Configuration
- * Provides comprehensive API documentation for all endpoints
- */
-
 import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
@@ -18,16 +13,16 @@ const options = {
 A comprehensive RESTful API for managing educational institutions with multi-tenant support.
 
 ### Features
-- 🔐 **Authentication & Authorization** - JWT-based secure authentication
-- 👥 **User Management** - Students, Teachers, Staff, and Admin management
-- 📚 **Academic Management** - Classes, Subjects, Exams, and Results
-- 📊 **Attendance Tracking** - Real-time attendance management
-- 💰 **Fee Management** - Invoice generation and payment tracking
-- 🚌 **Transport Management** - Vehicle and route management
-- 📖 **Library System** - Book management and borrowing
-- 🏠 **Hostel Management** - Room allocation and visitor logs
-- 📧 **Communication** - Notifications, Emails, and Messaging
-- 📈 **Analytics & Reports** - Comprehensive reporting system
+- **Authentication & Authorization** - JWT-based secure authentication
+- **User Management** - Students, Teachers, Staff, and Admin management
+- **Academic Management** - Classes, Subjects, Exams, and Results
+- **Attendance Tracking** - Real-time attendance management
+- **Fee Management** - Invoice generation and payment tracking
+- **Transport Management** - Vehicle and route management
+- **Library System** - Book management and borrowing
+- **Hostel Management** - Room allocation and visitor logs
+- **Communication** - Notifications, Emails, and Messaging
+- **Analytics & Reports** - Comprehensive reporting system
 
 ### Authentication
 Most endpoints require authentication using JWT Bearer token.
@@ -329,7 +324,7 @@ Current version: v1
             }
           }
         },
-        
+
         // User & Authentication Schemas
         User: {
           type: 'object',
@@ -418,7 +413,7 @@ Current version: v1
             }
           }
         },
-        
+
         // File Upload Schemas
         UploadedFile: {
           type: 'object',
@@ -459,7 +454,7 @@ Current version: v1
             }
           }
         },
-        
+
         // Student Schema
         Student: {
           type: 'object',
@@ -507,7 +502,7 @@ Current version: v1
             }
           }
         },
-        
+
         // Teacher Schema
         Teacher: {
           type: 'object',
@@ -841,7 +836,7 @@ Current version: v1
     ]
   },
   apis: [
-    './src/routes/*.js', 
+    './src/routes/*.js',
     './src/controllers/*.js',
     './src/models/*.js'
   ]
@@ -975,25 +970,25 @@ export const setupSwagger = (app) => {
   // Serve Swagger UI
   app.use('/api-docs', swaggerUi.serve);
   app.get('/api-docs', swaggerUi.setup(specs, swaggerOptions));
-  
+
   // Serve OpenAPI JSON spec
   app.get('/api-docs.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(specs);
   });
-  
+
   // Serve OpenAPI YAML spec
   app.get('/api-docs.yaml', (req, res) => {
     res.setHeader('Content-Type', 'text/yaml');
     const yaml = require('js-yaml');
     res.send(yaml.dump(specs));
   });
-  
+
   // API documentation redirect
   app.get('/docs', (req, res) => {
     res.redirect('/api-docs');
   });
-  
+
   console.log('📚 Swagger documentation available at:');
   console.log('   - UI: http://localhost:5000/api-docs');
   console.log('   - JSON: http://localhost:5000/api-docs.json');

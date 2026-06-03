@@ -4,12 +4,21 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { examService } from '../../services/examService';
 import type { Exam } from '../../services/examService';
+import { exportToPDF, exportToExcel } from '../../utils/exportUtils';
+import { getInstitutionId } from '../../utils/auth';
 
 declare global {
   interface Window {
     bootstrap: any;
   }
 }
+ 
+const EXAM_TYPE_MAP: Record<string, 'mid_term' | 'final' | 'practical' | 'assignment'> = {
+  mid_term: 'mid_term',
+  final: 'final',
+  practical: 'practical',
+  assignment: 'assignment',
+};
 
 const ExamPage: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -19,6 +28,17 @@ const ExamPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editExam, setEditExam] = useState<Exam | null>(null);
+
+  const [examTypeFilter, setExamTypeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const filteredExams = React.useMemo(() => {
+    return exams.filter(exam => {
+      if (examTypeFilter && exam.examType !== examTypeFilter) return false;
+      if (statusFilter && exam.status !== statusFilter) return false;
+      return true;
+    });
+  }, [exams, examTypeFilter, statusFilter]);
 
   const [newExam, setNewExam] = useState({
     name: '',
@@ -39,11 +59,23 @@ const ExamPage: React.FC = () => {
   const fetchExams = async () => {
     try {
       setLoading(true);
-      const response = await examService.getAll({ page: 1, limit: 100 });
-      setExams(response.data);
-    } catch (error) {
+      const response = await examService.getAll({ page: 1, limit: 100, institutionId: getInstitutionId() });
+      let examsArray = [];
+      if (Array.isArray(response)) examsArray = response;
+      else if (response && Array.isArray(response.data)) examsArray = response.data;
+      else if (response && Array.isArray((response as any).exams)) examsArray = (response as any).exams;
+      setExams(examsArray.map((e: any) => ({
+        ...e,
+        id: e.id || e._id,
+        name: e.title || e.name || '',
+        subject: e.subjectId?.name || e.subjectId || e.subject || '',
+        class: e.classId?.name || e.classId || e.class || '',
+        date: e.examDate || e.date || '',
+        examType: Object.keys(EXAM_TYPE_MAP).find(k => EXAM_TYPE_MAP[k] === e.type) || e.examType || 'mid_term',
+      })));
+    } catch (error: any) {
       console.error('Error fetching exams:', error);
-      toast.error('Failed to load exams');
+      toast.error(error?.message || 'Failed to load exams');
     } finally {
       setLoading(false);
     }
@@ -71,14 +103,24 @@ const ExamPage: React.FC = () => {
     e.preventDefault();
 
     try {
-      await examService.create(newExam);
+      await examService.create({
+        name: newExam.name,
+        subject: newExam.subject,
+        class: newExam.class,
+        date: newExam.date,
+        startTime: newExam.startTime,
+        endTime: newExam.endTime,
+        duration: newExam.duration,
+        totalMarks: newExam.totalMarks,
+        examType: EXAM_TYPE_MAP[newExam.examType] || 'written',
+      });
       toast.success('Exam created successfully');
       setShowAddModal(false);
       resetForm();
       fetchExams();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating exam:', error);
-      toast.error('Failed to create exam');
+      toast.error(error?.message || 'Failed to create exam');
     }
   };
 
@@ -96,15 +138,15 @@ const ExamPage: React.FC = () => {
         endTime: editExam.endTime,
         duration: editExam.duration,
         totalMarks: editExam.totalMarks,
-        examType: editExam.examType,
+        examType: EXAM_TYPE_MAP[editExam.examType] || editExam.examType || 'written',
       });
       toast.success('Exam updated successfully');
       setShowEditModal(false);
       setEditExam(null);
       fetchExams();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating exam:', error);
-      toast.error('Failed to update exam');
+      toast.error(error?.message || 'Failed to update exam');
     }
   };
 
@@ -117,9 +159,9 @@ const ExamPage: React.FC = () => {
       setShowDeleteModal(false);
       setDeleteId(null);
       fetchExams();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting exam:', error);
-      toast.error('Failed to delete exam');
+      toast.error(error?.message || 'Failed to delete exam');
     }
   };
 
@@ -138,7 +180,15 @@ const ExamPage: React.FC = () => {
   };
 
   const handleExport = (type: 'pdf' | 'excel') => {
-    toast.info(`Export as ${type.toUpperCase()} - Feature coming soon`);
+    if (!filteredExams.length) { toast.error('No data to export'); return; }
+    const exportData = filteredExams.map(e => ({ ID: e.id, Name: e.name, Subject: e.subject, Class: e.class, Date: e.date ? new Date(e.date).toLocaleDateString() : '-', Start: e.startTime, End: e.endTime, Status: e.status }));
+    if (type === 'pdf') {
+      exportToPDF(exportData, 'exams', [
+        { key: 'ID', label: 'ID' }, { key: 'Name', label: 'Exam Name' }, { key: 'Subject', label: 'Subject' }, { key: 'Class', label: 'Class' }, { key: 'Date', label: 'Exam Date' }, { key: 'Start', label: 'Start Time' }, { key: 'End', label: 'End Time' }, { key: 'Status', label: 'Status' }
+      ]);
+    } else {
+      exportToExcel(exportData, 'exams');
+    }
   };
 
   const timeOptions = [
@@ -258,30 +308,30 @@ const ExamPage: React.FC = () => {
                       <div className="col-md-12">
                         <div className="mb-3">
                           <label className="form-label">Exam Type</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                            <option>Mid Term</option>
-                            <option>Final</option>
-                            <option>Practical</option>
-                            <option>Assignment</option>
+                          <select className="form-select" value={examTypeFilter} onChange={(e) => setExamTypeFilter(e.target.value)}>
+                            <option value="">Select</option>
+                            <option value="mid_term">Mid Term</option>
+                            <option value="final">Final</option>
+                            <option value="practical">Practical</option>
+                            <option value="assignment">Assignment</option>
                           </select>
                         </div>
                       </div>
                       <div className="col-md-12">
                         <div className="mb-3">
                           <label className="form-label">Status</label>
-                          <select className="form-select">
-                            <option>Select</option>
-                            <option>Scheduled</option>
-                            <option>In Progress</option>
-                            <option>Completed</option>
+                          <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                            <option value="">Select</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
                           </select>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="p-3 d-flex align-items-center justify-content-end">
-                    <button type="button" className="btn btn-light me-3">
+                    <button type="button" className="btn btn-light me-3" onClick={() => { setExamTypeFilter(''); setStatusFilter(''); }}>
                       Reset
                     </button>
                     <button type="submit" className="btn btn-primary">
@@ -344,8 +394,8 @@ const ExamPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {exams.length > 0 ? (
-                    exams.map((exam) => (
+                  {filteredExams.length > 0 ? (
+                    filteredExams.map((exam) => (
                       <tr key={exam.id}>
                         <td>
                           <div className="form-check form-check-md">
@@ -360,7 +410,7 @@ const ExamPage: React.FC = () => {
                         <td>{exam.name}</td>
                         <td>{exam.subject}</td>
                         <td>{exam.class}</td>
-                        <td>{new Date(exam.date).toLocaleDateString()}</td>
+                        <td>{exam.date ? new Date(exam.date).toLocaleDateString() : '-'}</td>
                         <td>{exam.startTime}</td>
                         <td>{exam.endTime}</td>
                         <td>
@@ -394,7 +444,8 @@ const ExamPage: React.FC = () => {
                                 <button
                                   className="dropdown-item rounded-1"
                                   onClick={() => {
-                                    setEditExam(exam);
+                                    const d = exam.date ? exam.date.split('T')[0] : '';
+                                    setEditExam({ ...exam, date: d });
                                     setShowEditModal(true);
                                   }}
                                 >

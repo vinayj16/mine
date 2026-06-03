@@ -1,7 +1,7 @@
-import User from '../models/User.js';
 import { verifyAccessToken, extractToken } from '../services/tokenService.js';
-import mongoose from 'mongoose';
+import { resolveAuthenticatedUser, attachUserToRequest } from '../utils/resolveAuthUser.js';
 import logger from '../utils/logger.js';
+import User from '../models/User.js';
 
 export const authenticate = async (req, res, next) => {
   try {
@@ -30,32 +30,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     const decoded = verifyAccessToken(token);
-
-    // First try User collection
-    let user = await User.findById(decoded.sub || decoded.id)
-      .select('-password')
-      .lean();
-
-    // If not found in User, try UserCredential collection
-    if (!user) {
-      const UserCredential = (await import('../models/UserCredential.js')).default;
-      user = await UserCredential.findOne({ _id: decoded.sub || decoded.id })
-        .lean();
-      
-      if (user) {
-        // Convert UserCredential to same format as User for consistent handling
-        user._id = user._id;
-        user.email = user.email;
-        user.name = user.fullName;
-        user.role = user.role;
-        user.plan = 'basic';
-        user.permissions = user.permissions || [];
-        user.modules = [];
-        user.institutionId = user.institutionId || user.institution;
-        user.institutionCode = user.institutionCode || user.instituteCode || user.schoolCode;
-        user.status = user.status || 'active';
-      }
-    }
+    const user = await resolveAuthenticatedUser(decoded);
 
     if (!user) {
       return res.status(401).json({
@@ -77,32 +52,13 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    req.user = {
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      plan: user.plan,
-      permissions: user.permissions || [],
-      modules: user.modules || [],
-      institutionId: user.institutionId,
-      institutionCode: user.institutionCode || user.instituteCode || user.schoolCode,
-      institution: decoded.institution || user.institutionId,
-      schoolId: user.schoolId,
-      avatar: user.avatar,
-      status: user.status || (user.isActive ? 'active' : 'inactive')
-    };
-
-    if (user.institutionId || decoded.institution) {
-      req.tenantId = user.institutionId || decoded.institution;
-      req.user.institution = decoded.institution || user.institutionId;
-    }
+    attachUserToRequest(req, user, decoded);
 
     // Add institution context validation
     if (req.user.institutionId) {
       try {
         const Institution = (await import('../models/Institution.js')).default;
-        const institution = await Institution.findById(req.user.institutionId).select('name instituteCode type status logo').lean();
+        const institution = await Institution.findById(req.user.institutionId).select('name instituteCode type status logo subscription.planName subscription.status subscription.endDate subscription.billingCycle').lean();
         
         if (institution && institution.status === 'active') {
           req.user.institutionData = {
@@ -111,7 +67,13 @@ export const authenticate = async (req, res, next) => {
             instituteCode: institution.instituteCode,
             type: institution.type,
             logo: institution.logo,
-            status: institution.status
+            status: institution.status,
+            subscription: institution.subscription ? {
+              planName: institution.subscription.planName,
+              status: institution.subscription.status,
+              endDate: institution.subscription.endDate,
+              billingCycle: institution.subscription.billingCycle
+            } : null
           };
         } else if (!institution) {
           logger.warn(`Institution not found for user ${req.user.id}: ${req.user.institutionId}`);
@@ -256,18 +218,21 @@ export const checkPermission = (permissionKey) => {
         ],
         'principal': [
           'school.admin', 'school.overview',
-          'students.view', 'students.manage',
-          'teachers.view', 'teachers.manage',
-          'classes.view', 'classes.manage',
-          'exams.view', 'exams.manage',
-          'attendance.view', 'attendance.manage',
-          'grades.view', 'grades.manage',
+          'students.admin', 'students.manage', 'students.view',
+          'teachers.admin', 'teachers.manage', 'teachers.view',
+          'classes.admin', 'classes.manage', 'classes.view',
+          'subjects.admin', 'subjects.manage', 'subjects.view',
+          'exams.admin', 'exams.manage', 'exams.view',
+          'attendance.admin', 'attendance.manage', 'attendance.view',
+          'grades.admin', 'grades.manage', 'grades.view',
+          'timetable.admin', 'timetable.manage', 'timetable.view',
+          'fee.admin', 'fee.manage', 'fee.view',
           'reports.view', 'reports.generate',
           'announcements.admin', 'announcements.manage',
           'events.admin', 'events.manage'
         ],
         'teacher': [
-          'students.view', 'students.grade',
+          'students.view', 'students.manage', 'students.grade',
           'classes.view', 'classes.manage',
           'subjects.view', 'subjects.manage',
           'exams.create', 'exams.manage', 'exams.view',
@@ -457,7 +422,6 @@ export const optionalAuth = async (req, res, next) => {
         permissions: [],
         modules: [],
         institutionId: null,
-        schoolId: null,
         avatar: null,
         status: 'active'
       };
@@ -475,6 +439,18 @@ export const optionalAuth = async (req, res, next) => {
     }
 
     if (user.status !== 'active' && user.isActive !== true) {
+      req.user = {
+        id: null,
+        email: null,
+        name: null,
+        role: 'guest',
+        plan: 'basic',
+        permissions: [],
+        modules: [],
+        institutionId: null,
+        avatar: null,
+        status: 'active'
+      };
       return next();
     }
 
@@ -487,7 +463,6 @@ export const optionalAuth = async (req, res, next) => {
       permissions: user.permissions || [],
       modules: user.modules || [],
       institutionId: user.institutionId,
-      schoolId: user.schoolId,
       avatar: user.avatar,
       status: user.status
     };

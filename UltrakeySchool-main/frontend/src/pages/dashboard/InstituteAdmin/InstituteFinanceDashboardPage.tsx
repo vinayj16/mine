@@ -226,8 +226,8 @@ const InstituteFinanceDashboardPage: React.FC = () => {
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="m" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `$${(v as number)/1000}k`} />
-                      <Tooltip formatter={(v: any, n: any) => [`$${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v as number)/1000}k`} />
+                      <Tooltip formatter={(v: any, n: any) => [`₹${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Area type="monotone" dataKey="revenue"  name="Revenue"  stroke="#6366f1" strokeWidth={2.5} fill="url(#revGrad)"  dot={false} />
                       <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2}   fill="url(#expGrad)"  dot={false} />
@@ -272,8 +272,8 @@ const InstituteFinanceDashboardPage: React.FC = () => {
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={budgetVsActual} barSize={22} barGap={4}>
                       <XAxis dataKey="dept" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `$${(v as number)/1000}k`} />
-                      <Tooltip formatter={(v: any, n: any) => [`$${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v as number)/1000}k`} />
+                      <Tooltip formatter={(v: any, n: any) => [`₹${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="budget" name="Budget" fill="#6366f1" radius={[6,6,0,0]} />
                       <Bar dataKey="actual" name="Actual" fill="#10b981" radius={[6,6,0,0]} />
@@ -329,8 +329,8 @@ const InstituteFinanceDashboardPage: React.FC = () => {
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={feeByTerm} barSize={18} barGap={4}>
                       <XAxis dataKey="q" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `$${(v as number)/1000}k`} />
-                      <Tooltip formatter={(v: any, n: any) => [`$${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: any) => `₹${(v as number)/1000}k`} />
+                      <Tooltip formatter={(v: any, n: any) => [`₹${(v as number)?.toLocaleString()}`,n]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                       <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="collected"   name="Collected"   fill="#6366f1" radius={[6,6,0,0]} />
                       <Bar dataKey="outstanding" name="Outstanding" fill="#ef4444" radius={[6,6,0,0]} />

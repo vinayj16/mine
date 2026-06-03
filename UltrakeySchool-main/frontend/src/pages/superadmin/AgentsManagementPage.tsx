@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { superAdminService } from '../../services/superAdminService'
 import agentService from '../../services/agentService'
+import ConfirmModal from '../../components/common/ConfirmModal'
 
 // Agent interface definition
 interface Agent {
@@ -40,6 +42,8 @@ const AgentsManagementPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1)
   const [totalAgents, setTotalAgents] = useState(0)
   const [agentsPerPage] = useState(10)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
   // Debounced search effect
   useEffect(() => {
@@ -122,25 +126,39 @@ const AgentsManagementPage: React.FC = () => {
     navigate(`/super-admin/agents/${agentId}`)
   }
 
-  const handleDeleteAgent = async (agentId: string) => {
-    if (!window.confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
-      return
-    }
-    
+  const handleDeleteAgent = (agentId: string) => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'delete', id: agentId })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
     try {
       setLoading(true)
-      await agentService.delete(agentId)
-      
-      const response = await superAdminService.getAllAgents()
-      setAgents(response as unknown as Agent[])
-      setTotalAgents((response || []).length)
-      setSelectedAgents(prevSelected => prevSelected.filter(id => id !== agentId))
-      alert('Agent deleted successfully')
+      if (deleteTarget.type === 'delete') {
+        await agentService.delete(deleteTarget.id)
+        const response = await superAdminService.getAllAgents()
+        setAgents(response as unknown as Agent[])
+        setTotalAgents((response || []).length)
+        setSelectedAgents(prevSelected => prevSelected.filter(id => id !== deleteTarget.id))
+        toast.success('Agent deleted successfully')
+      } else if (deleteTarget.type === 'suspend') {
+        for (const id of deleteTarget.ids) {
+          await agentService.update(id, { status: 'Suspended' })
+        }
+        const response = await superAdminService.getAllAgents()
+        setAgents(response as unknown as Agent[])
+        setTotalAgents((response || []).length)
+        toast.success(`Suspended ${deleteTarget.ids.length} agents`)
+        setSelectedAgents([])
+      }
     } catch (error: any) {
-      console.error('Error deleting agent:', error)
-      alert(error.message || 'Failed to delete agent')
+      console.error('Error:', error)
+      toast.error(error.message || 'Action failed')
     } finally {
       setLoading(false)
+      setShowDeleteModal(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -152,30 +170,17 @@ const AgentsManagementPage: React.FC = () => {
       const response = await superAdminService.getAllAgents()
       setAgents(response as unknown as Agent[])
       setTotalAgents(response.length)
-      alert(`Activated ${selectedAgents.length} agents`)
+      toast.success(`Activated ${selectedAgents.length} agents`)
       setSelectedAgents([])
     } catch (error: any) {
       console.error('Error activating agents:', error)
-      alert('Failed to activate agents')
+      toast.error('Failed to activate agents')
     }
   }
 
-  const handleBulkSuspend = async () => {
-    if (window.confirm(`Are you sure you want to suspend ${selectedAgents.length} agents?`)) {
-      try {
-        for (const id of selectedAgents) {
-          await agentService.update(id, { status: 'Suspended' })
-        }
-        const response = await superAdminService.getAllAgents()
-        setAgents(response as unknown as Agent[])
-        setTotalAgents((response || []).length)
-        alert(`Suspended ${selectedAgents.length} agents`)
-        setSelectedAgents([])
-      } catch (error: any) {
-        console.error('Error suspending agents:', error)
-        alert('Failed to suspend agents')
-      }
-    }
+  const handleBulkSuspend = () => {
+    setShowDeleteModal(true)
+    setDeleteTarget({ type: 'suspend', ids: selectedAgents })
   }
 
   // Add Agent handlers
@@ -212,10 +217,10 @@ const AgentsManagementPage: React.FC = () => {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
 
-      alert('Agents exported successfully!')
+      toast.success('Agents exported successfully!')
     } catch (error: any) {
       console.error('Error exporting agents:', error)
-      alert('Failed to export agents')
+      toast.error('Failed to export agents')
     }
   }
 
@@ -270,7 +275,7 @@ const AgentsManagementPage: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid">
+    <><div className="container-fluid">
       <div className="row">
         <div className="col-12">
           <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
@@ -513,6 +518,8 @@ const AgentsManagementPage: React.FC = () => {
         </div>
       </div>
     </div>
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }} onConfirm={handleConfirmDelete} message={deleteTarget?.type === 'suspend' ? `Are you sure you want to suspend ${deleteTarget?.ids?.length || 0} agents?` : 'Are you sure you want to delete this agent? This action cannot be undone.'} />
+    </>
   )
 }
 

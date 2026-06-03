@@ -44,7 +44,7 @@ const validateDateRange = (startDate, endDate) => {
   return null;
 };
 
-const getInstitutionId = (req) => req.user?.schoolId || req.user?.institutionId || req.tenantId;
+const getInstitutionId = (req) => req.user?.institutionId || req.user?.institutionId || req.tenantId;
 
 const createInventoryItem = async (req, res) => {
   try {

@@ -61,6 +61,49 @@ router.get('/', async (req, res) => { // ✓✓
   }
 }); 
 
+router.get('/roles', async (req, res) => {
+  try {
+    const roles = ['superadmin', 'admin', 'principal', 'teacher', 'accountant', 'student', 'parent', 'guardian', 'staff', 'librarian', 'transport', 'agent'];
+    res.json({ success: true, data: roles });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch roles', error: error.message });
+  }
+});
+
+// Permissions routes - All data from database (TESTED & VERIFIED)
+router.get('/permissions', async (req, res) => { // ✓✓
+  try {
+    logger.info('Fetching permissions with tenantId:', req.tenantId);
+    const permissions = await Permission.find({}).lean();
+    logger.info('Permissions fetched:', permissions.length);
+    res.json({ success: true, data: permissions });
+  } catch (error) {
+    logger.error('Failed to fetch permissions:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch permissions', error: error.message });
+  }
+});
+
+router.put('/permissions', authorize(['admin']), async (req, res) => { // ✓✓
+  try {
+    const { permissions } = req.body;
+    
+    // Update permissions in bulk
+    const updatePromises = permissions.map(perm =>
+      Permission.findOneAndUpdate(
+        { _id: perm.id, tenantId: req.tenantId },
+        perm,
+        { new: true, upsert: true }
+      )
+    );
+
+    await Promise.all(updatePromises);
+    res.json({ success: true, message: 'Permissions updated' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update permissions', error: error.message });
+  }
+});
+
+// User routes - by ID (must come AFTER /permissions to avoid conflict)
 router.get('/:id', async (req, res) => { // ✓✓
   try {
     const user = await User.findOne({
@@ -219,36 +262,6 @@ router.post('/users/delete-requests/bulk-reject', authorize(['admin']), async (r
     res.json({ success: true, message: 'Requests rejected' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to reject requests', error: error.message });
-  }
-});
-
-// Permissions routes - All data from database (TESTED & VERIFIED)
-router.get('/permissions', async (req, res) => { // ✓✓
-  try {
-    const permissions = await Permission.find({ tenantId: req.tenantId });
-    res.json({ success: true, data: permissions });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch permissions', error: error.message });
-  }
-});
-
-router.put('/permissions', authorize(['admin']), async (req, res) => { // ✓✓
-  try {
-    const { permissions } = req.body;
-    
-    // Update permissions in bulk
-    const updatePromises = permissions.map(perm =>
-      Permission.findOneAndUpdate(
-        { _id: perm.id, tenantId: req.tenantId },
-        perm,
-        { new: true, upsert: true }
-      )
-    );
-
-    await Promise.all(updatePromises);
-    res.json({ success: true, message: 'Permissions updated' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to update permissions', error: error.message });
   }
 });
 

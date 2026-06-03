@@ -16,6 +16,9 @@ router.get('/', async (req, res) => {
     
     // Build query
     const query = { isDeleted: false };
+    if (req.user?.institutionId) {
+      query.institutionId = req.user.institutionId;
+    }
     
     if (classId) {
       query.classId = classId;
@@ -67,14 +70,15 @@ router.get('/', async (req, res) => {
 // Get exam schedules by date range
 router.get('/by-date-range', async (req, res) => {
   try {
-    const { startDate, endDate, schoolId, classId } = req.query;
+    const { startDate, endDate, institutionId, classId } = req.query;
     
     if (!startDate || !endDate) {
       return res.status(400).json({ success: false, message: 'Start date and end date are required' });
     }
 
     const query = { isDeleted: false };
-    if (schoolId) query.schoolId = schoolId;
+    if (req.user?.institutionId) query.institutionId = req.user.institutionId;
+    if (institutionId) query.institutionId = institutionId;
     if (classId) query.classId = classId;
     query.examDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
 
@@ -99,6 +103,7 @@ router.get('/statistics', async (req, res) => {
     const { academicYear } = req.query;
     
     const query = { isDeleted: false };
+    if (req.user?.institutionId) query.institutionId = req.user.institutionId;
     if (academicYear) query.academicYear = academicYear;
     
     const [
@@ -163,7 +168,7 @@ router.get('/statistics', async (req, res) => {
 // Get single exam schedule
 router.get('/:id', async (req, res) => {
   try {
-    const schedule = await ExamSchedule.findOne({ scheduleId: req.params.id, isDeleted: false })
+    const schedule = await ExamSchedule.findOne({ _id: req.params.id, isDeleted: false })
       .populate('classId', 'name section')
       .populate('subjectId', 'name code')
       .populate('invigilatorId', 'name email');
@@ -227,6 +232,9 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin', 'teacher'
       message: 'Exam schedule created successfully'
     });
   } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to create exam schedule', error: error.message });
   }
 });
@@ -235,7 +243,7 @@ router.post('/', authorize(['admin', 'principal', 'institution_admin', 'teacher'
 router.put('/:id', authorize(['admin', 'principal', 'institution_admin', 'teacher']), async (req, res) => {
   try {
     const schedule = await ExamSchedule.findOneAndUpdate(
-      { scheduleId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: false },
       { 
         ...req.body, 
         'metadata.updatedBy': req.user.id 
@@ -264,7 +272,7 @@ router.put('/:id', authorize(['admin', 'principal', 'institution_admin', 'teache
 router.delete('/:id', authorize(['admin', 'principal', 'institution_admin']), async (req, res) => {
   try {
     const schedule = await ExamSchedule.findOneAndUpdate(
-      { scheduleId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: false },
       { isDeleted: true, 'metadata.updatedBy': req.user.id },
       { new: true }
     );
@@ -288,7 +296,7 @@ router.patch('/:id/status', authorize(['admin', 'principal', 'institution_admin'
     const { status } = req.body;
     
     const schedule = await ExamSchedule.findOneAndUpdate(
-      { scheduleId: req.params.id, isDeleted: false },
+      { _id: req.params.id, isDeleted: false },
       { 
         status, 
         'metadata.updatedBy': req.user.id 

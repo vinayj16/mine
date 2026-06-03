@@ -51,22 +51,22 @@ const AdminTeacherManagementPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use demo ID
+      // Get institutionId from localStorage or use demo ID
       const userStr = localStorage.getItem('user');
-      let schoolId = '507f1f77bcf86cd799439011'; // Default demo school
+      let institutionId = ''; // Default demo school
       
       if (userStr) {
         try {
           const userData = JSON.parse(userStr);
-          if (userData?.schoolId && userData.schoolId.length === 24) {
-            schoolId = userData.schoolId;
+          if (userData?.institutionId && userData.institutionId.length === 24) {
+            institutionId = userData.institutionId;
           }
         } catch (e) {
           console.log('Error parsing user:', e);
         }
       }
       
-      const response = await apiClient.get('/teachers', { params: { schoolId } });
+      const response = await apiClient.get('/teachers', { params: { institutionId } });
       
       // Store raw teachers for the list
       const teachersArray = response.data?.data || [];

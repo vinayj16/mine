@@ -1,10 +1,3 @@
-// Utility functions for generating consistent conversation IDs
-
-/**
- * Generate a consistent conversation ID between two users
- * Uses emails if available (more stable than user IDs)
- * Format: email1-email2 (sorted alphabetically)
- */
 export const generateConversationId = (
   userId1: string, 
   userId2: string, 

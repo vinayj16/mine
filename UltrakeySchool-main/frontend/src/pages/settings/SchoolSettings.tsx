@@ -58,7 +58,7 @@ const SchoolSettings: React.FC = () => {
   const [settings, setSettings] = useState<SchoolSettingsData | null>(null);
   const [activeTab, setActiveTab] = useState<'academic' | 'exam' | 'attendance' | 'fee' | 'notification'>('academic');
 
-  const institutionId = '507f1f77bcf86cd799439011';
+  const institutionId = localStorage.getItem('institutionId') || '';
 
   const [academicForm, setAcademicForm] = useState<AcademicSettings>({
     academicYear: '2024/2025',
@@ -85,7 +85,7 @@ const SchoolSettings: React.FC = () => {
   });
 
   const [feeForm, setFeeForm] = useState<FeeSettings>({
-    currency: 'USD',
+    currency: 'INR',
     lateFeePercentage: 5,
     lateFeeGracePeriod: 7
   });
@@ -261,7 +261,7 @@ const SchoolSettings: React.FC = () => {
           <div className="spinner-border text-primary" role="status" style={{ width: '3rem', height: '3rem' }}>
             <span className="visually-hidden">Loading...</span>
           </div>
-          <p className="mt-3 text-muted">Loading school settings...</p>
+          <p className="mt-3 text-muted">Loading institution settings...</p>
         </div>
       </div>
     );
@@ -270,11 +270,11 @@ const SchoolSettings: React.FC = () => {
   if (error) {
     return (
       <div>
-        <h3 className="page-title mb-1">School Settings</h3>
+        <h3 className="page-title mb-1">Institution Settings</h3>
         <nav>
           <ol className="breadcrumb mb-0">
             <li className="breadcrumb-item"><Link to="/">Home</Link></li>
-            <li className="breadcrumb-item active">School Settings</li>
+            <li className="breadcrumb-item active">Institution Settings</li>
           </ol>
         </nav>
         <div className="card mt-3">
@@ -282,7 +282,7 @@ const SchoolSettings: React.FC = () => {
             <div className="alert alert-danger d-flex align-items-center" role="alert">
               <i className="ti ti-alert-circle me-2 fs-4"></i>
               <div className="flex-grow-1">
-                <h5 className="alert-heading">Error Loading School Settings</h5>
+                <h5 className="alert-heading">Error Loading Institution Settings</h5>
                 <p className="mb-0">{error}</p>
               </div>
               <button className="btn btn-outline-danger ms-3" onClick={fetchSettings}>
@@ -298,17 +298,17 @@ const SchoolSettings: React.FC = () => {
   if (!settings) {
     return (
       <div>
-        <h3 className="page-title mb-1">School Settings</h3>
+        <h3 className="page-title mb-1">Institution Settings</h3>
         <nav>
           <ol className="breadcrumb mb-0">
             <li className="breadcrumb-item"><Link to="/">Home</Link></li>
-            <li className="breadcrumb-item active">School Settings</li>
+            <li className="breadcrumb-item active">Institution Settings</li>
           </ol>
         </nav>
         <div className="card mt-3">
           <div className="card-body text-center py-5">
             <i className="ti ti-database-off" style={{ fontSize: '48px', color: '#ccc' }}></i>
-            <p className="mt-2 text-muted">No school settings available</p>
+            <p className="mt-2 text-muted">No institution settings available</p>
           </div>
         </div>
       </div>
@@ -317,17 +317,17 @@ const SchoolSettings: React.FC = () => {
 
   return (
     <div>
-      <h3 className="page-title mb-1">School Settings</h3>
+      <h3 className="page-title mb-1">Institution Settings</h3>
       <nav>
         <ol className="breadcrumb mb-0">
           <li className="breadcrumb-item"><Link to="/">Home</Link></li>
-          <li className="breadcrumb-item active">School Settings</li>
+          <li className="breadcrumb-item active">Institution Settings</li>
         </ol>
       </nav>
 
       <div className="card mt-3">
         <div className="card-header">
-          <h5 className="mb-0">Configure School Settings</h5>
+          <h5 className="mb-0">Configure Institution Settings</h5>
         </div>
         <div className="card-body">
           <ul className="nav nav-tabs mb-3" role="tablist">
@@ -360,7 +360,7 @@ const SchoolSettings: React.FC = () => {
                 className={`nav-link ${activeTab === 'fee' ? 'active' : ''}`}
                 onClick={() => setActiveTab('fee')}
               >
-                <i className="ti ti-currency-dollar me-1"></i>Fee
+                <i className="ti ti-currency-rupee me-1"></i>Fee
               </button>
             </li>
             <li className="nav-item">
@@ -623,7 +623,6 @@ const SchoolSettings: React.FC = () => {
                     value={feeForm.currency}
                     onChange={(e) => setFeeForm({ ...feeForm, currency: e.target.value })}
                   >
-                    <option value="USD">USD - US Dollar</option>
                     <option value="EUR">EUR - Euro</option>
                     <option value="GBP">GBP - British Pound</option>
                     <option value="INR">INR - Indian Rupee</option>

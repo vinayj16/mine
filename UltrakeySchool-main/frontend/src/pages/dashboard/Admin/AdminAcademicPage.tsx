@@ -66,15 +66,15 @@ const AdminAcademicPage: React.FC = () => {
     try {
       setLoading(true);
       
-      // Get schoolId from localStorage or use default
+      // Get institutionId from localStorage or use default
       const userStr = localStorage.getItem('user');
-      const schoolId = userStr ? JSON.parse(userStr)?.schoolId || '507f1f77bcf86cd799439011' : '507f1f77bcf86cd799439011';
+      const institutionId = userStr ? JSON.parse(userStr)?.institutionId || '' : '';
       
       // Fetch real data
       const [classesRes, subjectsRes, teachersRes] = await Promise.allSettled([
-        apiClient.get('/classes', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
-        apiClient.get('/subjects', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } })),
-        apiClient.get('/teachers', { params: { schoolId } }).catch(() => ({ data: { success: false, data: [] } }))
+        apiClient.get('/classes', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/subjects', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } })),
+        apiClient.get('/teachers', { params: { institutionId } }).catch(() => ({ data: { success: false, data: [] } }))
       ]);
       
       const classes = classesRes.status === 'fulfilled' ? (classesRes.value.data?.data || []) : [];
